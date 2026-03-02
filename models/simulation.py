@@ -296,10 +296,25 @@ def simulate_year(cfg: dict, year: int = 0) -> YearResult:
                 # refill from cheaper solar later.
                 # Profitable if: sell_now × RTE > cheapest_refill + wear_per_kwh_stored
                 # (the refill is solar so its cost is the foregone export price)
+                #
+                # Extra guard when solar won't refill the battery today:
+                # Cycling permanently depletes stored energy that could instead
+                # avoid an import in a future deficit hour.  In that case, also
+                # require the cycling value to beat the best remaining
+                # deficit-hour avoidance value (× RTE).  This prevents high-power
+                # batteries from exporting cheap at moderate prices when an
+                # expensive evening import is still coming.
                 cheapest_refill = future_min_solar_ep[min(hod + 1, 23)]
+                _future_deficit_dv = max(
+                    (dv[j] for j in range(hod + 1, 24) if day_net[j] < 0),
+                    default=0.0,
+                )
+                _cycle_threshold = cheapest_refill + wear_cost
+                if not solar_fills_battery:
+                    _cycle_threshold = max(_cycle_threshold, _future_deficit_dv * rte)
                 if (
                     soc > 0.1
-                    and day_ep[hod] * rte > cheapest_refill + wear_cost
+                    and day_ep[hod] * rte > _cycle_threshold
                 ):
                     can_discharge = min(max_power, soc * eff)
                     delivered = battery.discharge(can_discharge)

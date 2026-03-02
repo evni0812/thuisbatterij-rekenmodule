@@ -17,7 +17,7 @@
   "contract_btw_pct": 0.0,
   "contract_terugleverkosten_eur": 0.0,
   "contract_volatiliteit_factor": 1.0,
-  "fin_analyse_jaren": 10,
+  "fin_analyse_jaren": 15,
   "fin_prijsstijging_pct": 0.0,
   "fin_discontovoet_pct": 3.0
 }

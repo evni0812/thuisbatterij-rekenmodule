@@ -265,3 +265,46 @@ def generate_price_profile(
             hour_idx += 24
 
     return profile
+
+
+def compute_epex_weighted_averages(
+    avg_epex: float,
+    volatility_factor: float,
+    solar_kwp: float,
+    kwh_per_kwp: float,
+    orientation_pct: float,
+    annual_kwh: float,
+    profile_type: str,
+) -> dict:
+    """
+    Compute surplus- and deficit-weighted EPEX averages for a given configuration.
+
+    Returns a dict with:
+      inject_epex  – EPEX weighted by surplus kWh (solar cannibalisation moments).
+                     Opportunity cost of storing solar instead of exporting it.
+      deficit_epex – EPEX weighted by deficit kWh (actual import moments).
+                     Import-EPEX component that battery discharge avoids.
+
+    Correct waarde zelfconsumptie (battery mediated):
+      waarde = (deficit_epex + opslag + EB) − (inject_epex − terugleverkosten)
+    """
+    prices = generate_price_profile(avg_epex, volatility_factor)
+    solar = generate_solar_profile(solar_kwp, kwh_per_kwp, orientation_pct)
+    consumption = generate_consumption_profile(annual_kwh, profile_type)
+    net = solar - consumption
+
+    surplus_mask = net > 0
+    deficit_mask = net < 0
+
+    inject_epex = (
+        float(np.average(prices[surplus_mask], weights=net[surplus_mask]))
+        if surplus_mask.any()
+        else avg_epex
+    )
+    deficit_epex = (
+        float(np.average(prices[deficit_mask], weights=-net[deficit_mask]))
+        if deficit_mask.any()
+        else avg_epex
+    )
+
+    return {"inject_epex": inject_epex, "deficit_epex": deficit_epex}
