@@ -1,0 +1,23 @@
+{
+  "batterij_capaciteit_kwh": 2.4,
+  "batterij_dod_pct": 90.0,
+  "batterij_max_power_kw": 0.8,
+  "batterij_efficiency_pct": 85.0,
+  "batterij_cycli_levensduur": 6000,
+  "batterij_degradatie_pct_jaar": 1.5,
+  "batterij_kosten_eur": 719.0,
+  "zon_kwp": 3.5,
+  "zon_kwh_per_kwp": 880.0,
+  "zon_orientatie_pct": 90.0,
+  "huis_jaarverbruik_kwh": 3500.0,
+  "huis_profiel": "standaard",
+  "contract_epex_gem_eur": 0.04,
+  "contract_opslag_eur": 0.018,
+  "contract_energiebelasting_eur": 0.11,
+  "contract_btw_pct": 21.0,
+  "contract_terugleverkosten_eur": 0.0,
+  "contract_volatiliteit_factor": 1.0,
+  "fin_analyse_jaren": 10,
+  "fin_prijsstijging_pct": 0.0,
+  "fin_discontovoet_pct": 5.0
+}
