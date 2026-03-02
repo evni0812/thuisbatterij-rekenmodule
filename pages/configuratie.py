@@ -1,7 +1,5 @@
 import streamlit as st
 
-from models.profiles import compute_epex_weighted_averages
-
 st.title("Batterij Configuratie")
 st.markdown(
     "Stel de technische en financiele parameters in voor je thuisbatterij-simulatie. "
@@ -223,50 +221,8 @@ with col2:
         help="Schaalfactor voor de dag/nacht prijsspreiding. 1.0 = normaal, >1 = meer volatiel.",
     )
 
-# Show derived all-in price and solar cannibalisation context.
-# The "waarde zelfconsumptie" represents the net gain per kWh that the battery
-# shifts from a solar-surplus hour (injection) to a deficit hour (import).
-# It must use the EPEX at EACH moment separately:
-#   - inject_epex: EPEX weighted by surplus kWh → the foregone export price
-#   - deficit_epex: EPEX weighted by deficit kWh → the avoided import EPEX
-# Using the annual average EPEX for the import side understates the value
-# because deficit hours (morning/evening) have above-average EPEX.
-
-@st.cache_data(show_spinner=False)
-def _epex_stats(avg_epex, vol_factor, kwp, kwh_per_kwp, orient_pct, annual_kwh, profile):
-    return compute_epex_weighted_averages(
-        avg_epex, vol_factor, kwp, kwh_per_kwp, orient_pct, annual_kwh, profile
-    )
-
-epex_stats = _epex_stats(
-    cfg["contract_epex_gem_eur"],
-    cfg["contract_volatiliteit_factor"],
-    cfg["zon_kwp"],
-    cfg["zon_kwh_per_kwp"],
-    cfg["zon_orientatie_pct"],
-    cfg["huis_jaarverbruik_kwh"],
-    cfg["huis_profiel"],
-)
-inject_epex = epex_stats["inject_epex"]
-deficit_epex = epex_stats["deficit_epex"]
-
 all_in = cfg["contract_epex_gem_eur"] + cfg["contract_opslag_eur"] + cfg["contract_energiebelasting_eur"]
-feed_in_inject = max(inject_epex - cfg["contract_terugleverkosten_eur"], 0.0)
-import_deficit = deficit_epex + cfg["contract_opslag_eur"] + cfg["contract_energiebelasting_eur"]
-waarde_zelfconsumptie = import_deficit - feed_in_inject
-
-st.info(
-    f"Gemiddelde all-in inkoopprijs (incl. BTW): **€{all_in:.4f}/kWh** &nbsp;·&nbsp; "
-    f"Gem. EPEX op injectie-uren (solar cannibalisation): **{inject_epex*100:.2f} ct/kWh** &nbsp;·&nbsp; "
-    f"Gem. EPEX op afname-uren: **{deficit_epex*100:.2f} ct/kWh** &nbsp;·&nbsp; "
-    f"Waarde zelfconsumptie: **€{waarde_zelfconsumptie:.4f}/kWh**\n\n"
-    f"*Toelichting: de batterij verschuift energie van zonnepiek-uren (EPEX ~{inject_epex*100:.1f} ct/kWh) "
-    f"naar afname-uren (EPEX ~{deficit_epex*100:.1f} ct/kWh). "
-    f"De netto waarde per verschoven kWh is het verschil tussen de all-in inkoopprijs "
-    f"op het moment van afname (€{import_deficit:.4f}/kWh) en de terugleverprijs "
-    f"op het moment van injectie ({feed_in_inject*100:.2f} ct/kWh). "
-    f"Het model berekent dit uurlijks via het synthetische EPEX-profiel.*"
-)
+st.info(f"Gemiddelde all-in inkoopprijs (incl. BTW): **€{all_in:.4f}/kWh**")
 
 
 # ── Financiele Parameters ───────────────────────────────────────────
