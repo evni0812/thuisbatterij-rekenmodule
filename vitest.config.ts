@@ -5,7 +5,10 @@ export default defineConfig({
     // Modeltests draaien in Node; componenttests hebben een DOM nodig. De
     // environment wordt per bestand gekozen met een docblock-comment.
     environment: "node",
-    environmentMatchGlobs: [["tests/components.test.tsx", "jsdom"]],
+    environmentMatchGlobs: [
+      ["tests/components.test.tsx", "jsdom"],
+      ["tests/layout.test.tsx", "jsdom"],
+    ],
   },
   esbuild: {
     jsx: "automatic",

@@ -567,10 +567,46 @@ input[type="date"] {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
 }
 
+/*
+ * Het dagprofiel is opgebouwd uit drie vaste kolommen: as-labels, plot en
+ * lijnlabels. Elk element hoort in precies één kolom. Eerder stonden de
+ * paneeltitels helemaal links en liepen ze dwars over de as-labels heen.
+ */
 .paneel-titel {
+  fill: var(--text-primary);
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.paneel-noot {
+  fill: var(--text-muted);
+  font-size: 11px;
+}
+
+/* Lijnlabels vervangen de legenda: elk paneel benoemt zijn eigen lijnen, dus je
+   hoeft nergens kleuren te matchen met een lijstje eronder. */
+.lijn-label {
   fill: var(--text-secondary);
+  font-size: 11px;
+}
+
+.lijn-waarde {
+  fill: var(--text-primary);
   font-size: 11.5px;
-  font-weight: 580;
+  font-weight: 600;
+  font-variant-numeric: tabular-nums;
+}
+
+.piek-label {
+  fill: var(--text-secondary);
+  font-size: 10.5px;
+  font-weight: 550;
+  font-variant-numeric: tabular-nums;
+}
+
+.dagprofiel-svg {
+  /* Ruim genoeg om de drie panelen niet samen te persen op een breed scherm. */
+  min-height: 380px;
 }
 
 .dagkiezer {
@@ -606,62 +642,50 @@ input[type="date"] {
 
 /*
  * De waarden staan in een vaste balk onder de grafiek, niet in een zwevende
- * tooltip: die dekte precies de data af die je wilde aflezen, en op een
- * telefoon is er geen ruimte om iets te laten zweven. De balk blijft ook staan
- * zonder cursor, zodat de pagina niet op en neer springt.
+ * tooltip: die dekte precies de data af die je wilde aflezen. De balk houdt
+ * dezelfde hoogte zonder cursor, zodat de pagina niet op en neer springt.
  */
-.uitlezing {
+.uitlezing,
+.uitlezing-leeg {
   display: flex;
+  align-items: center;
   flex-wrap: wrap;
-  gap: 4px 26px;
-  margin: 14px 0 0;
-  padding: 12px 14px;
+  gap: 6px 20px;
+  margin: 16px 0 0;
+  padding: 11px 14px;
+  min-height: 44px;
   background: var(--surface-2);
   border-radius: var(--radius-sm);
   font-size: 0.85rem;
+  color: var(--text-secondary);
 }
 
-.uitlezing > div {
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  min-width: 0;
+.uitlezing-leeg {
+  color: var(--text-muted);
 }
 
-.uitlezing dt {
+.uitlezing-tijd {
+  font-weight: 640;
+  font-size: 1rem;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+  padding-right: 6px;
+  border-right: 1px solid var(--border);
+}
+
+.uitlezing-item {
   display: flex;
   align-items: center;
-  gap: 6px;
-  color: var(--text-muted);
-  font-size: 0.78rem;
+  gap: 7px;
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 
-.uitlezing dt i {
+.uitlezing-item i {
   width: 9px;
   height: 9px;
   border-radius: 2px;
   flex: none;
-}
-
-.uitlezing dd {
-  margin: 0;
-  font-variant-numeric: tabular-nums;
-  font-weight: 560;
-  white-space: nowrap;
-}
-
-.uitlezing-tijd dd {
-  font-size: 1.05rem;
-}
-
-.uitlezing-leeg {
-  margin: 14px 0 0;
-  padding: 12px 14px;
-  background: var(--surface-2);
-  border-radius: var(--radius-sm);
-  font-size: 0.85rem;
-  color: var(--text-muted);
 }
 
 /* ── Kerncijfers ──────────────────────────────────────────────────────────── */
