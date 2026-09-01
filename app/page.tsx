@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from "react";
 import { Antwoord } from "../components/Antwoord";
+import { BatterijMaat } from "../components/BatterijMaat";
 import { BesparingPerJaar } from "../components/BesparingPerJaar";
 import { Cashflow } from "../components/Cashflow";
 import { Dagprofiel } from "../components/Dagprofiel";
@@ -99,7 +100,7 @@ export default function Page() {
     }, [geladen, inst, preset, capaciteit, vermogen, prijs]),
   );
 
-  const { manifest, result, busy, error } = state;
+  const { manifest, result, busy, error, grid, startGrid } = state;
 
   const periodeLabel = result
     ? periode(
@@ -173,6 +174,16 @@ export default function Page() {
           <Dagprofiel dagen={result.sampleDays} />
 
           <BesparingPerJaar jaren={result.perYear} />
+
+          <BatterijMaat
+            grid={grid}
+            huidigeCapaciteit={capaciteit}
+            huidigVermogen={vermogen}
+            onStart={startGrid}
+            onKies={(cap, kw) =>
+              setInst((s) => ({ ...s, capaciteitKwh: cap, vermogenKw: kw }))
+            }
+          />
 
           <Cashflow finance={result.finance} investeringEur={prijs} />
 

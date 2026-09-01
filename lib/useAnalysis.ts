@@ -12,7 +12,21 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AnalysisResult } from "./model/analysis";
 import type { Manifest } from "./data/manifest";
-import type { Configuration, WorkerRequest, WorkerResponse } from "./worker/protocol";
+import type {
+  Configuration,
+  GridPoint,
+  WorkerRequest,
+  WorkerResponse,
+} from "./worker/protocol";
+
+export interface GridState {
+  /** Rijen zoals ze binnenkomen; ontbrekende rijen zijn nog niet berekend. */
+  rows: (GridPoint[] | null)[];
+  capacities: number[];
+  powers: number[];
+  klaar: boolean;
+  bezig: boolean;
+}
 
 export interface AnalysisState {
   manifest: Manifest | null;
@@ -21,6 +35,9 @@ export interface AnalysisState {
   busy: boolean;
   error: string | null;
   elapsedMs: number | null;
+  grid: GridState | null;
+  /** Start de rasterberekening; kost enkele seconden. */
+  startGrid: (capacities: number[], powers: number[]) => void;
 }
 
 /** Wachttijd voordat een wijziging een herberekening start, in milliseconden. */
@@ -31,13 +48,17 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
   const nextId = useRef(0);
   const pendingId = useRef<number | null>(null);
 
-  const [state, setState] = useState<AnalysisState>({
+  const [state, setState] = useState<
+    Omit<AnalysisState, "startGrid">
+  >({
     manifest: null,
     result: null,
     busy: false,
     error: null,
     elapsedMs: null,
+    grid: null,
   });
+  const gridId = useRef(0);
 
   useEffect(() => {
     const worker = new Worker(
@@ -63,6 +84,19 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
           error: null,
           elapsedMs: msg.elapsedMs,
         }));
+        return;
+      }
+      if (msg.type === "grid-row") {
+        if (msg.id !== gridId.current) return;
+        setState((s) => {
+          if (!s.grid) return s;
+          const rows = [...s.grid.rows];
+          rows[msg.row] = msg.points;
+          return {
+            ...s,
+            grid: { ...s.grid, rows, klaar: msg.done, bezig: !msg.done },
+          };
+        });
         return;
       }
       if (msg.type === "error") {
@@ -98,6 +132,34 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
     worker.postMessage(msg);
   }, []);
 
+  const startGrid = useCallback(
+    (capacities: number[], powers: number[]) => {
+      const worker = workerRef.current;
+      if (!worker || !config) return;
+      const id = ++gridId.current;
+      setState((s) => ({
+        ...s,
+        grid: {
+          rows: capacities.map(() => null),
+          capacities,
+          powers,
+          klaar: false,
+          bezig: true,
+        },
+      }));
+      const msg: WorkerRequest = { type: "grid", id, config, capacities, powers };
+      worker.postMessage(msg);
+    },
+    [config],
+  );
+
+  // Een wijziging in de invoer maakt een eerder raster achterhaald.
+  useEffect(() => {
+    setState((s) => (s.grid ? { ...s, grid: null } : s));
+    const worker = workerRef.current;
+    if (worker) worker.postMessage({ type: "cancel" } satisfies WorkerRequest);
+  }, [JSON.stringify(config)]);
+
   useEffect(() => {
     if (!config || !state.manifest) return;
     const timer = setTimeout(() => send(config), DEBOUNCE_MS);
@@ -106,5 +168,5 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
     // manier om op inhoud te vergelijken in plaats van op referentie.
   }, [JSON.stringify(config), state.manifest, send]);
 
-  return state;
+  return { ...state, startGrid };
 }

@@ -10,6 +10,8 @@ import { readFileSync } from "node:fs";
 import { beforeAll, describe, expect, it } from "vitest";
 import { loadManifest, loadPriceYear, loadProfileYear, expandPricesToQuarters } from "../lib/data/loader";
 import { runAnalysis, type AnalysisInput } from "../lib/model/analysis";
+import { dispatchBaseline } from "../lib/model/dispatch-baseline";
+import { dispatchRolling } from "../lib/model/dispatch-rolling";
 import { buildResidual } from "../lib/model/residual";
 import { buildPriceSeries } from "../lib/model/tariff";
 import { PRESETS } from "../lib/presets";
@@ -217,5 +219,84 @@ describe("volledige keten", () => {
     expect(met.perYear[0]!.realisticSavingEur).toBeGreaterThan(
       zonder.perYear[0]!.realisticSavingEur,
     );
+  });
+});
+
+describe("batterijmaat-raster", () => {
+  /**
+   * De test die het oude model niet haalt.
+   *
+   * In het Streamlit-prototype daalde de besparing bij een grotere batterij
+   * (8 kWh gaf 203,05 en 15 kWh 202,32) en leverde 3,6 kW minder op dan 2,4 kW.
+   * Dat waren modelartefacten, en het was precies de as die de optimalisatie-
+   * pagina plotte. Hier moet het raster in beide richtingen kloppen.
+   */
+  it("is monotoon in capaciteit en in vermogen", async () => {
+    const manifest = await loadManifest();
+    const invoer = await bouwInvoer(manifest, "2025-01-01", "2025-12-31");
+    const entry = invoer.windows[0]!;
+    const basis = dispatchBaseline(entry.window, {
+      purchaseSurchargeEurPerKwh: 0,
+      energyTaxEurPerKwh: manifest.prijzen["2025"]!.jaarconstante_eur_per_kwh,
+      feedInCostEurPerKwh: 0,
+      allowCurtailment: true,
+    });
+    const tariff = {
+      purchaseSurchargeEurPerKwh: 0,
+      energyTaxEurPerKwh: manifest.prijzen["2025"]!.jaarconstante_eur_per_kwh,
+      feedInCostEurPerKwh: 0,
+      allowCurtailment: true,
+    };
+
+    const capaciteiten = [1, 2, 3, 5, 7.5, 10];
+    const vermogens = [0.5, 0.8, 1.5, 2.5, 3.6];
+
+    const raster: number[][] = [];
+    for (const cap of capaciteiten) {
+      const rij: number[] = [];
+      for (const kw of vermogens) {
+        const spec = {
+          ...invoer.battery,
+          capacityKwh: cap,
+          maxChargeKw: kw,
+          maxDischargeKw: kw,
+          wearCostEurPerKwh: 0,
+        };
+        const res = dispatchRolling(entry.window, spec, tariff);
+        rij.push(basis.totalCostEur - res.totalCostEur);
+      }
+      raster.push(rij);
+    }
+
+    // De realistische strategie plant op een voorspelling, dus een enkele
+    // uitschieter van een paar procent is geen fout maar het gevolg van
+    // beslissen onder onzekerheid. Structurele dalingen zijn dat wel.
+    const marge = 0.03;
+
+    for (let k = 0; k < vermogens.length; k++) {
+      for (let r = 1; r < capaciteiten.length; r++) {
+        const vorige = raster[r - 1]![k]!;
+        const huidige = raster[r]![k]!;
+        expect(
+          huidige,
+          `bij ${vermogens[k]} kW daalde de besparing van ${capaciteiten[r - 1]} naar ${capaciteiten[r]} kWh`,
+        ).toBeGreaterThanOrEqual(vorige * (1 - marge) - 0.01);
+      }
+    }
+
+    for (let r = 0; r < capaciteiten.length; r++) {
+      for (let k = 1; k < vermogens.length; k++) {
+        const vorige = raster[r]![k - 1]!;
+        const huidige = raster[r]![k]!;
+        expect(
+          huidige,
+          `bij ${capaciteiten[r]} kWh daalde de besparing van ${vermogens[k - 1]} naar ${vermogens[k]} kW`,
+        ).toBeGreaterThanOrEqual(vorige * (1 - marge) - 0.01);
+      }
+    }
+
+    // En het effect moet substantieel zijn: een tienvoudige batterij hoort
+    // duidelijk meer op te leveren dan de kleinste.
+    expect(raster.at(-1)!.at(-1)!).toBeGreaterThan(raster[0]![0]! * 2);
   });
 });

@@ -16,10 +16,19 @@ import {
 } from "../data/loader";
 import { addDays, localMidnightUtcMs } from "../data/timeaxis";
 import type { Manifest } from "../data/manifest";
+import { equivalentCycles, wearCostPerKwh } from "../model/battery";
+import { dispatchBaseline } from "../model/dispatch-baseline";
+import { dispatchRolling } from "../model/dispatch-rolling";
 import { runAnalysis, type AnalysisInput } from "../model/analysis";
 import { buildResidual } from "../model/residual";
 import { buildPriceSeries } from "../model/tariff";
-import type { Configuration, WorkerRequest, WorkerResponse } from "./protocol";
+import type { BatterySpec } from "../model/types";
+import type {
+  Configuration,
+  GridPoint,
+  WorkerRequest,
+  WorkerResponse,
+} from "./protocol";
 
 let manifest: Manifest | null = null;
 let baseUrl = "/data";
@@ -170,6 +179,67 @@ function post(msg: WorkerResponse): void {
   self.postMessage(msg);
 }
 
+/**
+ * Rekent een raster van batterijmaten door, rij voor rij.
+ *
+ * Alleen de realistische strategie en alleen op één representatief jaar: een
+ * volledig raster met het optimum erbij zou minutenlang duren, en de vraag die
+ * deze kaart beantwoordt — welke maat loont — hangt niet af van de bovengrens.
+ *
+ * Na elke rij geven we de beurt terug aan de berichtenlus, zodat een annulering
+ * of een nieuwe aanvraag ertussen kan komen.
+ */
+async function runGrid(
+  id: number,
+  config: Configuration,
+  capacities: number[],
+  powers: number[],
+): Promise<void> {
+  const invoer = await buildInput(config);
+  // Het meest recente volledige jaar is het representatiefst; anders het laatste.
+  const volledig = invoer.windows.filter((w) => w.isFullYear);
+  const entry = (volledig.length > 0 ? volledig : invoer.windows).at(-1);
+  if (!entry) throw new Error("geen doorrekenbare periode voor het raster");
+
+  const basis = dispatchBaseline(entry.window, invoer.tariff);
+
+  for (let r = 0; r < capacities.length; r++) {
+    if (huidigeGrid !== id) return; // een nieuwere aanvraag heeft voorrang
+    const cap = capacities[r]!;
+    const points: GridPoint[] = [];
+
+    for (const kw of powers) {
+      const spec: BatterySpec = {
+        ...invoer.battery,
+        capacityKwh: cap,
+        maxChargeKw: kw,
+        maxDischargeKw: kw,
+        wearCostEurPerKwh: wearCostPerKwh(
+          config.investmentEur,
+          config.cycleLife,
+          { ...invoer.battery, capacityKwh: cap },
+        ),
+      };
+      const res = dispatchRolling(entry.window, spec, invoer.tariff);
+      let ontladen = 0;
+      for (let i = 0; i < res.dischargeKwh.length; i++) ontladen += res.dischargeKwh[i]!;
+      points.push({
+        capacityKwh: cap,
+        powerKw: kw,
+        savingEur: basis.totalCostEur - res.totalCostEur,
+        cyclesPerYear: equivalentCycles(ontladen, spec),
+      });
+    }
+
+    post({ type: "grid-row", id, row: r, points, done: r === capacities.length - 1 });
+    // Even terug naar de berichtenlus.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+  }
+}
+
+/** Volgnummer van het raster dat nu mag draaien; ouder werk stopt vanzelf. */
+let huidigeGrid = -1;
+
 self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
   const msg = event.data;
   try {
@@ -177,6 +247,16 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       baseUrl = msg.baseUrl;
       manifest = await loadManifest(baseUrl);
       post({ type: "ready", manifest });
+      return;
+    }
+    if (msg.type === "cancel") {
+      huidigeGrid = -1;
+      return;
+    }
+    if (msg.type === "grid") {
+      if (!manifest) throw new Error("worker is nog niet geïnitialiseerd");
+      huidigeGrid = msg.id;
+      await runGrid(msg.id, msg.config, msg.capacities, msg.powers);
       return;
     }
     if (msg.type === "analyse") {
@@ -188,7 +268,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
   } catch (err) {
     post({
       type: "error",
-      id: msg.type === "analyse" ? msg.id : null,
+      id: msg.type === "analyse" || msg.type === "grid" ? msg.id : null,
       message: err instanceof Error ? err.message : String(err),
     });
   }
