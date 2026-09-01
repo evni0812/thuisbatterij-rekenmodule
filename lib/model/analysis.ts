@@ -27,7 +27,7 @@ export interface SavingBreakdown {
   arbitrageEur: number;
   /** Niet hoeven terugleveren tegen een negatieve prijs. */
   avoidedNegativeExportEur: number;
-  /** Rendementsverlies en slijtage: de kosten van de batterij zelf. */
+  /** Rendementsverlies: wat er bij het laden en ontladen verdwijnt. */
   lossesEur: number;
   /** Som van bovenstaande; gelijk aan basiskosten minus kosten met batterij. */
   totalEur: number;
@@ -147,7 +147,8 @@ function breakdown(
   const n = window.residualKwh.length;
   let self = 0;
   let avoided = 0;
-  let wear = 0;
+  let verliesKwh = 0;
+  let gewogenPrijs = 0;
 
   for (let i = 0; i < n; i++) {
     const ip = window.prices.importPrice[i]!;
@@ -164,19 +165,26 @@ function breakdown(
     } else {
       self += minderImport * ip - minderExport * ep;
     }
-    wear += spec.wearCostEurPerKwh * bat.dischargeKwh[i]!;
+
+    // Wat er bij laden en ontladen verdwijnt: er gaat meer in dan eruit komt.
+    const verlies =
+      bat.chargeKwh[i]! * (1 - spec.efficiency) +
+      (bat.dischargeKwh[i]! / spec.efficiency) * (1 - spec.efficiency);
+    verliesKwh += verlies;
+    gewogenPrijs += verlies * ip;
   }
 
   const totaal = base.totalCostEur - bat.totalCostEur;
+  const verliesEur = verliesKwh > 0 ? gewogenPrijs : 0;
   // Arbitrage is het residu, zodat de uitsplitsing per definitie optelt tot het
   // totaal en er geen onverklaard verschil kan ontstaan.
-  const arbitrage = totaal - self - avoided + wear;
+  const arbitrage = totaal - self - avoided + verliesEur;
 
   return {
     selfConsumptionEur: self,
     arbitrageEur: arbitrage,
     avoidedNegativeExportEur: avoided,
-    lossesEur: -wear,
+    lossesEur: -verliesEur,
     totalEur: totaal,
   };
 }

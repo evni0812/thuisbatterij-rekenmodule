@@ -81,6 +81,12 @@ Round-trip is dus η². Symmetrisch in beide richtingen.
 **Cycli** worden alleen over de ontlading geteld: één volledige laad-ontlaadgang
 is precies één cyclus.
 
+**Slijtage telt één keer.** De slijtagekosten sturen de dispatch — ze bepalen of
+een extra cyclus de moeite waard is — maar ze worden niet van de gerapporteerde
+besparing afgetrokken. Slijtage is niet iets bovenop de aanschafprijs; het ís die
+prijs, uitgesmeerd over de cycli, en die staat al als investering in de
+businesscase.
+
 **Tijd.** Een Nederlandse dag heeft 92, 96 of 100 kwartieren. Dag-, maand- en
 jaargrenzen worden in `Europe/Amsterdam` bepaald, koppelingen tussen reeksen in
 UTC. Nergens staat een hardcoded 24 of 96.

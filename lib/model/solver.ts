@@ -362,7 +362,25 @@ const spec0 = {
   wearCostEurPerKwh: 0,
 } satisfies BatterySpec;
 
-/** Tel kosten en cycli op uit de per-kwartier reeksen. */
+/**
+ * Tel kosten en cycli op uit de per-kwartier reeksen.
+ *
+ * ── Waarom slijtage hier NIET meetelt ────────────────────────────────────────
+ * De slijtagekosten sturen wel de dispatch: ze zijn de schaduwprijs die bepaalt
+ * of een extra cyclus de moeite waard is, en zonder die drempel zou de batterij
+ * eindeloos cycelen voor een marginale winst.
+ *
+ * Maar ze horen niet in de gerapporteerde besparing. Slijtage is niet iets
+ * bovenop de aanschafprijs — het IS de aanschafprijs, uitgesmeerd over de
+ * cycli. Die prijs staat al als investering in de financiële doorrekening, dus
+ * hem hier nog eens aftrekken telt hem twee keer.
+ *
+ * Het gevolg van die dubbeltelling was zichtbaar: een duurdere batterij kreeg
+ * een hogere schaduwprijs en daarmee een lagere gerapporteerde besparing, zodat
+ * een FoxESS van 2,1 kWh minder leek op te leveren dan een Zendure van 1,92 kWh.
+ * De besparing hier is dus de energiekostenbesparing; wat de batterij kost komt
+ * in finance.ts aan bod.
+ */
 export function finalize(
   window: Window,
   spec: BatterySpec,
@@ -375,7 +393,6 @@ export function finalize(
   for (let i = 0; i < n; i++) {
     cost += out.gridImportKwh[i]! * window.prices.importPrice[i]!;
     cost -= out.gridExportKwh[i]! * window.prices.exportPrice[i]!;
-    cost += spec.wearCostEurPerKwh * out.dischargeKwh[i]!;
     discharge += out.dischargeKwh[i]!;
   }
   out.totalCostEur = cost;

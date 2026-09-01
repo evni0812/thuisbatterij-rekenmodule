@@ -292,3 +292,52 @@ describe("curtailment", () => {
     expect(b.totalCostEur).toBeCloseTo(0, 9);    // afregelen kost niets
   });
 });
+
+describe("slijtage telt niet dubbel", () => {
+  /**
+   * De aanschafprijs mag maar één keer meetellen.
+   *
+   * De slijtagekosten sturen de dispatch — ze bepalen of een extra cyclus de
+   * moeite waard is — maar ze zijn niet iets bovenop de aanschafprijs: ze ZIJN
+   * die prijs, uitgesmeerd over de cycli. Die staat al als investering in de
+   * businesscase.
+   *
+   * Toen ze wél van de besparing werden afgetrokken, kreeg een duurdere
+   * batterij een hogere schaduwprijs en daarmee een lagere besparing: een
+   * FoxESS van 2,1 kWh leek toen minder op te leveren dan een Zendure van
+   * 1,92 kWh, puur omdat hij meer kostte.
+   */
+  it("laat een duurdere batterij niet minder opleveren dan een kleinere goedkopere", () => {
+    const w = makeWindow(14);
+    const goedkoopKlein = saving(
+      w,
+      spec({ capacityKwh: 1.92, wearCostEurPerKwh: 0.085 }),
+      TARIFF,
+      dispatchRolling,
+    );
+    const duurderGroter = saving(
+      w,
+      spec({ capacityKwh: 2.1, wearCostEurPerKwh: 0.113 }),
+      TARIFF,
+      dispatchRolling,
+    );
+    expect(duurderGroter).toBeGreaterThanOrEqual(goedkoopKlein);
+  });
+
+  it("rapporteert dezelfde besparing ongeacht de slijtagedrempel bij gelijk gedrag", () => {
+    // Bij een vlakke prijs handelt de batterij niet, dus de slijtagedrempel mag
+    // de uitkomst helemaal niet raken.
+    const n = 96 * 3;
+    const startMs = buildQuarterAxis("2025-01-01", "2025-01-04");
+    const residual = new Float64Array(n).fill(0.2);
+    const market = new Float64Array(n).fill(0.08);
+    const w: Window = {
+      startMs,
+      residualKwh: residual,
+      prices: buildPriceSeries(market, TARIFF),
+    };
+    const zonder = dispatchRolling(w, spec({ wearCostEurPerKwh: 0 }), TARIFF);
+    const met = dispatchRolling(w, spec({ wearCostEurPerKwh: 0.15 }), TARIFF);
+    expect(met.totalCostEur).toBeCloseTo(zonder.totalCostEur, 6);
+  });
+});
