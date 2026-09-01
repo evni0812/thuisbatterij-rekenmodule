@@ -127,7 +127,8 @@ describe("kolomindeling van het dagprofiel", () => {
   it("zet paneeltitels binnen de plot, nooit over de as-labels", () => {
     const svg = tekenen();
     const titels = [...svg.querySelectorAll<SVGTextElement>("text.paneel-titel")];
-    expect(titels.length).toBe(3);
+    // Vier panelen: prijs, acties, lading, net.
+    expect(titels.length).toBe(4);
 
     for (const el of titels) {
       const { van, tot } = bereik(el);
@@ -168,6 +169,27 @@ describe("kolomindeling van het dagprofiel", () => {
         14,
       );
     }
+  });
+
+  it("toont de acties uitgesplitst naar herkomst en bestemming", () => {
+    const { container } = render(
+      <Dagprofiel
+        voorbeelden={dagen}
+        losseDag={null}
+        ontbreekt={null}
+        eersteDag="2025-01-01"
+        laatsteDag="2025-12-31"
+        onVraagDag={() => {}}
+        onWisDag={() => {}}
+      />,
+    );
+    const namen = [...container.querySelectorAll("text.lijn-label")].map(
+      (el) => el.textContent,
+    );
+    // Op een zomerdag laadt de batterij uit eigen zon en gebruikt hij dat zelf;
+    // dat onderscheid is het hele verhaal van dit paneel.
+    expect(namen).toContain("uit eigen zon");
+    expect(namen).toContain("zelf gebruikt");
   });
 
   it("gebruikt geen legenda meer — elk paneel benoemt zijn eigen lijnen", () => {

@@ -35,13 +35,27 @@ const PLOT_BREEDTE = PLOT_RECHTS - PLOT_LINKS;
 
 /** Ruimte boven elk paneel voor zijn titel, en de hoogte van het paneel zelf. */
 const TITEL_RUIMTE = 30;
-const HOOGTE = { prijs: 120, lading: 84, net: 120 };
+const HOOGTE = { prijs: 112, actie: 118, lading: 62, net: 112 };
 const TIJDAS_HOOGTE = 28;
 
+/**
+ * De panelen staan in de volgorde van het verhaal: de prijs geeft de aanleiding,
+ * de acties zijn wat de batterij doet, de lading is het gevolg daarvan, en het
+ * net is het resultaat voor jou. De lading sluit direct aan op de acties, want
+ * de helling van die lijn ís de optelsom van de staven erboven.
+ */
 const Y = {
   prijs: TITEL_RUIMTE,
-  lading: TITEL_RUIMTE + HOOGTE.prijs + TITEL_RUIMTE,
-  net: TITEL_RUIMTE + HOOGTE.prijs + TITEL_RUIMTE + HOOGTE.lading + TITEL_RUIMTE,
+  actie: TITEL_RUIMTE + HOOGTE.prijs + TITEL_RUIMTE,
+  lading: TITEL_RUIMTE + HOOGTE.prijs + TITEL_RUIMTE + HOOGTE.actie + 20,
+  net:
+    TITEL_RUIMTE +
+    HOOGTE.prijs +
+    TITEL_RUIMTE +
+    HOOGTE.actie +
+    20 +
+    HOOGTE.lading +
+    TITEL_RUIMTE,
 };
 const H_TOTAAL = Y.net + HOOGTE.net + TIJDAS_HOOGTE;
 
@@ -53,6 +67,46 @@ const LABEL_MIN_AFSTAND = 15;
 
 function lijn(punten: [number, number][]): string {
   return punten.map(([x, y], i) => `${i === 0 ? "M" : "L"}${x} ${y}`).join(" ");
+}
+
+/**
+ * Splits elke laad- en ontlaadactie uit naar herkomst en bestemming.
+ *
+ * Dat is exact af te leiden en het is precies wat het verhaal draagt: laden uit
+ * je eigen overschot is iets heel anders dan inkopen van het net, en ontladen
+ * voor eigen gebruik levert veel meer op dan terugverkopen.
+ *
+ *   laden  — zolang er overschot is, komt de lading daaruit; wat je meer laadt
+ *            dan er over is, koop je in
+ *   ontladen — zolang er tekort is, gaat de lading daarheen; wat je meer ontlaadt
+ *            dan je zelf verbruikt, gaat het net op
+ */
+function splitsActies(dag: SampleDay): {
+  uitZon: number[];
+  uitNet: number[];
+  naarHuis: number[];
+  naarNet: number[];
+} {
+  const uitZon: number[] = [];
+  const uitNet: number[] = [];
+  const naarHuis: number[] = [];
+  const naarNet: number[] = [];
+
+  for (let i = 0; i < dag.startMs.length; i++) {
+    const laden = dag.chargeKwh[i]!;
+    const ontladen = dag.dischargeKwh[i]!;
+    const overschot = Math.max(0, -dag.residualKwh[i]!);
+    const tekort = Math.max(0, dag.residualKwh[i]!);
+
+    const zon = Math.min(laden, overschot);
+    uitZon.push(zon * KWH_NAAR_KW);
+    uitNet.push((laden - zon) * KWH_NAAR_KW);
+
+    const huis = Math.min(ontladen, tekort);
+    naarHuis.push(huis * KWH_NAAR_KW);
+    naarNet.push((ontladen - huis) * KWH_NAAR_KW);
+  }
+  return { uitZon, uitNet, naarHuis, naarNet };
 }
 
 /**
@@ -156,7 +210,24 @@ export function Dagprofiel({
   const yP = (v: number) =>
     Y.prijs + (1 - (v - pLo) / Math.max(1e-9, pHi - pLo)) * HOOGTE.prijs;
 
-  // ── Paneel 2: lading ──
+  // ── Paneel 2: wat de batterij doet ──
+  const acties = splitsActies(dag);
+  const aMax = Math.max(
+    ...acties.uitZon.map((v, k) => v + acties.uitNet[k]!),
+    ...acties.naarHuis.map((v, k) => v + acties.naarNet[k]!),
+    0.2,
+  );
+  const yA = (v: number) => Y.actie + (1 - (v + aMax) / (2 * aMax)) * HOOGTE.actie;
+  const staafB = Math.max(2, (PLOT_BREEDTE / n) * 0.8);
+
+  // Totalen over de dag, voor de labels: die dragen het verhaal van dit paneel.
+  const som = (a: number[]) => a.reduce((x, y) => x + y, 0) / KWH_NAAR_KW;
+  const totaalZon = som(acties.uitZon);
+  const totaalNet = som(acties.uitNet);
+  const totaalHuis = som(acties.naarHuis);
+  const totaalVerkocht = som(acties.naarNet);
+
+  // ── Paneel 3: lading ──
   const cap = Math.max(dag.usableCapacityKwh, 0.001);
   const yS = (v: number) => Y.lading + (1 - v / cap) * HOOGTE.lading;
   const socMax = Math.max(...dag.socKwh);
@@ -324,8 +395,79 @@ export function Dagprofiel({
             gestippeld
           />
 
-          {/* ══ Paneel 2: lading ══ */}
-          {paneelTitel(Y.lading, "Lading van de batterij", `${getal(cap, 1)} kWh bruikbaar`)}
+          {/* ══ Paneel 2: wat de batterij doet ══ */}
+          {paneelTitel(Y.actie, "Wat de batterij doet")}
+          <line x1={PLOT_LINKS} x2={PLOT_RECHTS} y1={yA(aMax / 2)} y2={yA(aMax / 2)} stroke="var(--grid)" />
+          <line x1={PLOT_LINKS} x2={PLOT_RECHTS} y1={yA(-aMax / 2)} y2={yA(-aMax / 2)} stroke="var(--grid)" />
+          {dag.startMs.map((_, k) => {
+            const zon = acties.uitZon[k]!;
+            const net = acties.uitNet[k]!;
+            const huis = acties.naarHuis[k]!;
+            const verkocht = acties.naarNet[k]!;
+            const xk = x(k) - staafB / 2;
+            const nul = yA(0);
+            return (
+              <g key={k}>
+                {/* Omhoog: erin. Onderop wat uit eigen overschot komt, daarboven
+                    wat is ingekocht — de volgorde is de voorkeursvolgorde. */}
+                {zon > 0.001 ? (
+                  <rect x={xk} y={yA(zon)} width={staafB} height={nul - yA(zon)} fill="var(--series-3)" />
+                ) : null}
+                {net > 0.001 ? (
+                  <rect x={xk} y={yA(zon + net)} width={staafB} height={yA(zon) - yA(zon + net)} fill="var(--series-1)" />
+                ) : null}
+                {/* Omlaag: eruit. */}
+                {huis > 0.001 ? (
+                  <rect x={xk} y={nul} width={staafB} height={yA(-huis) - nul} fill="var(--series-3)" />
+                ) : null}
+                {verkocht > 0.001 ? (
+                  <rect x={xk} y={yA(-huis)} width={staafB} height={yA(-huis - verkocht) - yA(-huis)} fill="var(--series-2)" />
+                ) : null}
+              </g>
+            );
+          })}
+          <line x1={PLOT_LINKS} x2={PLOT_RECHTS} y1={yA(0)} y2={yA(0)} stroke="var(--axis)" strokeWidth={1.5} />
+          <text x={PLOT_LINKS - 10} y={Y.actie + 12} textAnchor="end" className="as-label">
+            erin
+          </text>
+          <text x={PLOT_LINKS - 10} y={yA(aMax / 2)} textAnchor="end" dominantBaseline="middle" className="as-label">
+            {getal(aMax / 2, 1)} kW
+          </text>
+          <text x={PLOT_LINKS - 10} y={yA(0)} textAnchor="end" dominantBaseline="middle" className="as-label">
+            0
+          </text>
+          <text x={PLOT_LINKS - 10} y={yA(-aMax / 2)} textAnchor="end" dominantBaseline="middle" className="as-label">
+            {getal(aMax / 2, 1)} kW
+          </text>
+          <text x={PLOT_LINKS - 10} y={Y.actie + HOOGTE.actie - 4} textAnchor="end" className="as-label">
+            eruit
+          </text>
+
+          {/* De dagtotalen dragen dit paneel: niet elk staafje telt, maar wel
+              hoeveel er die dag in totaal is opgeslagen en waar het heen ging. */}
+          <g className="actie-legende">
+            {[
+              { kleur: "var(--series-3)", naam: "uit eigen zon", waarde: totaalZon, y: Y.actie + 14 },
+              { kleur: "var(--series-1)", naam: "ingekocht", waarde: totaalNet, y: Y.actie + 32 },
+              { kleur: "var(--series-3)", naam: "zelf gebruikt", waarde: totaalHuis, y: Y.actie + HOOGTE.actie - 30 },
+              { kleur: "var(--series-2)", naam: "verkocht", waarde: totaalVerkocht, y: Y.actie + HOOGTE.actie - 12 },
+            ].map((r) =>
+              r.waarde > 0.01 ? (
+                <g key={r.naam}>
+                  <rect x={PLOT_RECHTS + 8} y={r.y - 8} width={9} height={9} rx={2} fill={r.kleur} />
+                  <text x={PLOT_RECHTS + 22} y={r.y} className="lijn-label">
+                    {r.naam}
+                  </text>
+                  <text x={PLOT_RECHTS + 22} y={r.y + 12} className="lijn-waarde">
+                    {getal(r.waarde, 2)} kWh
+                  </text>
+                </g>
+              ) : null,
+            )}
+          </g>
+
+          {/* ══ Paneel 3: lading ══ */}
+          {paneelTitel(Y.lading, "Hoe vol hij daardoor is", `${getal(cap, 1)} kWh bruikbaar`)}
           <line
             x1={PLOT_LINKS}
             x2={PLOT_RECHTS}
@@ -352,23 +494,17 @@ export function Dagprofiel({
           <text x={PLOT_LINKS - 10} y={yS(0)} textAnchor="end" dominantBaseline="middle" className="as-label">
             leeg
           </text>
-          <LijnLabel
-            y={yS(dag.socKwh[laatste]!)}
-            yLijn={yS(dag.socKwh[laatste]!)}
-            kleur="var(--series-3)"
-            naam="aan het eind"
-            waarde={`${getal(dag.socKwh[laatste]!, 1)} kWh`}
-          />
           {/* Het hoogste punt is het verhaal van dit paneel: hoe vol werd hij? */}
           {socMax > cap * 0.05 ? (
-            <text
-              x={x(dag.socKwh.indexOf(socMax))}
-              y={yS(socMax) - 7}
-              textAnchor="middle"
-              className="piek-label"
-            >
-              tot {getal(socMax, 1)} kWh
-            </text>
+            <g>
+              <rect x={PLOT_RECHTS + 8} y={yS(socMax) - 8} width={9} height={9} rx={2} fill="var(--series-3)" />
+              <text x={PLOT_RECHTS + 22} y={yS(socMax)} className="lijn-label">
+                hoogste stand
+              </text>
+              <text x={PLOT_RECHTS + 22} y={yS(socMax) + 12} className="lijn-waarde">
+                {getal(socMax, 1)} kWh
+              </text>
+            </g>
           ) : null}
 
           {/* ══ Paneel 3: netuitwisseling ══ */}
@@ -484,9 +620,8 @@ function Uitlezing({ dag, i }: { dag: SampleDay; i: number | null }) {
   });
 
   const netKw = dag.netKwh[i]! * KWH_NAAR_KW;
-  const laden = dag.chargeKwh[i]! * KWH_NAAR_KW;
-  const ontladen = dag.dischargeKwh[i]! * KWH_NAAR_KW;
   const afgeregeld = dag.curtailedKwh[i]! * KWH_NAAR_KW;
+  const a = splitsActies(dag);
 
   const netTekst =
     Math.abs(netKw) < 0.02
@@ -495,12 +630,25 @@ function Uitlezing({ dag, i }: { dag: SampleDay; i: number | null }) {
         ? `${getal(netKw, 1)} kW afnemen`
         : `${getal(-netKw, 1)} kW terugleveren`;
 
-  const batterijTekst =
-    laden > 0.02
-      ? `laadt met ${getal(laden, 1)} kW`
-      : ontladen > 0.02
-        ? `levert ${getal(ontladen, 1)} kW`
-        : "staat stil";
+  // Zeg niet alleen dát hij laadt, maar waarvandaan en waarheen: dat is het
+  // verschil tussen zelf verbruiken en handelen, en dus tussen veel en weinig
+  // opbrengst.
+  const zon = a.uitZon[i]!;
+  const uitNet = a.uitNet[i]!;
+  const huis = a.naarHuis[i]!;
+  const verkocht = a.naarNet[i]!;
+  let batterijTekst = "staat stil";
+  if (zon + uitNet > 0.02) {
+    const delen: string[] = [];
+    if (zon > 0.02) delen.push(`${getal(zon, 1)} kW uit eigen zon`);
+    if (uitNet > 0.02) delen.push(`${getal(uitNet, 1)} kW ingekocht`);
+    batterijTekst = `laadt ${delen.join(" en ")}`;
+  } else if (huis + verkocht > 0.02) {
+    const delen: string[] = [];
+    if (huis > 0.02) delen.push(`${getal(huis, 1)} kW voor eigen gebruik`);
+    if (verkocht > 0.02) delen.push(`${getal(verkocht, 1)} kW verkocht`);
+    batterijTekst = `levert ${delen.join(" en ")}`;
+  }
 
   return (
     <div className="uitlezing">
@@ -515,7 +663,7 @@ function Uitlezing({ dag, i }: { dag: SampleDay; i: number | null }) {
       </span>
       <span className="uitlezing-item">
         <i style={{ background: "var(--series-3)" }} />
-        {getal(dag.socKwh[i]!, 1)} kWh · {batterijTekst}
+        {batterijTekst} · {getal(dag.socKwh[i]!, 1)} kWh in de accu
       </span>
       <span className="uitlezing-item">
         <i style={{ background: "var(--series-4)" }} />
