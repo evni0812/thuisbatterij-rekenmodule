@@ -7,14 +7,16 @@
  * nul in een schaalfunctie.
  */
 import { readFileSync } from "node:fs";
-import { cleanup, render, screen, within } from "@testing-library/react";
-import { afterEach, beforeAll, describe, expect, it } from "vitest";
+import { cleanup, fireEvent, render, screen, within } from "@testing-library/react";
+import { afterEach, beforeAll, describe, expect, it, vi } from "vitest";
 import { Antwoord } from "../components/Antwoord";
 import { BatterijMaat } from "../components/BatterijMaat";
 import { BesparingPerJaar } from "../components/BesparingPerJaar";
 import { Cashflow } from "../components/Cashflow";
 import { Dagprofiel } from "../components/Dagprofiel";
+import { Geavanceerd } from "../components/Geavanceerd";
 import { Prijskloof } from "../components/Prijskloof";
+import { Statistieken } from "../components/Statistieken";
 import { Uitsplitsing } from "../components/Uitsplitsing";
 import { Verantwoording } from "../components/Verantwoording";
 import { controleerInvoer } from "../components/Invoer";
@@ -31,6 +33,15 @@ import { PRESETS } from "../lib/presets";
 afterEach(cleanup);
 
 const DOMAIN = "871685900000056162";
+
+/** Minimale instellingen voor het instellingenpaneel. */
+const LEGE_INSTELLINGEN = {
+  afnameKwh: 2500, terugleveringKwh: 2000, presetId: "foxess-s22",
+  domein: DOMAIN, van: "", tot: "", spreiding: 1, terugleverkostenCt: 0,
+  curtailment: true, analysejaren: 15, discontovoet: 0.03, prijsstijging: 0.02,
+  degradatie: 0.015, prijsEur: null, capaciteitKwh: null, vermogenKw: null,
+  opwekKwh: null,
+};
 let manifest: Manifest;
 let result: AnalysisResult;
 
@@ -257,5 +268,53 @@ describe("invoervalidatie denkt mee", () => {
     expect(w.length).toBeGreaterThan(0);
     // Ook bij extreme invoer blijft de tool doorrekenen.
     expect(w.every((x) => typeof x.tekst === "string")).toBe(true);
+  });
+});
+
+describe("kerncijfers en herberekenen", () => {
+  it("toont elk cijfer met zijn verandering, niet als los getal", () => {
+    render(<Statistieken stats={result.stats} opwekBekend={false} />);
+    const tekst = document.body.textContent ?? "";
+    // Het verschil is het verhaal: "van X naar Y" zegt wat een batterij doet,
+    // een kaal eindgetal niet.
+    expect(tekst).toMatch(/Van het net/);
+    expect(tekst).toMatch(/Naar het net/);
+    expect(tekst).toMatch(/Cycli/);
+    expect(tekst).toMatch(/per dag/);
+    expect(screen.getAllByLabelText("wordt").length).toBeGreaterThanOrEqual(2);
+  });
+
+  it("laat zelfconsumptie en autarkie weg zolang de opwek onbekend is", () => {
+    render(<Statistieken stats={result.stats} opwekBekend={false} />);
+    const tekst = document.body.textContent ?? "";
+    // Ze zijn niet uit meterstanden af te leiden; een geraden getal zou erger
+    // zijn dan geen getal.
+    expect(tekst).not.toMatch(/Zelfconsumptie/);
+    expect(tekst).toMatch(/hoeveel je panelen per jaar opwekken/);
+  });
+
+  it("vraagt om een opdracht in plaats van vanzelf te rekenen", () => {
+    const opBereken = vi.fn();
+    render(
+      <Geavanceerd
+        inst={{ ...LEGE_INSTELLINGEN }}
+        manifest={manifest}
+        preset={PRESETS[1]!}
+        capaciteit={2.1}
+        vermogen={0.8}
+        prijs={1199}
+        onChange={() => {}}
+        onReset={() => {}}
+        onBereken={opBereken}
+        verouderd
+        bezig={false}
+      />,
+    );
+    // Bij gewijzigde invoer hoort de knop om aandacht te vragen: anders kijk je
+    // naar een uitkomst die niet meer bij je instellingen hoort.
+    expect(screen.getByText("Instellingen gewijzigd")).toBeDefined();
+    const knop = screen.getByRole("button", { name: /Bereken opnieuw/ });
+    fireEvent.click(knop);
+    expect(opBereken).toHaveBeenCalledOnce();
   });
 });

@@ -25,6 +25,8 @@ export interface Instellingen {
   prijsEur: number | null;
   capaciteitKwh: number | null;
   vermogenKw: number | null;
+  /** Bruto jaaropwek van de panelen; null als onbekend. */
+  opwekKwh: number | null;
 }
 
 /** Korte sleutels, zodat een gedeelde link leesbaar blijft. */
@@ -45,6 +47,7 @@ const SLEUTELS: Record<keyof Instellingen, string> = {
   prijsEur: "prijs",
   capaciteitKwh: "cap",
   vermogenKw: "kw",
+  opwekKwh: "opwek",
 };
 
 export function leesUrl(): Partial<Instellingen> {
@@ -74,6 +77,7 @@ export function leesUrl(): Partial<Instellingen> {
   zetGetal("prijsEur", getal(SLEUTELS.prijsEur));
   zetGetal("capaciteitKwh", getal(SLEUTELS.capaciteitKwh));
   zetGetal("vermogenKw", getal(SLEUTELS.vermogenKw));
+  zetGetal("opwekKwh", getal(SLEUTELS.opwekKwh));
 
   const preset = p.get(SLEUTELS.presetId);
   if (preset) uit.presetId = preset;

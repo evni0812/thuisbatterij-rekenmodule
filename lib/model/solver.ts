@@ -276,9 +276,19 @@ export function executePath(
 
     if (adaptToActual) {
       if (r < 0) {
-        // Overschot: sla op wat past, ook als het plan dat niet voorzag.
         const surplus = -r;
-        charge = Math.max(charge, Math.min(surplus, maxIn, (usable - soc) / eta));
+        // Onverwacht overschot alsnog opvangen, maar alleen wanneer dat
+        // onmiskenbaar beter is dan terugleveren: bij een prijs onder de
+        // drempel levert het net vrijwel niets op.
+        //
+        // Deze correctie mag NIET altijd gelden. Als hij bij elk overschot
+        // maximaal laadt, overrulet hij het plan volledig en wordt de batterij
+        // greedy: hij vult zich bij het eerste ochtendzonnetje, terwijl
+        // teruglevering dan nog 11 ct opbrengt en de prijs 's middags naar nul
+        // zakt. Precies dan had hij moeten laden.
+        if (ep < GRETIG_LADEN_ONDER) {
+          charge = Math.max(charge, Math.min(surplus, maxIn, (usable - soc) / eta));
+        }
         discharge = 0;
       } else if (r > 0) {
         // Tekort: ontlaad hooguit tot het tekort gedekt is.
@@ -311,6 +321,12 @@ export function executePath(
   }
   return soc;
 }
+
+/**
+ * Onder deze terugleverprijs is opslaan altijd beter dan teruggeven, ongeacht
+ * wat het plan zei. In EUR/kWh.
+ */
+export const GRETIG_LADEN_ONDER = 0.02;
 
 /** Leeg resultaat met arrays van de juiste lengte. */
 export function emptyResult(n: number): DispatchResult {

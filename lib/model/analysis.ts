@@ -51,12 +51,54 @@ export interface YearAnalysis {
   cyclesPerYear: number;
   /** Aandeel van het optimum dat de realistische strategie haalt, 0–1. */
   captureRate: number;
-  /** Zelfvoorzieningsgraad: welk deel van het verbruik niet van het net komt. */
-  selfSufficiencyBaseline: number;
-  selfSufficiencyBattery: number;
+  /** Netafname met batterij, kWh — waar de reductie uit volgt. */
+  gridImportWithBatteryKwh: number;
+  /** Netinvoeding met batterij, kWh. */
+  gridExportWithBatteryKwh: number;
+  /** Energie die door de batterij ging, AC-zijdig geleverd, kWh. */
+  throughputKwh: number;
+}
+
+/**
+ * Kerncijfers over de gekozen periode, per jaar.
+ *
+ * Zelfconsumptie en autarkie zijn de gangbare maten, maar ze vragen het BRUTO
+ * verbruik en de BRUTO opwek — en die staan niet op je jaarafrekening; daar
+ * staat alleen wat er door de meter ging. Ze worden daarom afgeleid uit één
+ * extra getal, de jaaropwek van je panelen:
+ *
+ *   direct zelf gebruikt = opwek − teruglevering
+ *   bruto verbruik       = netafname + direct zelf gebruikt
+ *
+ * Zonder dat getal blijven ze leeg en tonen we alleen wat wél exact volgt uit
+ * de meterstanden.
+ */
+export interface KeyStats {
+  /** Equivalente volledige cycli per jaar, en per dag. */
+  cyclesPerYear: number;
+  cyclesPerDay: number;
+  /** Door de batterij geleverde energie per jaar, kWh. */
+  throughputPerYearKwh: number;
+  /** Netafname zonder en met batterij, kWh per jaar. */
+  gridImportBaselineKwh: number;
+  gridImportBatteryKwh: number;
+  /** Netinvoeding zonder en met batterij, kWh per jaar. */
+  gridExportBaselineKwh: number;
+  gridExportBatteryKwh: number;
+  /** Zelfconsumptie: welk deel van je opwek je zelf gebruikt, 0–1. */
+  selfConsumptionBaseline: number | null;
+  selfConsumptionBattery: number | null;
+  /** Autarkie: welk deel van je verbruik je zelf dekt, 0–1. */
+  selfSufficiencyBaseline: number | null;
+  selfSufficiencyBattery: number | null;
 }
 
 export interface AnalysisInput {
+  /**
+   * Bruto jaaropwek van de panelen in kWh, als de gebruiker die weet.
+   * Nodig voor zelfconsumptie en autarkie; zonder blijven die leeg.
+   */
+  annualProductionKwh?: number;
   /** Eén venster per profieljaar. */
   windows: { year: number; firstDay: string; lastDay: string; isFullYear: boolean; window: Window }[];
   battery: BatterySpec;
@@ -132,6 +174,7 @@ export interface AnalysisResult {
   curve: SavingCurvePoint[];
   priceGap: PriceGap;
   sampleDays: SampleDay[];
+  stats: KeyStats;
 }
 
 /**
@@ -244,9 +287,11 @@ function analyseWindow(
 
   let dischargeTotal = 0;
   let importWithBattery = 0;
+  let exportWithBattery = 0;
   for (let i = 0; i < real.dischargeKwh.length; i++) {
     dischargeTotal += real.dischargeKwh[i]!;
     importWithBattery += real.gridImportKwh[i]!;
+    exportWithBattery += real.gridExportKwh[i]!;
   }
 
   const realSaving = base.totalCostEur - real.totalCostEur;
@@ -270,10 +315,11 @@ function analyseWindow(
     breakdown: breakdown(window, base, real, spec),
     cyclesPerYear: equivalentCycles(dischargeTotal, spec),
     captureRate: optSaving > 0 ? realSaving / optSaving : 0,
-    selfSufficiencyBaseline: 0,
-    selfSufficiencyBattery:
-      totaalBehoefte > 0 ? 1 - importWithBattery / totaalBehoefte : 0,
+    gridImportWithBatteryKwh: importWithBattery,
+    gridExportWithBatteryKwh: exportWithBattery,
+    throughputKwh: dischargeTotal,
   };
+  void totaalBehoefte;
   return { analysis, realistic: real, baselineCost: base.totalCostEur };
 }
 
@@ -553,8 +599,47 @@ export function runAnalysis(
   const toonVenster = input.windows[toonIndex];
   const toonDispatch = uitkomsten[toonIndex]?.realistic;
 
+  // Kerncijfers over de volledige jaren, per jaar gemiddeld.
+  const gem = (f: (y: YearAnalysis) => number) =>
+    basis.reduce((a, y) => a + f(y), 0) / Math.max(1, basis.length);
+
+  const impBasis = gem((y) => y.gridImportKwh);
+  const impBat = gem((y) => y.gridImportWithBatteryKwh);
+  const expBasis = gem((y) => y.gridExportKwh);
+  const expBat = gem((y) => y.gridExportWithBatteryKwh);
+  const cycli = gem((y) => y.cyclesPerYear);
+
+  const opwek = input.annualProductionKwh;
+  // Wat je direct zelf gebruikt van je eigen opwek, zonder batterij: alles wat
+  // niet is teruggeleverd. Daaruit volgt het bruto verbruik.
+  const directEigen = opwek !== undefined ? Math.max(0, opwek - expBasis) : null;
+  const brutoVerbruik = directEigen !== null ? impBasis + directEigen : null;
+
+  const stats: KeyStats = {
+    cyclesPerYear: cycli,
+    cyclesPerDay: cycli / 365,
+    throughputPerYearKwh: gem((y) => y.throughputKwh),
+    gridImportBaselineKwh: impBasis,
+    gridImportBatteryKwh: impBat,
+    gridExportBaselineKwh: expBasis,
+    gridExportBatteryKwh: expBat,
+    selfConsumptionBaseline:
+      opwek && opwek > 0 ? Math.min(1, 1 - expBasis / opwek) : null,
+    selfConsumptionBattery:
+      opwek && opwek > 0 ? Math.min(1, 1 - expBat / opwek) : null,
+    selfSufficiencyBaseline:
+      brutoVerbruik && brutoVerbruik > 0
+        ? Math.min(1, 1 - impBasis / brutoVerbruik)
+        : null,
+    selfSufficiencyBattery:
+      brutoVerbruik && brutoVerbruik > 0
+        ? Math.min(1, 1 - impBat / brutoVerbruik)
+        : null,
+  };
+
   return {
     perYear,
+    stats,
     averageSavingEur: gemiddeld,
     minSavingEur: Math.min(...besparingen),
     maxSavingEur: Math.max(...besparingen),

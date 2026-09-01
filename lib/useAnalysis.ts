@@ -10,6 +10,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
+import { leesCache, schrijfCache } from "./cache";
 import type { AnalysisResult } from "./model/analysis";
 import type { Manifest } from "./data/manifest";
 import type { SampleDay } from "./model/analysis";
@@ -36,6 +37,12 @@ export interface AnalysisState {
   busy: boolean;
   error: string | null;
   elapsedMs: number | null;
+  /** Het getoonde resultaat komt uit een eerdere doorrekening. */
+  uitCache: boolean;
+  /** De invoer is gewijzigd sinds het getoonde resultaat. */
+  verouderd: boolean;
+  /** Reken opnieuw door, ook als er een bewaard resultaat is. */
+  herbereken: () => void;
   grid: GridState | null;
   /** Start de rasterberekening; kost enkele seconden. */
   startGrid: (capacities: number[], powers: number[]) => void;
@@ -48,7 +55,12 @@ export interface AnalysisState {
   wisDag: () => void;
 }
 
-/** Wachttijd voordat een wijziging een herberekening start, in milliseconden. */
+/**
+ * Wachttijd voordat een wijziging een herberekening start.
+ *
+ * Alleen van toepassing op wijzigingen die direct doorrekenen; de zware
+ * instellingen wachten op een expliciete opdracht.
+ */
 const DEBOUNCE_MS = 180;
 
 export function useAnalysis(config: Configuration | null): AnalysisState {
@@ -57,17 +69,21 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
   const pendingId = useRef<number | null>(null);
 
   const [state, setState] = useState<
-    Omit<AnalysisState, "startGrid" | "vraagDag" | "wisDag">
+    Omit<AnalysisState, "startGrid" | "vraagDag" | "wisDag" | "herbereken">
   >({
     manifest: null,
     result: null,
     busy: false,
     error: null,
     elapsedMs: null,
+    uitCache: false,
+    verouderd: false,
     grid: null,
     dag: null,
     dagOntbreekt: null,
   });
+  /** De configuratie waar het getoonde resultaat bij hoort. */
+  const getoondVoor = useRef<string | null>(null);
   const gridId = useRef(0);
   const dagId = useRef(0);
 
@@ -94,7 +110,13 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
           busy: false,
           error: null,
           elapsedMs: msg.elapsedMs,
+          uitCache: false,
+          verouderd: false,
         }));
+        if (laatsteConfig.current) {
+          schrijfCache(laatsteConfig.current, msg.result);
+          getoondVoor.current = JSON.stringify(laatsteConfig.current);
+        }
         return;
       }
       if (msg.type === "grid-row") {
@@ -142,15 +164,23 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
     };
   }, []);
 
+  /** De configuratie van de lopende of laatst verstuurde aanvraag. */
+  const laatsteConfig = useRef<Configuration | null>(null);
+
   const send = useCallback((cfg: Configuration) => {
     const worker = workerRef.current;
     if (!worker) return;
     const id = ++nextId.current;
     pendingId.current = id;
+    laatsteConfig.current = cfg;
     setState((s) => ({ ...s, busy: true }));
     const msg: WorkerRequest = { type: "analyse", id, config: cfg };
     worker.postMessage(msg);
   }, []);
+
+  const herbereken = useCallback(() => {
+    if (config) send(config);
+  }, [config, send]);
 
   const startGrid = useCallback(
     (capacities: number[], powers: number[]) => {
@@ -197,11 +227,39 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
 
   useEffect(() => {
     if (!config || !state.manifest) return;
-    const timer = setTimeout(() => send(config), DEBOUNCE_MS);
-    return () => clearTimeout(timer);
+    const sleutel = JSON.stringify(config);
+    if (getoondVoor.current === sleutel) return;
+
+    // Eerst kijken of we dit al eens hebben uitgerekend. Dezelfde invoer op
+    // dezelfde data geeft altijd hetzelfde antwoord — er zit geen willekeur in
+    // het model — dus een bewaard resultaat is net zo geldig als een verse
+    // berekening, en scheelt seconden bij elke refresh.
+    const bewaard = leesCache(config);
+    if (bewaard) {
+      getoondVoor.current = sleutel;
+      laatsteConfig.current = config;
+      setState((s) => ({
+        ...s,
+        result: bewaard,
+        busy: false,
+        error: null,
+        uitCache: true,
+        verouderd: false,
+      }));
+      return;
+    }
+
+    // Nog niet eerder uitgerekend: de eerste keer doen we het meteen, daarna
+    // markeren we het resultaat als verouderd en wacht de tool op een opdracht.
+    if (state.result === null) {
+      const timer = setTimeout(() => send(config), DEBOUNCE_MS);
+      return () => clearTimeout(timer);
+    }
+    setState((s) => ({ ...s, verouderd: true }));
+    return;
     // De configuratie is een gewoon object; serialiseren is de eenvoudigste
     // manier om op inhoud te vergelijken in plaats van op referentie.
-  }, [JSON.stringify(config), state.manifest, send]);
+  }, [JSON.stringify(config), state.manifest, state.result, send]);
 
-  return { ...state, startGrid, vraagDag, wisDag };
+  return { ...state, startGrid, vraagDag, wisDag, herbereken };
 }

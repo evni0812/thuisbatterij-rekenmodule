@@ -20,6 +20,8 @@ export interface Configuration {
   discountRate: number;
   calendarFadePerYear: number;
   residualValueEur: number;
+  /** Bruto jaaropwek van de panelen, voor zelfconsumptie en autarkie. */
+  annualProductionKwh?: number;
   /**
    * Neem de energiebelasting over uit de brondata van elk jaar in plaats van de
    * ingestelde waarde. Zo rekent de tool standaard met de tarieven zoals ze

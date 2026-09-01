@@ -9,6 +9,7 @@ import { Dagprofiel } from "../components/Dagprofiel";
 import { Geavanceerd } from "../components/Geavanceerd";
 import { Invoer } from "../components/Invoer";
 import { Prijskloof } from "../components/Prijskloof";
+import { Statistieken } from "../components/Statistieken";
 import { Uitsplitsing } from "../components/Uitsplitsing";
 import { Verantwoording } from "../components/Verantwoording";
 import { periode } from "../lib/format";
@@ -42,6 +43,7 @@ const STANDAARD: Instellingen = {
   prijsEur: null,
   capaciteitKwh: null,
   vermogenKw: null,
+  opwekKwh: null,
 };
 
 export default function Page() {
@@ -95,12 +97,27 @@ export default function Page() {
         discountRate: inst.discontovoet,
         calendarFadePerYear: inst.degradatie,
         residualValueEur: 0,
+        annualProductionKwh: inst.opwekKwh ?? undefined,
         useHistoricalLevy: true,
       };
     }, [geladen, inst, preset, capaciteit, vermogen, prijs]),
   );
 
-  const { manifest, result, busy, error, grid, startGrid, dag, dagOntbreekt, vraagDag, wisDag } = state;
+  const {
+    manifest,
+    result,
+    busy,
+    error,
+    grid,
+    startGrid,
+    dag,
+    dagOntbreekt,
+    vraagDag,
+    wisDag,
+    herbereken,
+    uitCache,
+    verouderd,
+  } = state;
 
   const periodeLabel = result
     ? periode(
@@ -153,6 +170,8 @@ export default function Page() {
         <>
           <Antwoord result={result} investeringEur={prijs} bezig={busy} />
 
+          <Statistieken stats={result.stats} opwekBekend={inst.opwekKwh !== null} />
+
           <Prijskloof
             gap={result.priceGap}
             afnameKwh={inst.afnameKwh}
@@ -204,6 +223,9 @@ export default function Page() {
             prijs={prijs}
             onChange={(patch) => setInst((s) => ({ ...s, ...patch }))}
             onReset={() => setInst(STANDAARD)}
+            onBereken={herbereken}
+            verouderd={verouderd}
+            bezig={busy}
           />
 
           {manifest ? (

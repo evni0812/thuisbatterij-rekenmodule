@@ -64,6 +64,9 @@ export function Geavanceerd({
   prijs,
   onChange,
   onReset,
+  onBereken,
+  verouderd,
+  bezig,
 }: {
   inst: Instellingen;
   manifest: Manifest | null;
@@ -73,6 +76,11 @@ export function Geavanceerd({
   prijs: number;
   onChange: (patch: Partial<Instellingen>) => void;
   onReset: () => void;
+  /** Reken door met de huidige instellingen. */
+  onBereken: () => void;
+  /** De invoer is gewijzigd sinds de getoonde uitkomst. */
+  verouderd: boolean;
+  bezig: boolean;
 }) {
   const gebieden = manifest?.netgebieden ?? [];
 
@@ -82,8 +90,26 @@ export function Geavanceerd({
   const laatste = jaren[jaren.length - 1]?.laatste_dag ?? "2026-12-31";
 
   return (
-    <details className="geavanceerd">
-      <summary>Zelf instellen</summary>
+    <section className="geavanceerd" id="instellingen">
+      <div className="geavanceerd-kop">
+        <h2>Instellingen</h2>
+        {/* Wijzigingen rekenen niet vanzelf door: een volledige doorrekening
+            kost seconden, en dan zou elke sleep van een regelaar er een starten.
+            Je bepaalt zelf wanneer. */}
+        <div className="bereken-balk">
+          {verouderd ? (
+            <span className="bereken-hint">Instellingen gewijzigd</span>
+          ) : null}
+          <button
+            type="button"
+            className={verouderd ? "bereken-knop nadruk" : "bereken-knop"}
+            onClick={onBereken}
+            disabled={bezig}
+          >
+            {bezig ? "Bezig met rekenen…" : "Bereken opnieuw"}
+          </button>
+        </div>
+      </div>
 
       <div className="geavanceerd-inhoud">
         <section>
@@ -173,6 +199,33 @@ export function Geavanceerd({
               <p className="instelling-uitleg">
                 Beschikbaar van {vroegste} tot {laatste}. Een periode korter dan
                 een jaar laat vooral het seizoen zien, niet de businesscase.
+              </p>
+            </div>
+
+            <div className="instelling">
+              <label htmlFor="opwek">Opwek van je panelen</label>
+              <div className="getal-veld">
+                <input
+                  id="opwek"
+                  type="number"
+                  inputMode="numeric"
+                  min={0}
+                  max={30000}
+                  step={100}
+                  value={inst.opwekKwh ?? ""}
+                  placeholder="onbekend"
+                  onChange={(e) =>
+                    onChange({
+                      opwekKwh: e.target.value === "" ? null : Number(e.target.value),
+                    })
+                  }
+                />
+                <span className="eenheid">kWh per jaar</span>
+              </div>
+              <p className="instelling-uitleg">
+                Optioneel. Hiermee kunnen zelfconsumptie en autarkie berekend
+                worden; die volgen niet uit je meterstanden. Vuistregel: ongeveer
+                900 kWh per kWp.
               </p>
             </div>
 
@@ -275,6 +328,6 @@ export function Geavanceerd({
           Alles terugzetten
         </button>
       </div>
-    </details>
+    </section>
   );
 }

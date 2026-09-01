@@ -77,9 +77,9 @@ beforeAll(async () => {
 }, 120_000);
 
 /** Dezelfde kolomgrenzen als het component hanteert. */
-const AS_BREEDTE = 62;
-const B = 780;
-const LABEL_BREEDTE = 132;
+const AS_BREEDTE = 84;
+const B = 860;
+const LABEL_BREEDTE = 148;
 const PLOT_RECHTS = B - LABEL_BREEDTE;
 
 function tekenen(): SVGSVGElement {
@@ -111,7 +111,9 @@ function bereik(el: SVGTextElement): { van: number; tot: number } {
 describe("kolomindeling van het dagprofiel", () => {
   it("houdt as-labels links van de plot", () => {
     const svg = tekenen();
-    const labels = [...svg.querySelectorAll<SVGTextElement>("text.as-label")];
+    const labels = [
+      ...svg.querySelectorAll<SVGTextElement>("text.as-label, text.as-kop"),
+    ];
     expect(labels.length).toBeGreaterThan(5);
 
     for (const el of labels) {
@@ -188,7 +190,8 @@ describe("kolomindeling van het dagprofiel", () => {
     );
     // Op een zomerdag laadt de batterij uit eigen zon en gebruikt hij dat zelf;
     // dat onderscheid is het hele verhaal van dit paneel.
-    expect(namen).toContain("uit eigen zon");
+    expect(namen).toContain("zon over");
+    expect(namen).toContain("opgeslagen");
     expect(namen).toContain("zelf gebruikt");
   });
 

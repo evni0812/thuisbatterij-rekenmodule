@@ -24,19 +24,24 @@ import type { SampleDay } from "../lib/model/analysis";
 import { centPerKwh, datum, getal } from "../lib/format";
 import { Figure, kiesTicks } from "./chart-parts";
 
-const B = 780;
+const B = 860;
 
 /** Kolomindeling: as-labels | plot | lijnlabels. Niets treedt buiten zijn kolom. */
-const AS_BREEDTE = 62;
-const LABEL_BREEDTE = 132;
+const AS_BREEDTE = 84;
+const LABEL_BREEDTE = 148;
 const PLOT_LINKS = AS_BREEDTE;
 const PLOT_RECHTS = B - LABEL_BREEDTE;
 const PLOT_BREEDTE = PLOT_RECHTS - PLOT_LINKS;
 
 /** Ruimte boven elk paneel voor zijn titel, en de hoogte van het paneel zelf. */
-const TITEL_RUIMTE = 30;
-const HOOGTE = { prijs: 112, actie: 118, lading: 62, net: 112 };
-const TIJDAS_HOOGTE = 28;
+/**
+ * Ruimte boven elk paneel voor de titel. Ruim genoeg dat de titel vrij staat
+ * van de grafiek erboven: eerder raakte hij de onderste rasterlijn van het
+ * vorige paneel en leek alles op elkaar gedrukt.
+ */
+const TITEL_RUIMTE = 42;
+const HOOGTE = { prijs: 128, actie: 156, lading: 84, net: 128 };
+const TIJDAS_HOOGTE = 34;
 
 /**
  * De panelen staan in de volgorde van het verhaal: de prijs geeft de aanleiding,
@@ -44,16 +49,21 @@ const TIJDAS_HOOGTE = 28;
  * net is het resultaat voor jou. De lading sluit direct aan op de acties, want
  * de helling van die lijn ís de optelsom van de staven erboven.
  */
+/** De lading sluit dichter aan op de acties: de helling van die lijn ís de
+ *  optelsom van de staven erboven, dus die twee horen bij elkaar. */
+const KOPPEL_RUIMTE = 30;
+
 const Y = {
   prijs: TITEL_RUIMTE,
   actie: TITEL_RUIMTE + HOOGTE.prijs + TITEL_RUIMTE,
-  lading: TITEL_RUIMTE + HOOGTE.prijs + TITEL_RUIMTE + HOOGTE.actie + 20,
+  lading:
+    TITEL_RUIMTE + HOOGTE.prijs + TITEL_RUIMTE + HOOGTE.actie + KOPPEL_RUIMTE,
   net:
     TITEL_RUIMTE +
     HOOGTE.prijs +
     TITEL_RUIMTE +
     HOOGTE.actie +
-    20 +
+    KOPPEL_RUIMTE +
     HOOGTE.lading +
     TITEL_RUIMTE,
 };
@@ -212,9 +222,16 @@ export function Dagprofiel({
 
   // ── Paneel 2: wat de batterij doet ──
   const acties = splitsActies(dag);
+  // Wat er te halen viel: overschot om op te slaan, en eigen verbruik om te
+  // dekken. Zonder deze context lijkt het laden willekeurig — je kunt niet zien
+  // of de batterij het overschot opvangt of dat er iets blijft liggen.
+  const overschotKw = dag.residualKwh.map((v) => Math.max(0, -v) * KWH_NAAR_KW);
+  const tekortKw = dag.residualKwh.map((v) => Math.max(0, v) * KWH_NAAR_KW);
   const aMax = Math.max(
     ...acties.uitZon.map((v, k) => v + acties.uitNet[k]!),
     ...acties.naarHuis.map((v, k) => v + acties.naarNet[k]!),
+    ...overschotKw,
+    ...tekortKw,
     0.2,
   );
   const yA = (v: number) => Y.actie + (1 - (v + aMax) / (2 * aMax)) * HOOGTE.actie;
@@ -226,6 +243,7 @@ export function Dagprofiel({
   const totaalNet = som(acties.uitNet);
   const totaalHuis = som(acties.naarHuis);
   const totaalVerkocht = som(acties.naarNet);
+  const totaalOverschot = overschotKw.reduce((a, b) => a + b, 0) / KWH_NAAR_KW;
 
   // ── Paneel 3: lading ──
   const cap = Math.max(dag.usableCapacityKwh, 0.001);
@@ -396,9 +414,38 @@ export function Dagprofiel({
           />
 
           {/* ══ Paneel 2: wat de batterij doet ══ */}
-          {paneelTitel(Y.actie, "Wat de batterij doet")}
+          {paneelTitel(Y.actie, "Wat er te halen valt, en wat de batterij ermee doet")}
           <line x1={PLOT_LINKS} x2={PLOT_RECHTS} y1={yA(aMax / 2)} y2={yA(aMax / 2)} stroke="var(--grid)" />
           <line x1={PLOT_LINKS} x2={PLOT_RECHTS} y1={yA(-aMax / 2)} y2={yA(-aMax / 2)} stroke="var(--grid)" />
+
+          {/* De context achter de staven: hoeveel zon er over was om op te
+              slaan, en hoeveel je zelf verbruikte. De staven vallen daarbinnen,
+              dus je ziet in één oogopslag wat de batterij oppakt en wat blijft
+              liggen omdat hij vol is of te weinig vermogen heeft. */}
+          <path
+            d={`${lijn(overschotKw.map((v, k) => [x(k), yA(v)]))} L${x(laatste)} ${yA(0)} L${x(0)} ${yA(0)} Z`}
+            fill="var(--text-muted)"
+            opacity={0.13}
+          />
+          <path
+            d={`${lijn(tekortKw.map((v, k) => [x(k), yA(-v)]))} L${x(laatste)} ${yA(0)} L${x(0)} ${yA(0)} Z`}
+            fill="var(--text-muted)"
+            opacity={0.13}
+          />
+          <path
+            d={lijn(overschotKw.map((v, k) => [x(k), yA(v)]))}
+            fill="none"
+            stroke="var(--text-muted)"
+            strokeWidth={1}
+            strokeDasharray="3 3"
+          />
+          <path
+            d={lijn(tekortKw.map((v, k) => [x(k), yA(-v)]))}
+            fill="none"
+            stroke="var(--text-muted)"
+            strokeWidth={1}
+            strokeDasharray="3 3"
+          />
           {dag.startMs.map((_, k) => {
             const zon = acties.uitZon[k]!;
             const net = acties.uitNet[k]!;
@@ -427,7 +474,7 @@ export function Dagprofiel({
             );
           })}
           <line x1={PLOT_LINKS} x2={PLOT_RECHTS} y1={yA(0)} y2={yA(0)} stroke="var(--axis)" strokeWidth={1.5} />
-          <text x={PLOT_LINKS - 10} y={Y.actie + 12} textAnchor="end" className="as-label">
+          <text x={PLOT_LINKS - 10} y={Y.actie + 10} textAnchor="end" className="as-kop">
             erin
           </text>
           <text x={PLOT_LINKS - 10} y={yA(aMax / 2)} textAnchor="end" dominantBaseline="middle" className="as-label">
@@ -439,7 +486,7 @@ export function Dagprofiel({
           <text x={PLOT_LINKS - 10} y={yA(-aMax / 2)} textAnchor="end" dominantBaseline="middle" className="as-label">
             {getal(aMax / 2, 1)} kW
           </text>
-          <text x={PLOT_LINKS - 10} y={Y.actie + HOOGTE.actie - 4} textAnchor="end" className="as-label">
+          <text x={PLOT_LINKS - 10} y={Y.actie + HOOGTE.actie - 2} textAnchor="end" className="as-kop">
             eruit
           </text>
 
@@ -447,14 +494,23 @@ export function Dagprofiel({
               hoeveel er die dag in totaal is opgeslagen en waar het heen ging. */}
           <g className="actie-legende">
             {[
-              { kleur: "var(--series-3)", naam: "uit eigen zon", waarde: totaalZon, y: Y.actie + 14 },
-              { kleur: "var(--series-1)", naam: "ingekocht", waarde: totaalNet, y: Y.actie + 32 },
-              { kleur: "var(--series-3)", naam: "zelf gebruikt", waarde: totaalHuis, y: Y.actie + HOOGTE.actie - 30 },
-              { kleur: "var(--series-2)", naam: "verkocht", waarde: totaalVerkocht, y: Y.actie + HOOGTE.actie - 12 },
+              { kleur: "var(--text-muted)", naam: "zon over", waarde: totaalOverschot, y: Y.actie + 16, vaag: true },
+              { kleur: "var(--series-3)", naam: "opgeslagen", waarde: totaalZon, y: Y.actie + 50 },
+              { kleur: "var(--series-1)", naam: "ingekocht", waarde: totaalNet, y: Y.actie + 84 },
+              { kleur: "var(--series-3)", naam: "zelf gebruikt", waarde: totaalHuis, y: Y.actie + HOOGTE.actie - 50 },
+              { kleur: "var(--series-2)", naam: "verkocht", waarde: totaalVerkocht, y: Y.actie + HOOGTE.actie - 16 },
             ].map((r) =>
               r.waarde > 0.01 ? (
                 <g key={r.naam}>
-                  <rect x={PLOT_RECHTS + 8} y={r.y - 8} width={9} height={9} rx={2} fill={r.kleur} />
+                  <rect
+                    x={PLOT_RECHTS + 8}
+                    y={r.y - 8}
+                    width={9}
+                    height={9}
+                    rx={2}
+                    fill={r.kleur}
+                    opacity={r.vaag ? 0.4 : 1}
+                  />
                   <text x={PLOT_RECHTS + 22} y={r.y} className="lijn-label">
                     {r.naam}
                   </text>
@@ -522,13 +578,13 @@ export function Dagprofiel({
           <line x1={PLOT_LINKS} x2={PLOT_RECHTS} y1={yN(0)} y2={yN(0)} stroke="var(--axis)" strokeWidth={1.5} />
           {/* De as zegt in woorden welke kant wat is: een getal alleen laat de
               lezer raden of positief nu afnemen of teruggeven betekent. */}
-          <text x={PLOT_LINKS - 10} y={Y.net + 12} textAnchor="end" className="as-label">
+          <text x={PLOT_LINKS - 10} y={Y.net + 10} textAnchor="end" className="as-kop">
             afnemen
           </text>
           <text x={PLOT_LINKS - 10} y={yN(0)} textAnchor="end" dominantBaseline="middle" className="as-label">
             0 kW
           </text>
-          <text x={PLOT_LINKS - 10} y={Y.net + HOOGTE.net - 4} textAnchor="end" className="as-label">
+          <text x={PLOT_LINKS - 10} y={Y.net + HOOGTE.net - 2} textAnchor="end" className="as-kop">
             terugleveren
           </text>
 
@@ -633,16 +689,21 @@ function Uitlezing({ dag, i }: { dag: SampleDay; i: number | null }) {
   // Zeg niet alleen dát hij laadt, maar waarvandaan en waarheen: dat is het
   // verschil tussen zelf verbruiken en handelen, en dus tussen veel en weinig
   // opbrengst.
+  const overschot = Math.max(0, -dag.residualKwh[i]!) * KWH_NAAR_KW;
   const zon = a.uitZon[i]!;
   const uitNet = a.uitNet[i]!;
   const huis = a.naarHuis[i]!;
   const verkocht = a.naarNet[i]!;
-  let batterijTekst = "staat stil";
+  let batterijTekst = overschot > 0.02 ? `${getal(overschot, 1)} kW zon over` : "staat stil";
   if (zon + uitNet > 0.02) {
     const delen: string[] = [];
     if (zon > 0.02) delen.push(`${getal(zon, 1)} kW uit eigen zon`);
     if (uitNet > 0.02) delen.push(`${getal(uitNet, 1)} kW ingekocht`);
     batterijTekst = `laadt ${delen.join(" en ")}`;
+    // Blijft er zon liggen omdat de batterij vol is of te weinig vermogen
+    // heeft? Dat is precies wat je wilt weten.
+    const rest = overschot - zon;
+    if (rest > 0.05) batterijTekst += `, ${getal(rest, 1)} kW blijft over`;
   } else if (huis + verkocht > 0.02) {
     const delen: string[] = [];
     if (huis > 0.02) delen.push(`${getal(huis, 1)} kW voor eigen gebruik`);

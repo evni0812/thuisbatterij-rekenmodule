@@ -172,6 +172,7 @@ async function buildInput(config: Configuration): Promise<AnalysisInput> {
     discountRate: config.discountRate,
     calendarFadePerYear: config.calendarFadePerYear,
     residualValueEur: config.residualValueEur,
+    annualProductionKwh: config.annualProductionKwh,
   };
 }
 

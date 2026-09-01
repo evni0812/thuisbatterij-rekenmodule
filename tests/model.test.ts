@@ -385,3 +385,46 @@ describe("uitsplitsing van de besparing", () => {
     expect(som).toBeCloseTo(b.totalEur, 6);
   });
 });
+
+describe("de regelaar volgt zijn eigen plan", () => {
+  /**
+   * De correctie voor onverwacht overschot mag het plan niet overrulen.
+   *
+   * Ze stond eerder aan bij élk overschot, met `charge = max(charge, ...)`.
+   * Daardoor vulde de batterij zich bij het eerste ochtendzonnetje — terwijl
+   * teruglevering dan nog 11 ct opbracht en de prijs 's middags naar nul zakte.
+   * Precies dan had hij moeten laden. Over een jaar scheelde dat 12 euro op 90:
+   * de strategie haalde 76% van het optimum in plaats van 88%.
+   */
+  it("laadt niet gretig bij overschot zolang terugleveren nog wat opbrengt", () => {
+    const startMs = buildQuarterAxis("2025-06-01", "2025-06-08");
+    const n = startMs.length;
+    const residual = new Float64Array(n);
+    const market = new Float64Array(n);
+    for (let i = 0; i < n; i++) {
+      const uur = (i % 96) / 4;
+      // Overschot de hele ochtend en middag, maar de prijs zakt pas na twaalven.
+      residual[i] = uur > 8 && uur < 17 ? -1.0 : 0.2;
+      market[i] = uur >= 12 && uur < 16 ? 0.005 : 0.12;
+    }
+    const w: Window = {
+      startMs,
+      residualKwh: residual,
+      prices: buildPriceSeries(market, TARIFF),
+    };
+    const s = spec({ capacityKwh: 4, maxChargeKw: 2, maxDischargeKw: 2 });
+    const r = dispatchRolling(w, s, TARIFF);
+
+    // Tel het laden vóór en na het moment dat de prijs instort, over de dagen
+    // waarop de strategie al historie heeft om op te plannen.
+    let vroeg = 0;
+    let laat = 0;
+    for (let i = 96 * 2; i < n; i++) {
+      const uur = (i % 96) / 4;
+      if (uur > 8 && uur < 12) vroeg += r.chargeKwh[i]!;
+      if (uur >= 12 && uur < 16) laat += r.chargeKwh[i]!;
+    }
+    // Laden hoort te gebeuren als terugleveren niets meer opbrengt.
+    expect(laat).toBeGreaterThan(vroeg);
+  });
+});
