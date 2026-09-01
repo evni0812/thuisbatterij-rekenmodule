@@ -16,13 +16,13 @@ import {
 } from "../data/loader";
 import { addDays, localMidnightUtcMs } from "../data/timeaxis";
 import type { Manifest } from "../data/manifest";
-import { equivalentCycles, wearCostPerKwh } from "../model/battery";
+import { equivalentCycles, marginalWearCostPerKwh } from "../model/battery";
 import { dispatchBaseline } from "../model/dispatch-baseline";
 import { dispatchRolling } from "../model/dispatch-rolling";
 import { findDay, runAnalysis, type AnalysisInput } from "../model/analysis";
 import { buildResidual } from "../model/residual";
 import { buildPriceSeries } from "../model/tariff";
-import type { BatterySpec, DispatchResult } from "../model/types";
+import type { BatterySpec, DispatchResult, TariffSpec } from "../model/types";
 import type {
   Configuration,
   GridPoint,
@@ -215,10 +215,15 @@ async function runGrid(
         capacityKwh: cap,
         maxChargeKw: kw,
         maxDischargeKw: kw,
-        wearCostEurPerKwh: wearCostPerKwh(
+        // Voor het raster schatten we de beurten per maat uit een proefrun
+        // zonder drempel; anders zou een grote batterij ten onrechte streng
+        // worden afgerekend op beurten die hij nooit opmaakt.
+        wearCostEurPerKwh: marginalWearCostPerKwh(
           config.investmentEur,
           config.cycleLife,
           { ...invoer.battery, capacityKwh: cap },
+          rasterCycli(entry, { ...invoer.battery, capacityKwh: cap, maxChargeKw: kw, maxDischargeKw: kw }, invoer.tariff),
+          config.analysisYears,
         ),
       };
       const res = dispatchRolling(entry.window, spec, invoer.tariff);
@@ -240,6 +245,18 @@ async function runGrid(
 
 /** Volgnummer van het raster dat nu mag draaien; ouder werk stopt vanzelf. */
 let huidigeGrid = -1;
+
+/** Beurten per jaar zonder drempel, voor de marginale slijtageprijs. */
+function rasterCycli(
+  entry: AnalysisInput["windows"][number],
+  spec: BatterySpec,
+  tariff: TariffSpec,
+): number {
+  const p = dispatchRolling(entry.window, { ...spec, wearCostEurPerKwh: 0 }, tariff);
+  let ontladen = 0;
+  for (let i = 0; i < p.dischargeKwh.length; i++) ontladen += p.dischargeKwh[i]!;
+  return equivalentCycles(ontladen, spec);
+}
 
 /**
  * De laatste doorrekening, bewaard zodat elke kalenderdag opvraagbaar is zonder
@@ -295,15 +312,19 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       const dispatches: DispatchResult[] = [];
       const result = runAnalysis(invoer, { collectDispatches: dispatches });
 
+      // De dagkiezer moet dezelfde drempel gebruiken als de doorrekening zelf.
+      const laatsteCycli = result.stats.cyclesPerYear;
       laatste = {
         windows: invoer.windows,
         dispatches,
         spec: {
           ...invoer.battery,
-          wearCostEurPerKwh: wearCostPerKwh(
+          wearCostEurPerKwh: marginalWearCostPerKwh(
             invoer.investmentEur,
             invoer.cycleLife,
             invoer.battery,
+            laatsteCycli,
+            invoer.years,
           ),
         },
       };

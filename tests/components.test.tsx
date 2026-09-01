@@ -129,7 +129,9 @@ describe("de pagina toont het antwoord", () => {
   it("splitst de besparing uit en telt op tot het totaal", () => {
     const b = result.perYear[0]!.breakdown;
     render(<Uitsplitsing breakdown={b} periodeLabel="2025" />);
-    expect(screen.getByText("Samen")).toBeDefined();
+    expect(screen.getByText("Samen bespaard")).toBeDefined();
+    // Slijtage hoort hier niet tussen: dat is de aanschafprijs, geen extra kost.
+    expect(document.body.textContent).toMatch(/Slijtage staat hier bewust niet tussen/);
     expect(screen.getByText(/Zelf verbruiken/)).toBeDefined();
   });
 

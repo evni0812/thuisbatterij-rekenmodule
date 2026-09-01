@@ -41,6 +41,46 @@ export function standbyKwhPerStep(spec: BatterySpec, hours = HOURS_PER_STEP): nu
 }
 
 /**
+ * De MARGINALE slijtagekost per geleverde kWh.
+ *
+ * Dit is de schaduwprijs die de dispatch stuurt: is deze laadbeurt de moeite
+ * waard? Het antwoord hangt af van de vraag of laadbeurten schaars zijn.
+ *
+ * Een batterij gaat kapot aan het eerste van twee dingen: ouderdom of
+ * doorzet. Maakt hij zijn laadbeurten niet op binnen zijn kalenderlevensduur,
+ * dan kost een extra beurt niets — de batterij was toch al afgeschreven op
+ * tijd, niet op gebruik. Pas als de beurten wél opraken, vervroegt elke extra
+ * beurt de vervanging, en dán is de aanschafprijs per beurt de juiste prijs.
+ *
+ * Gemeten voor een FoxESS S22 (2,1 kWh, 6000 beurten, 15 jaar): zonder drempel
+ * draait hij 394 beurten per jaar, precies 5.910 over vijftien jaar. De
+ * beurten zijn dus net niet schaars. Met de volle drempel van 11,3 ct zakt dat
+ * naar 251 per jaar — hij sterft dan aan ouderdom met 40% van zijn beurten
+ * ongebruikt, en dat kost 12 euro per jaar aan gemiste besparing.
+ *
+ * @param expectedCyclesPerYear  verwacht aantal beurten per jaar zonder drempel
+ * @param calendarYears          hoe lang de batterij meegaat op leeftijd
+ */
+export function marginalWearCostPerKwh(
+  investmentEur: number,
+  cycleLife: number,
+  spec: BatterySpec,
+  expectedCyclesPerYear: number,
+  calendarYears: number,
+): number {
+  const vol = wearCostPerKwh(investmentEur, cycleLife, spec);
+  if (vol <= 0) return 0;
+
+  const verwachtTotaal = expectedCyclesPerYear * calendarYears;
+  if (verwachtTotaal <= cycleLife) return 0;
+
+  // De beurten zijn schaars: schaal de prijs naar de mate van schaarste. Wie
+  // twee keer zoveel beurten wil als er zijn, moet ze twee keer zo streng
+  // afwegen. Zo komt het gebruik vanzelf in de buurt van wat de batterij aankan.
+  return vol * Math.min(1, (verwachtTotaal - cycleLife) / cycleLife + 0.5);
+}
+
+/**
  * Slijtagekosten per kWh die de batterij AC-zijdig levert.
  *
  * Over de levensduur levert de batterij `cycleLife * usable * eta` kWh aan de

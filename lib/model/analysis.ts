@@ -7,7 +7,11 @@
  */
 
 import { LocalTimeIndex } from "../data/timeaxis";
-import { equivalentCycles, usableCapacityKwh, wearCostPerKwh } from "./battery";
+import {
+  equivalentCycles,
+  marginalWearCostPerKwh,
+  usableCapacityKwh,
+} from "./battery";
 import { dispatchBaseline } from "./dispatch-baseline";
 import { dispatchOptimal } from "./dispatch-optimal";
 import { dispatchRolling } from "./dispatch-rolling";
@@ -191,7 +195,8 @@ export interface AnalysisResult {
  *   negatieve prijs vermeden kosten op momenten dat terugleveren geld kóst.
  *                   Apart gehouden omdat dit een wezenlijk ander mechanisme is
  *                   en snel groeit met de hoeveelheid zon op het net.
- *   verliezen       rendementsverlies en slijtage: wat de batterij zelf kost.
+ *   verliezen       het omzettingsverlies bij laden en ontladen: kilowatturen
+ *                   die je alsnog van het net moet halen.
  *   arbitrage       wat er dan nog overblijft — het gevolg van op andere
  *                   momenten van het net nemen dan teruggeven.
  */
@@ -520,12 +525,32 @@ export function runAnalysis(
   input: AnalysisInput,
   options: AnalysisOptions = {},
 ): AnalysisResult {
+  // Eerst uitvinden of laadbeurten schaars zijn. Dat kan alleen door te kijken
+  // hoeveel de batterij er zonder drempel zou maken: pas als hij ze binnen zijn
+  // kalenderlevensduur opmaakt, kost een extra beurt iets. Eén proefjaar is
+  // genoeg voor die schatting.
+  const zonderDrempel: BatterySpec = { ...input.battery, wearCostEurPerKwh: 0 };
+  const proef = input.windows.find((w) => w.isFullYear) ?? input.windows[0];
+  let verwachteCycli = 0;
+  if (proef) {
+    // Een grover SoC-rooster volstaat: we hoeven alleen te weten of het aantal
+    // beurten boven of onder de levensduur uitkomt, niet wat het precies is.
+    const p = dispatchRolling(proef.window, zonderDrempel, input.tariff, {
+      socLevels: 41,
+    });
+    let ontladen = 0;
+    for (let i = 0; i < p.dischargeKwh.length; i++) ontladen += p.dischargeKwh[i]!;
+    verwachteCycli = equivalentCycles(ontladen, zonderDrempel);
+  }
+
   const spec: BatterySpec = {
     ...input.battery,
-    wearCostEurPerKwh: wearCostPerKwh(
+    wearCostEurPerKwh: marginalWearCostPerKwh(
       input.investmentEur,
       input.cycleLife,
       input.battery,
+      verwachteCycli,
+      input.years,
     ),
   };
 

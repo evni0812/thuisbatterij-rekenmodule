@@ -50,10 +50,10 @@ export function Uitsplitsing({
       kleur: "var(--series-3)",
     },
     {
-      label: "Verlies en slijtage",
+      label: "Omzettingsverlies",
       uitleg:
-        "Een deel van de opgeslagen stroom gaat verloren bij het laden en ontladen, " +
-        "en elke cyclus verbruikt een stukje levensduur.",
+        "Een deel van de stroom gaat verloren bij het laden en ontladen. Die " +
+        "kilowatturen moet je alsnog van het net halen, dus dat kost geld.",
       waarde: breakdown.lossesEur,
       kleur: "var(--series-4)",
     },
@@ -106,9 +106,16 @@ export function Uitsplitsing({
         })}
       </ul>
       <div className="posten-totaal">
-        <span>Samen</span>
+        <span>Samen bespaard</span>
         <strong>{euro(breakdown.totalEur)}</strong>
       </div>
+      <p className="posten-noot">
+        Slijtage staat hier bewust niet tussen. Die is geen aparte kostenpost
+        naast de aanschafprijs — het ís die prijs, verdeeld over de laadbeurten.
+        Je vindt hem terug in de terugverdientijd, waar de hele aanschaf tegen
+        deze besparing wordt afgezet. Zou hij hier óók staan, dan betaalde je
+        hem twee keer.
+      </p>
     </Figure>
   );
 }

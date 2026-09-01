@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest";
 import { buildQuarterAxis } from "../lib/data/timeaxis";
 import {
   equivalentCycles,
+  marginalWearCostPerKwh,
   remainingCapacityFraction,
   roundTripEfficiency,
   usableCapacityKwh,
@@ -426,5 +427,44 @@ describe("de regelaar volgt zijn eigen plan", () => {
     }
     // Laden hoort te gebeuren als terugleveren niets meer opbrengt.
     expect(laat).toBeGreaterThan(vroeg);
+  });
+});
+
+describe("slijtage als schaduwprijs", () => {
+  /**
+   * Een batterij gaat kapot aan het eerste van twee dingen: ouderdom of
+   * doorzet. Maakt hij zijn laadbeurten niet op binnen zijn kalenderlevensduur,
+   * dan kost een extra beurt niets — hij was toch al afgeschreven op tijd.
+   *
+   * De drempel stond eerder altijd op de volle aanschafprijs per beurt. Voor een
+   * FoxESS S22 was dat 11,3 ct/kWh, waardoor hij 251 beurten per jaar draaide en
+   * na vijftien jaar stierf met 40% van zijn 6.000 beurten ongebruikt. Dat kostte
+   * 12 euro per jaar aan besparing die er gewoon lag.
+   */
+  it("rekent niets aan als de laadbeurten toch niet opraken", () => {
+    const s = spec({ capacityKwh: 2.1, depthOfCharge: 0.9 });
+    // 250 beurten per jaar, 15 jaar: 3.750 van de 6.000. Niet schaars.
+    expect(marginalWearCostPerKwh(1199, 6000, s, 250, 15)).toBe(0);
+  });
+
+  it("rekent wél af zodra de beurten schaars worden", () => {
+    const s = spec({ capacityKwh: 2.1, depthOfCharge: 0.9 });
+    // 600 beurten per jaar, 15 jaar: 9.000 van de 6.000. Ruim over.
+    const schaars = marginalWearCostPerKwh(1199, 6000, s, 600, 15);
+    expect(schaars).toBeGreaterThan(0);
+    // En nooit meer dan de volledige prijs per beurt.
+    expect(schaars).toBeLessThanOrEqual(wearCostPerKwh(1199, 6000, s));
+  });
+
+  it("rekent strenger naarmate de beurten schaarser zijn", () => {
+    const s = spec({ capacityKwh: 2.1, depthOfCharge: 0.9 });
+    const matig = marginalWearCostPerKwh(1199, 6000, s, 500, 15);
+    const nijpend = marginalWearCostPerKwh(1199, 6000, s, 900, 15);
+    expect(nijpend).toBeGreaterThan(matig);
+  });
+
+  it("laat een batterij die niets kostte vrij cyclen", () => {
+    const s = spec();
+    expect(marginalWearCostPerKwh(0, 6000, s, 5000, 15)).toBe(0);
   });
 });
