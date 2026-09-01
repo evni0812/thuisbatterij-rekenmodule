@@ -26,6 +26,7 @@ env/
 # Node / Next.js
 node_modules/
 .next/
+.next-build/
 out/
 next-env.d.ts
 *.tsbuildinfo

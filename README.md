@@ -16,9 +16,16 @@ gebruik, alles vanaf de CDN.
 ```bash
 npm install
 npm run dev          # http://localhost:3000
-npm test             # 54 tests, waaronder de modelinvarianten
+npm test             # 86 tests, waaronder de modelinvarianten
 npm run build        # statische export naar out/
+npm run clean        # bij een vastgelopen build-cache
 ```
+
+**Stop de dev-server voordat je bouwt.** Ze delen state, en een build onder een
+draaiende dev-server laat die omvallen met `Cannot find module './833.js'` of een
+fout over het React Client Manifest. De build schrijft naar een eigen map
+(`.next-build`), wat de ergste chunk-corruptie voorkomt, maar niet alles.
+Loopt het toch vast: `npm run clean`.
 
 De data staat al in `public/data/`. Alleen als je die wilt verversen zijn de
 Python-scripts nodig — zie [Data verversen](#data-verversen).
