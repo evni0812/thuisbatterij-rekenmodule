@@ -1,6 +1,6 @@
 /** Berichten tussen de UI en de rekenworker. */
 
-import type { AnalysisResult } from "../model/analysis";
+import type { AnalysisResult, SampleDay } from "../model/analysis";
 import type { BatterySpec, HouseholdSpec, TariffSpec } from "../model/types";
 
 /** Alles wat de gebruiker instelt, in één object. */
@@ -51,6 +51,12 @@ export type WorkerRequest =
       capacities: number[];
       powers: number[];
     }
+  | {
+      /** Haal het batterijgedrag van één kalenderdag op uit de laatste analyse. */
+      type: "day";
+      id: number;
+      date: string;
+    }
   | { type: "cancel" };
 
 export type WorkerResponse =
@@ -64,4 +70,5 @@ export type WorkerResponse =
       points: GridPoint[];
       done: boolean;
     }
+  | { type: "day"; id: number; day: SampleDay | null; date: string }
   | { type: "error"; id: number | null; message: string };

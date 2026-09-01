@@ -78,7 +78,21 @@ export interface SampleDay {
   /** Lokale kalenderdatum van deze dag. */
   date: string;
   startMs: number[];
+  /**
+   * Netto uitwisseling ZONDER batterij, kWh per kwartier.
+   * Positief is afname van het net, negatief is teruglevering.
+   */
   residualKwh: number[];
+  /**
+   * Netto uitwisseling MET batterij, kWh per kwartier, zelfde tekenafspraak.
+   * Het verschil met residualKwh is precies wat de batterij doet.
+   */
+  netKwh: number[];
+  /**
+   * Overschot dat is afgeregeld in plaats van teruggeleverd, kWh per kwartier.
+   * Alleen op momenten dat terugleveren geld zou kosten.
+   */
+  curtailedKwh: number[];
   socKwh: number[];
   chargeKwh: number[];
   dischargeKwh: number[];
@@ -138,7 +152,7 @@ export interface AnalysisResult {
  *   arbitrage       wat er dan nog overblijft — het gevolg van op andere
  *                   momenten van het net nemen dan teruggeven.
  */
-function breakdown(
+export function breakdown(
   window: Window,
   base: DispatchResult,
   bat: DispatchResult,
@@ -158,10 +172,15 @@ function breakdown(
     const minderExport = base.gridExportKwh[i]! - bat.gridExportKwh[i]!;
 
     if (ep < 0) {
-      // Terugleveren kost hier geld: minder exporteren is pure winst. Zonder
-      // curtailment betaalt de baseline dit; de batterij ontloopt het.
+      // Terugleveren kost hier geld. Alleen het EXPORT-deel hoort in deze post:
+      // wat de baseline moest weggeven en de batterij opving.
+      //
+      // Het import-deel hoort er nadrukkelijk niet in. Laadt de batterij op zo'n
+      // moment uit het net, dan is dat goedkoop inkopen — arbitrage — en niet
+      // "ontlopen". Toen dat er wél in zat, werd de post negatief en leek het
+      // ontlopen van negatieve prijzen geld te kosten.
       avoided += minderExport * -ep;
-      avoided += minderImport * ip;
+      self += minderImport * ip;
     } else {
       self += minderImport * ip - minderExport * ep;
     }
@@ -258,7 +277,18 @@ function analyseWindow(
   return { analysis, realistic: real, baselineCost: base.totalCostEur };
 }
 
+/**
+ * De prijskloof, per jaar.
+ *
+ * Alleen volledige kalenderjaren tellen mee, en het resultaat wordt gedeeld
+ * door hun aantal. Zonder dat zou het volume optellen over de hele reeks —
+ * ruim drie jaar — terwijl het naast een jaarvolume wordt getoond. Dan lijkt
+ * er meer teruglevering in negatieve uren te vallen dan er in een heel jaar is.
+ */
 function computePriceGap(windows: AnalysisInput["windows"]): PriceGap {
+  const volledig = windows.filter((w) => w.isFullYear);
+  const basis = volledig.length > 0 ? volledig : windows;
+  const jaren = Math.max(1, basis.length);
   let impVolume = 0;
   let impWaarde = 0;
   let expVolume = 0;
@@ -268,7 +298,7 @@ function computePriceGap(windows: AnalysisInput["windows"]): PriceGap {
   let negatief = 0;
   let expNegatief = 0;
 
-  for (const { window } of windows) {
+  for (const { window } of basis) {
     const n = window.residualKwh.length;
     for (let i = 0; i < n; i++) {
       const r = window.residualKwh[i]!;
@@ -293,16 +323,92 @@ function computePriceGap(windows: AnalysisInput["windows"]): PriceGap {
     weightedExportPrice: expVolume > 0 ? expWaarde / expVolume : 0,
     simpleAveragePrice: stappen > 0 ? prijsSom / stappen : 0,
     negativePriceShare: stappen > 0 ? negatief / stappen : 0,
-    exportAtNegativePriceKwh: expNegatief,
+    exportAtNegativePriceKwh: expNegatief / jaren,
   };
 }
 
 /**
- * Kies een representatieve zomer- en winterdag en leg vast wat de batterij doet.
+ * Bakent de lokale kalenderdagen af in een venster.
+ *
+ * In lokale tijd, want een dag is een wandklokbegrip: de grens ligt op
+ * middernacht in Amsterdam, niet in UTC.
+ */
+export function dayBoundaries(
+  startMs: Float64Array,
+): { starts: number[]; index: LocalTimeIndex } {
+  const n = startMs.length;
+  const index = new LocalTimeIndex(startMs[0]!, startMs[n - 1]!);
+  const starts: number[] = [];
+  let vorige = Number.NaN;
+  for (let i = 0; i < n; i++) {
+    const d = index.localDayNumber(startMs[i]!);
+    if (d !== vorige) {
+      starts.push(i);
+      vorige = d;
+    }
+  }
+  starts.push(n);
+  return { starts, index };
+}
+
+/** Snijd één dag uit een venster plus de bijbehorende dispatch. */
+export function extractDay(
+  window: Window,
+  dispatch: DispatchResult,
+  spec: BatterySpec,
+  start: number,
+  end: number,
+  label: string,
+  date: string,
+): SampleDay {
+  const plak = (arr: { [k: number]: number }): number[] => {
+    const uit: number[] = [];
+    for (let i = start; i < end; i++) uit.push(arr[i]!);
+    return uit;
+  };
+  const net: number[] = [];
+  for (let i = start; i < end; i++) {
+    net.push(dispatch.gridImportKwh[i]! - dispatch.gridExportKwh[i]!);
+  }
+  return {
+    label,
+    date,
+    startMs: plak(window.startMs),
+    residualKwh: plak(window.residualKwh),
+    netKwh: net,
+    curtailedKwh: plak(dispatch.curtailedKwh),
+    socKwh: plak(dispatch.socKwh),
+    chargeKwh: plak(dispatch.chargeKwh),
+    dischargeKwh: plak(dispatch.dischargeKwh),
+    importPrice: plak(window.prices.importPrice),
+    exportPrice: plak(window.prices.exportPrice),
+    usableCapacityKwh: usableCapacityKwh(spec),
+  };
+}
+
+/** Zoek een kalenderdatum op in een venster en geef die dag terug. */
+export function findDay(
+  window: Window,
+  dispatch: DispatchResult,
+  spec: BatterySpec,
+  isoDate: string,
+): SampleDay | null {
+  const { starts, index } = dayBoundaries(window.startMs);
+  for (let d = 0; d + 1 < starts.length; d++) {
+    const start = starts[d]!;
+    if (index.localDate(window.startMs[start]!) === isoDate) {
+      return extractDay(window, dispatch, spec, start, starts[d + 1]!, "", isoDate);
+    }
+  }
+  return null;
+}
+
+/**
+ * Kies een representatieve zomer- en winterdag.
  *
  * Representatief betekent hier: de dag met de mediane spreiding tussen hoogste
- * en laagste prijs binnen dat seizoen. Een extreme dag zou een spannender plaatje
- * geven maar een verkeerde indruk.
+ * en laagste prijs binnen dat seizoen. Een extreme dag zou een spannender
+ * plaatje geven maar een verkeerde indruk.
  */
 function pickSampleDays(
   entry: AnalysisInput["windows"][number],
@@ -313,24 +419,12 @@ function pickSampleDays(
   const n = window.residualKwh.length;
   if (n === 0) return [];
 
-  const index = new LocalTimeIndex(window.startMs[0]!, window.startMs[n - 1]!);
-
-  // Dagen afbakenen in lokale tijd, want een dag is een wandklokbegrip.
-  const grenzen: number[] = [];
-  let vorige = Number.NaN;
-  for (let i = 0; i < n; i++) {
-    const d = index.localDayNumber(window.startMs[i]!);
-    if (d !== vorige) {
-      grenzen.push(i);
-      vorige = d;
-    }
-  }
-  grenzen.push(n);
-
+  const { starts, index } = dayBoundaries(window.startMs);
   const kandidaten: { start: number; end: number; maand: number; spreiding: number }[] = [];
-  for (let d = 0; d + 1 < grenzen.length; d++) {
-    const start = grenzen[d]!;
-    const end = grenzen[d + 1]!;
+
+  for (let d = 0; d + 1 < starts.length; d++) {
+    const start = starts[d]!;
+    const end = starts[d + 1]!;
     let hoog = -Infinity;
     let laag = Infinity;
     for (let i = start; i < end; i++) {
@@ -346,25 +440,16 @@ function pickSampleDays(
     const set = kandidaten.filter((k) => maanden.includes(k.maand));
     if (set.length === 0) return null;
     set.sort((a, b) => a.spreiding - b.spreiding);
-    const gekozen = set[Math.floor(set.length / 2)]!;
-    const { start, end } = gekozen;
-    const plak = <T,>(arr: { [k: number]: T }): T[] => {
-      const uit: T[] = [];
-      for (let i = start; i < end; i++) uit.push(arr[i]!);
-      return uit;
-    };
-    return {
+    const g = set[Math.floor(set.length / 2)]!;
+    return extractDay(
+      window,
+      dispatch,
+      spec,
+      g.start,
+      g.end,
       label,
-      date: index.localDate(window.startMs[start]!),
-      startMs: plak(window.startMs),
-      residualKwh: plak(window.residualKwh),
-      socKwh: plak(dispatch.socKwh),
-      chargeKwh: plak(dispatch.chargeKwh),
-      dischargeKwh: plak(dispatch.dischargeKwh),
-      importPrice: plak(window.prices.importPrice),
-      exportPrice: plak(window.prices.exportPrice),
-      usableCapacityKwh: usableCapacityKwh(spec),
-    };
+      index.localDate(window.startMs[g.start]!),
+    );
   };
 
   return [
@@ -373,7 +458,22 @@ function pickSampleDays(
   ].filter((d): d is SampleDay => d !== null);
 }
 
-export function runAnalysis(input: AnalysisInput): AnalysisResult {
+export interface AnalysisOptions {
+  /**
+   * Wordt gevuld met de realistische dispatch per venster.
+   *
+   * De worker bewaart die om later een willekeurige dag uit te kunnen snijden.
+   * Ze gaan bewust niet in AnalysisResult: dat wordt over de worker-grens
+   * gestuurd, en een jaar aan dispatch is enkele megabytes die de UI niet nodig
+   * heeft zolang er geen dag wordt opgevraagd.
+   */
+  collectDispatches?: DispatchResult[];
+}
+
+export function runAnalysis(
+  input: AnalysisInput,
+  options: AnalysisOptions = {},
+): AnalysisResult {
   const spec: BatterySpec = {
     ...input.battery,
     wearCostEurPerKwh: wearCostPerKwh(
@@ -385,6 +485,10 @@ export function runAnalysis(input: AnalysisInput): AnalysisResult {
 
   const uitkomsten = input.windows.map((w) => analyseWindow(w, spec, input.tariff));
   const perYear = uitkomsten.map((u) => u.analysis);
+  if (options.collectDispatches) {
+    options.collectDispatches.length = 0;
+    for (const u of uitkomsten) options.collectDispatches.push(u.realistic);
+  }
 
   // Alleen volledige jaren tellen mee voor het gemiddelde en de bandbreedte:
   // een deelperiode is per definitie lager en zou de uitkomst vertekenen.

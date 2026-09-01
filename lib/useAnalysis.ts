@@ -12,6 +12,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import type { AnalysisResult } from "./model/analysis";
 import type { Manifest } from "./data/manifest";
+import type { SampleDay } from "./model/analysis";
 import type {
   Configuration,
   GridPoint,
@@ -38,6 +39,13 @@ export interface AnalysisState {
   grid: GridState | null;
   /** Start de rasterberekening; kost enkele seconden. */
   startGrid: (capacities: number[], powers: number[]) => void;
+  /** Een opgevraagde losse dag, of null zolang er geen is opgehaald. */
+  dag: SampleDay | null;
+  /** De datum waarvoor geen gegevens bleken te zijn. */
+  dagOntbreekt: string | null;
+  /** Vraag het batterijgedrag van één kalenderdag op. */
+  vraagDag: (datum: string) => void;
+  wisDag: () => void;
 }
 
 /** Wachttijd voordat een wijziging een herberekening start, in milliseconden. */
@@ -49,7 +57,7 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
   const pendingId = useRef<number | null>(null);
 
   const [state, setState] = useState<
-    Omit<AnalysisState, "startGrid">
+    Omit<AnalysisState, "startGrid" | "vraagDag" | "wisDag">
   >({
     manifest: null,
     result: null,
@@ -57,8 +65,11 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
     error: null,
     elapsedMs: null,
     grid: null,
+    dag: null,
+    dagOntbreekt: null,
   });
   const gridId = useRef(0);
+  const dagId = useRef(0);
 
   useEffect(() => {
     const worker = new Worker(
@@ -97,6 +108,15 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
             grid: { ...s.grid, rows, klaar: msg.done, bezig: !msg.done },
           };
         });
+        return;
+      }
+      if (msg.type === "day") {
+        if (msg.id !== dagId.current) return;
+        setState((s) => ({
+          ...s,
+          dag: msg.day,
+          dagOntbreekt: msg.day === null ? msg.date : null,
+        }));
         return;
       }
       if (msg.type === "error") {
@@ -153,9 +173,24 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
     [config],
   );
 
-  // Een wijziging in de invoer maakt een eerder raster achterhaald.
+  const vraagDag = useCallback((datum: string) => {
+    const worker = workerRef.current;
+    if (!worker) return;
+    const id = ++dagId.current;
+    worker.postMessage({ type: "day", id, date: datum } satisfies WorkerRequest);
+  }, []);
+
+  const wisDag = useCallback(() => {
+    dagId.current++;
+    setState((s) => ({ ...s, dag: null, dagOntbreekt: null }));
+  }, []);
+
+  // Een wijziging in de invoer maakt een eerder raster en een opgehaalde dag
+  // achterhaald: die hoorden bij de vorige doorrekening.
   useEffect(() => {
-    setState((s) => (s.grid ? { ...s, grid: null } : s));
+    setState((s) =>
+      s.grid || s.dag ? { ...s, grid: null, dag: null, dagOntbreekt: null } : s,
+    );
     const worker = workerRef.current;
     if (worker) worker.postMessage({ type: "cancel" } satisfies WorkerRequest);
   }, [JSON.stringify(config)]);
@@ -168,5 +203,5 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
     // manier om op inhoud te vergelijken in plaats van op referentie.
   }, [JSON.stringify(config), state.manifest, send]);
 
-  return { ...state, startGrid };
+  return { ...state, startGrid, vraagDag, wisDag };
 }

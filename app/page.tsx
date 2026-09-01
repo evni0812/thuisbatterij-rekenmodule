@@ -100,7 +100,7 @@ export default function Page() {
     }, [geladen, inst, preset, capaciteit, vermogen, prijs]),
   );
 
-  const { manifest, result, busy, error, grid, startGrid } = state;
+  const { manifest, result, busy, error, grid, startGrid, dag, dagOntbreekt, vraagDag, wisDag } = state;
 
   const periodeLabel = result
     ? periode(
@@ -171,7 +171,15 @@ export default function Page() {
             }
           />
 
-          <Dagprofiel dagen={result.sampleDays} />
+          <Dagprofiel
+            voorbeelden={result.sampleDays}
+            losseDag={dag}
+            ontbreekt={dagOntbreekt}
+            eersteDag={result.perYear[0]?.firstDay ?? ""}
+            laatsteDag={result.perYear[result.perYear.length - 1]?.lastDay ?? ""}
+            onVraagDag={vraagDag}
+            onWisDag={wisDag}
+          />
 
           <BesparingPerJaar jaren={result.perYear} />
 

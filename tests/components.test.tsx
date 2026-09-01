@@ -122,11 +122,39 @@ describe("de pagina toont het antwoord", () => {
     expect(screen.getByText(/Zelf verbruiken/)).toBeDefined();
   });
 
-  it("tekent het dagprofiel met beide dagen", () => {
-    render(<Dagprofiel dagen={result.sampleDays} />);
-    expect(screen.getByRole("tablist")).toBeDefined();
-    const tabs = screen.getAllByRole("tab");
-    expect(tabs.length).toBe(2);
+  it("tekent het dagprofiel met beide voorbeelddagen én een datumkiezer", () => {
+    render(
+      <Dagprofiel
+        voorbeelden={result.sampleDays}
+        losseDag={null}
+        ontbreekt={null}
+        eersteDag="2025-01-01"
+        laatsteDag="2025-12-31"
+        onVraagDag={() => {}}
+        onWisDag={() => {}}
+      />,
+    );
+    expect(screen.getAllByRole("tab").length).toBe(2);
+    // Elke dag moet opzoekbaar zijn, niet alleen de twee voorbeelden.
+    const datum = screen.getByLabelText(/dag naar keuze/i) as HTMLInputElement;
+    expect(datum.type).toBe("date");
+    expect(datum.min).toBe("2025-01-01");
+    expect(datum.max).toBe("2025-12-31");
+  });
+
+  it("meldt het als er voor de gekozen dag geen gegevens zijn", () => {
+    render(
+      <Dagprofiel
+        voorbeelden={result.sampleDays}
+        losseDag={null}
+        ontbreekt="2019-05-04"
+        eersteDag="2025-01-01"
+        laatsteDag="2025-12-31"
+        onVraagDag={() => {}}
+        onWisDag={() => {}}
+      />,
+    );
+    expect(document.body.textContent).toMatch(/geen gegevens/);
   });
 
   it("toont de besparing per jaar", () => {

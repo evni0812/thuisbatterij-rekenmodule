@@ -3,103 +3,175 @@
 /**
  * Een dag in detail: wat doet de batterij nu eigenlijk?
  *
- * Twee gestapelde vlakken maken het mechanisme zichtbaar: bovenin de prijs door
- * de dag heen, onderin de lading van de batterij tegen de netuitwisseling. Wie
- * beide naast elkaar ziet, snapt in één oogopslag dat de batterij vult als het
- * goedkoop is en leegt als het duur is.
+ * Drie panelen onder elkaar met een gedeelde tijdas — prijs, lading,
+ * netuitwisseling — en één cursor die ze verbindt. De waarden staan in een
+ * vaste balk ónder de grafiek, niet in een zwevende tooltip: die dekte precies
+ * de data af die je wilde aflezen, en op een telefoon is er helemaal geen ruimte
+ * om iets te laten zweven.
+ *
+ * Het onderste paneel toont twee lijnen. Zonder batterij en met batterij, want
+ * het verschil daartussen ís wat de batterij doet. Eerder stond hier alleen de
+ * situatie zónder, terwijl het bijschrift het tegenovergestelde beloofde.
  */
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import type { SampleDay } from "../lib/model/analysis";
 import { centPerKwh, datum, getal } from "../lib/format";
 import { Figure, Legenda, kiesTicks } from "./chart-parts";
 
-const B = 720;
-const H_PRIJS = 90;
-const H_ENERGIE = 130;
-const MARGE = { boven: 12, rechts: 12, onder: 26, links: 46 };
+const B = 760;
+/** Elk paneel krijgt een eigen strook, met ruimte voor zijn titel erboven. */
+const PANEEL = { prijs: 118, lading: 92, net: 118 };
+const TITEL_HOOGTE = 18;
+const MARGE = { rechts: 16, links: 86, onder: 26 };
 
-function pad(punten: [number, number][]): string {
+const Y_PRIJS = TITEL_HOOGTE;
+const Y_LADING = Y_PRIJS + PANEEL.prijs + TITEL_HOOGTE;
+const Y_NET = Y_LADING + PANEEL.lading + TITEL_HOOGTE;
+const H_TOTAAL = Y_NET + PANEEL.net + MARGE.onder;
+
+/** Kwartier-kWh naar vermogen in kW: 0,25 kWh in een kwartier is 1 kW. */
+const KWH_NAAR_KW = 4;
+
+function lijn(punten: [number, number][]): string {
   return punten.map(([x, y], i) => `${i === 0 ? "M" : "L"}${x} ${y}`).join(" ");
 }
 
-export function Dagprofiel({ dagen }: { dagen: SampleDay[] }) {
+export function Dagprofiel({
+  voorbeelden,
+  losseDag,
+  ontbreekt,
+  eersteDag,
+  laatsteDag,
+  onVraagDag,
+  onWisDag,
+}: {
+  voorbeelden: SampleDay[];
+  losseDag: SampleDay | null;
+  ontbreekt: string | null;
+  eersteDag: string;
+  laatsteDag: string;
+  onVraagDag: (datum: string) => void;
+  onWisDag: () => void;
+}) {
   const [gekozen, setGekozen] = useState(0);
-  const [hover, setHover] = useState<number | null>(null);
-  const dag = dagen[gekozen];
+  const [cursor, setCursor] = useState<number | null>(null);
+
+  // Een zelf opgezochte dag heeft voorrang op de voorbeelden.
+  const dag = losseDag ?? voorbeelden[gekozen];
+
+  useEffect(() => setCursor(null), [dag?.date]);
+
   if (!dag) return null;
 
   const n = dag.startMs.length;
   const plotB = B - MARGE.links - MARGE.rechts;
   const x = (i: number) => MARGE.links + (i / Math.max(1, n - 1)) * plotB;
 
-  // Prijsvlak
-  const prijzen = dag.importPrice;
-  const pMin = Math.min(...prijzen, ...dag.exportPrice);
-  const pMax = Math.max(...prijzen);
+  // ── Prijs ──
+  const pMin = Math.min(...dag.importPrice, ...dag.exportPrice);
+  const pMax = Math.max(...dag.importPrice, ...dag.exportPrice);
   const pTicks = kiesTicks(pMin, pMax, 3);
   const pLo = Math.min(...pTicks, pMin);
   const pHi = Math.max(...pTicks, pMax);
   const yP = (v: number) =>
-    MARGE.boven + (1 - (v - pLo) / Math.max(1e-9, pHi - pLo)) * (H_PRIJS - MARGE.boven - 8);
+    Y_PRIJS + (1 - (v - pLo) / Math.max(1e-9, pHi - pLo)) * PANEEL.prijs;
 
-  // Energievlak: lading als vlak, netuitwisseling als lijn rond nul.
+  // ── Lading ──
   const cap = Math.max(dag.usableCapacityKwh, 0.001);
-  const rMax = Math.max(...dag.residualKwh.map(Math.abs), 0.1);
-  const eTop = MARGE.boven;
-  const eBodem = H_ENERGIE - MARGE.onder;
-  const ySoc = (v: number) => eBodem - (v / cap) * (eBodem - eTop);
-  const yRes = (v: number) => (eTop + eBodem) / 2 - (v / rMax) * ((eBodem - eTop) / 2);
+  const ySoc = (v: number) => Y_LADING + (1 - v / cap) * PANEEL.lading;
 
-  const socPad =
-    pad(dag.socKwh.map((v, i) => [x(i), ySoc(v)] as [number, number])) +
-    ` L${x(n - 1)} ${eBodem} L${x(0)} ${eBodem} Z`;
+  // ── Net ──
+  const netKw = dag.netKwh.map((v) => v * KWH_NAAR_KW);
+  const zonderKw = dag.residualKwh.map((v) => v * KWH_NAAR_KW);
+  const nMax = Math.max(...netKw.map(Math.abs), ...zonderKw.map(Math.abs), 0.5);
+  const nTicks = kiesTicks(-nMax, nMax, 4);
+  const yN = (v: number) => Y_NET + (1 - (v + nMax) / (2 * nMax)) * PANEEL.net;
 
-  const actief = hover ?? null;
+  const i = cursor;
+  const isVoorbeeld = losseDag === null;
 
   return (
     <Figure
-      titel="De batterij vult zich als stroom goedkoop is en leegt als hij duur is"
+      titel="Wat de batterij op een dag precies doet"
       toelichting={
         <>
-          {dag.label.toLowerCase()} in deze periode, {datum(dag.date)}. Bovenin de
-          prijs per uur, onderin de lading van de batterij en wat er met het net
-          wordt uitgewisseld.
+          {datum(dag.date)}. Beweeg over de grafiek — of tik erop — voor de
+          waarden op elk moment van de dag.
         </>
       }
       actie={
-        dagen.length > 1 ? (
-          <div className="segment" role="tablist" aria-label="Kies een dag">
-            {dagen.map((d, i) => (
-              <button
-                key={d.label}
-                role="tab"
-                aria-selected={i === gekozen}
-                className={i === gekozen ? "segment-knop actief" : "segment-knop"}
-                onClick={() => setGekozen(i)}
-              >
-                {d.label}
-              </button>
-            ))}
-          </div>
-        ) : undefined
+        <div className="dagkiezer">
+          {voorbeelden.length > 1 ? (
+            <div className="segment" role="tablist" aria-label="Kies een dag">
+              {voorbeelden.map((d, k) => (
+                <button
+                  key={d.label}
+                  role="tab"
+                  aria-selected={isVoorbeeld && k === gekozen}
+                  className={
+                    isVoorbeeld && k === gekozen
+                      ? "segment-knop actief"
+                      : "segment-knop"
+                  }
+                  onClick={() => {
+                    setGekozen(k);
+                    onWisDag();
+                  }}
+                >
+                  {d.label}
+                </button>
+              ))}
+            </div>
+          ) : null}
+          <label className="dagkiezer-datum">
+            <span>of een dag naar keuze</span>
+            <input
+              type="date"
+              min={eersteDag}
+              max={laatsteDag}
+              value={losseDag?.date ?? ""}
+              onChange={(e) =>
+                e.target.value ? onVraagDag(e.target.value) : onWisDag()
+              }
+            />
+          </label>
+        </div>
       }
     >
+      {ontbreekt ? (
+        <p className="dag-melding">
+          Voor {datum(ontbreekt)} zijn geen gegevens in de gekozen periode. Kies
+          een dag tussen {datum(eersteDag)} en {datum(laatsteDag)}.
+        </p>
+      ) : null}
+
       <div className="chart-wrap">
         <svg
-          viewBox={`0 0 ${B} ${H_PRIJS + H_ENERGIE}`}
+          viewBox={`0 0 ${B} ${H_TOTAAL}`}
           className="chart"
           role="img"
-          aria-label={`Prijsverloop en batterijgedrag op ${datum(dag.date)}`}
-          onMouseLeave={() => setHover(null)}
+          aria-label={`Prijs, lading en netuitwisseling op ${datum(dag.date)}`}
+          onMouseLeave={() => setCursor(null)}
           onMouseMove={(e) => {
             const rect = e.currentTarget.getBoundingClientRect();
             const rel = ((e.clientX - rect.left) / rect.width) * B;
-            const i = Math.round(((rel - MARGE.links) / plotB) * (n - 1));
-            setHover(i >= 0 && i < n ? i : null);
+            const k = Math.round(((rel - MARGE.links) / plotB) * (n - 1));
+            setCursor(k >= 0 && k < n ? k : null);
+          }}
+          onTouchMove={(e) => {
+            const t = e.touches[0];
+            if (!t) return;
+            const rect = e.currentTarget.getBoundingClientRect();
+            const rel = ((t.clientX - rect.left) / rect.width) * B;
+            const k = Math.round(((rel - MARGE.links) / plotB) * (n - 1));
+            setCursor(k >= 0 && k < n ? k : null);
           }}
         >
-          {/* Prijs */}
+          {/* ── Prijs ── */}
+          <text x={0} y={Y_PRIJS - 6} className="paneel-titel">
+            Prijs per kilowattuur
+          </text>
           {pTicks.map((t) => (
             <g key={`p${t}`}>
               <line
@@ -110,106 +182,221 @@ export function Dagprofiel({ dagen }: { dagen: SampleDay[] }) {
                 stroke={Math.abs(t) < 1e-9 ? "var(--axis)" : "var(--grid)"}
                 strokeWidth={Math.abs(t) < 1e-9 ? 1.5 : 1}
               />
-              <text x={MARGE.links - 8} y={yP(t)} textAnchor="end" dominantBaseline="middle" className="as-label">
+              <text
+                x={MARGE.links - 10}
+                y={yP(t)}
+                textAnchor="end"
+                dominantBaseline="middle"
+                className="as-label"
+              >
                 {centPerKwh(t)}
               </text>
             </g>
           ))}
           <path
-            d={pad(prijzen.map((v, i) => [x(i), yP(v)] as [number, number]))}
+            d={lijn(dag.importPrice.map((v, k) => [x(k), yP(v)]))}
             fill="none"
             stroke="var(--series-1)"
             strokeWidth={2}
             strokeLinejoin="round"
           />
           <path
-            d={pad(dag.exportPrice.map((v, i) => [x(i), yP(v)] as [number, number]))}
+            d={lijn(dag.exportPrice.map((v, k) => [x(k), yP(v)]))}
             fill="none"
             stroke="var(--series-2)"
             strokeWidth={2}
-            strokeDasharray="4 3"
+            strokeDasharray="5 3"
             strokeLinejoin="round"
           />
 
-          {/* Energie */}
-          <g transform={`translate(0 ${H_PRIJS})`}>
-            <path d={socPad} fill="var(--series-3)" opacity={0.22} />
-            <path
-              d={pad(dag.socKwh.map((v, i) => [x(i), ySoc(v)] as [number, number]))}
-              fill="none"
-              stroke="var(--series-3)"
-              strokeWidth={2}
-              strokeLinejoin="round"
-            />
+          {/* ── Lading ── */}
+          <text x={0} y={Y_LADING - 6} className="paneel-titel">
+            Lading van de batterij
+          </text>
+          <path
+            d={`${lijn(dag.socKwh.map((v, k) => [x(k), ySoc(v)]))} L${x(n - 1)} ${ySoc(0)} L${x(0)} ${ySoc(0)} Z`}
+            fill="var(--series-3)"
+            opacity={0.18}
+          />
+          <path
+            d={lijn(dag.socKwh.map((v, k) => [x(k), ySoc(v)]))}
+            fill="none"
+            stroke="var(--series-3)"
+            strokeWidth={2}
+            strokeLinejoin="round"
+          />
+          <line
+            x1={MARGE.links}
+            x2={B - MARGE.rechts}
+            y1={ySoc(0)}
+            y2={ySoc(0)}
+            stroke="var(--axis)"
+            strokeWidth={1}
+          />
+          <text x={MARGE.links - 10} y={ySoc(cap)} textAnchor="end" dominantBaseline="middle" className="as-label">
+            {getal(cap, 1)} kWh
+          </text>
+          <text x={MARGE.links - 10} y={ySoc(0)} textAnchor="end" dominantBaseline="middle" className="as-label">
+            leeg
+          </text>
+
+          {/* ── Netuitwisseling ── */}
+          <text x={0} y={Y_NET - 6} className="paneel-titel">
+            Uitwisseling met het net
+          </text>
+          {nTicks.map((t) => (
             <line
+              key={`n${t}`}
               x1={MARGE.links}
               x2={B - MARGE.rechts}
-              y1={yRes(0)}
-              y2={yRes(0)}
-              stroke="var(--axis)"
-              strokeWidth={1.5}
+              y1={yN(t)}
+              y2={yN(t)}
+              stroke={Math.abs(t) < 1e-9 ? "var(--axis)" : "var(--grid)"}
+              strokeWidth={Math.abs(t) < 1e-9 ? 1.5 : 1}
             />
-            <path
-              d={pad(dag.residualKwh.map((v, i) => [x(i), yRes(v)] as [number, number]))}
-              fill="none"
-              stroke="var(--text-muted)"
-              strokeWidth={1.5}
-            />
-            <text x={MARGE.links - 8} y={ySoc(cap)} textAnchor="end" dominantBaseline="middle" className="as-label">
-              vol
-            </text>
-            <text x={MARGE.links - 8} y={eBodem} textAnchor="end" dominantBaseline="middle" className="as-label">
-              leeg
-            </text>
-          </g>
+          ))}
+          {/* De as zegt in woorden welke kant wat is: een getal alleen laat de
+              lezer raden of positief nu afnemen of teruggeven betekent. */}
+          <text x={MARGE.links - 10} y={yN(nMax * 0.55)} textAnchor="end" dominantBaseline="middle" className="as-label">
+            {getal(nMax * 0.55, 1)} kW eraf
+          </text>
+          <text x={MARGE.links - 10} y={yN(0)} textAnchor="end" dominantBaseline="middle" className="as-label">
+            niets
+          </text>
+          <text x={MARGE.links - 10} y={yN(-nMax * 0.55)} textAnchor="end" dominantBaseline="middle" className="as-label">
+            {getal(nMax * 0.55, 1)} kW erop
+          </text>
 
-          {/* Uuraanduiding */}
-          {[0, 6, 12, 18].map((u) => {
-            const i = Math.round((u / 24) * (n - 1));
+          <path
+            d={lijn(zonderKw.map((v, k) => [x(k), yN(v)]))}
+            fill="none"
+            stroke="var(--text-muted)"
+            strokeWidth={1.5}
+            strokeDasharray="4 3"
+          />
+          <path
+            d={lijn(netKw.map((v, k) => [x(k), yN(v)]))}
+            fill="none"
+            stroke="var(--series-4)"
+            strokeWidth={2}
+            strokeLinejoin="round"
+          />
+
+          {/* ── Tijdas ── */}
+          {[0, 3, 6, 9, 12, 15, 18, 21].map((u) => {
+            const k = Math.round((u / 24) * (n - 1));
             return (
-              <text key={u} x={x(i)} y={H_PRIJS + H_ENERGIE - 6} textAnchor="middle" className="as-label">
+              <text key={u} x={x(k)} y={H_TOTAAL - 8} textAnchor="middle" className="as-label">
                 {String(u).padStart(2, "0")}:00
               </text>
             );
           })}
 
-          {actief !== null ? (
-            <line
-              x1={x(actief)}
-              x2={x(actief)}
-              y1={MARGE.boven}
-              y2={H_PRIJS + H_ENERGIE - MARGE.onder}
-              stroke="var(--text-muted)"
-              strokeWidth={1}
-              strokeDasharray="3 3"
-            />
+          {/* ── Cursor ── */}
+          {i !== null ? (
+            <g pointerEvents="none">
+              <line
+                x1={x(i)}
+                x2={x(i)}
+                y1={Y_PRIJS}
+                y2={Y_NET + PANEEL.net}
+                stroke="var(--text-primary)"
+                strokeWidth={1}
+                opacity={0.3}
+              />
+              <circle cx={x(i)} cy={yP(dag.importPrice[i]!)} r={4} fill="var(--series-1)" stroke="var(--surface-1)" strokeWidth={2} />
+              <circle cx={x(i)} cy={yP(dag.exportPrice[i]!)} r={4} fill="var(--series-2)" stroke="var(--surface-1)" strokeWidth={2} />
+              <circle cx={x(i)} cy={ySoc(dag.socKwh[i]!)} r={4} fill="var(--series-3)" stroke="var(--surface-1)" strokeWidth={2} />
+              <circle cx={x(i)} cy={yN(netKw[i]!)} r={4} fill="var(--series-4)" stroke="var(--surface-1)" strokeWidth={2} />
+            </g>
           ) : null}
         </svg>
-
-        {actief !== null ? (
-          <div className="dag-uitlezing">
-            <span>
-              {new Date(dag.startMs[actief]!).toLocaleTimeString("nl-NL", {
-                hour: "2-digit",
-                minute: "2-digit",
-                timeZone: "Europe/Amsterdam",
-              })}
-            </span>
-            <span>afname {centPerKwh(dag.importPrice[actief]!)}</span>
-            <span>teruglevering {centPerKwh(dag.exportPrice[actief]!)}</span>
-            <span>lading {getal(dag.socKwh[actief]!, 1)} kWh</span>
-          </div>
-        ) : null}
       </div>
+
+      <Uitlezing dag={dag} i={i} />
 
       <Legenda
         items={[
           { kleur: "var(--series-1)", label: "prijs bij afname" },
           { kleur: "var(--series-2)", label: "opbrengst bij teruglevering" },
           { kleur: "var(--series-3)", label: "lading van de batterij" },
-          { kleur: "var(--text-muted)", label: "uitwisseling met het net" },
+          { kleur: "var(--series-4)", label: "net, mét batterij" },
+          { kleur: "var(--text-muted)", label: "net, zónder batterij" },
         ]}
       />
     </Figure>
+  );
+}
+
+/**
+ * De waarden op het aangewezen moment, in een vaste balk onder de grafiek.
+ *
+ * Blijft staan als er geen cursor is, met een uitnodiging in plaats van een
+ * lege plek: dan springt de pagina niet op en neer bij het bewegen van de muis.
+ */
+function Uitlezing({ dag, i }: { dag: SampleDay; i: number | null }) {
+  if (i === null) {
+    return (
+      <p className="uitlezing-leeg">
+        Beweeg over de grafiek om de waarden per kwartier te zien.
+      </p>
+    );
+  }
+
+  const tijd = new Date(dag.startMs[i]!).toLocaleTimeString("nl-NL", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Europe/Amsterdam",
+  });
+
+  const netKw = dag.netKwh[i]! * KWH_NAAR_KW;
+  const laden = dag.chargeKwh[i]! * KWH_NAAR_KW;
+  const ontladen = dag.dischargeKwh[i]! * KWH_NAAR_KW;
+  const afgeregeld = dag.curtailedKwh[i]! * KWH_NAAR_KW;
+
+  const richting = (kw: number): string =>
+    Math.abs(kw) < 0.02
+      ? "niets"
+      : kw > 0
+        ? `${getal(kw, 1)} kW eraf`
+        : `${getal(-kw, 1)} kW erop`;
+
+  const watDoetHij =
+    laden > 0.02
+      ? `laadt met ${getal(laden, 1)} kW`
+      : ontladen > 0.02
+        ? `levert ${getal(ontladen, 1)} kW`
+        : "staat stil";
+
+  return (
+    <dl className="uitlezing">
+      <div className="uitlezing-tijd">
+        <dt>Tijd</dt>
+        <dd>{tijd}</dd>
+      </div>
+      <div>
+        <dt><i style={{ background: "var(--series-1)" }} />Afname kost</dt>
+        <dd>{centPerKwh(dag.importPrice[i]!)}</dd>
+      </div>
+      <div>
+        <dt><i style={{ background: "var(--series-2)" }} />Teruglevering geeft</dt>
+        <dd>{centPerKwh(dag.exportPrice[i]!)}</dd>
+      </div>
+      <div>
+        <dt><i style={{ background: "var(--series-3)" }} />Batterij</dt>
+        <dd>
+          {getal(dag.socKwh[i]!, 1)} kWh · {watDoetHij}
+        </dd>
+      </div>
+      <div>
+        <dt><i style={{ background: "var(--series-4)" }} />Net</dt>
+        <dd>
+          {richting(netKw)}
+          {afgeregeld > 0.02 ? (
+            <span className="dd-noot">{getal(afgeregeld, 1)} kW afgeregeld</span>
+          ) : null}
+        </dd>
+      </div>
+    </dl>
   );
 }

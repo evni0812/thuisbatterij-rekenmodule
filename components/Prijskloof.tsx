@@ -85,7 +85,9 @@ export function Prijskloof({
           In {procent(gap.negativePriceShare, 1)} van de tijd was de prijs
           negatief: terugleveren kostte dan geld in plaats van dat het iets
           opbracht. Daar viel {kwh(gap.exportAtNegativePriceKwh)} van jouw
-          teruglevering in.
+          jaarlijkse teruglevering in — veel meer dan dat tijdsaandeel doet
+          vermoeden, want je levert nu eenmaal terug op precies de zonnige uren
+          waarop iedereen dat doet en de prijs onderuit gaat.
         </p>
       ) : null}
     </Figure>

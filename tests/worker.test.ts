@@ -222,6 +222,50 @@ describe("volledige keten", () => {
   });
 });
 
+describe("voorbeelddag", () => {
+  it("toont de netuitwisseling mét batterij, niet die zonder", async () => {
+    const manifest = await loadManifest();
+    const invoer = await bouwInvoer(manifest, "2025-01-01", "2025-12-31");
+    const result = runAnalysis(invoer);
+    const dag = result.sampleDays[0]!;
+
+    expect(dag.netKwh.length).toBe(dag.residualKwh.length);
+
+    // De twee reeksen moeten verschillen: doen ze dat niet, dan toont de
+    // grafiek de situatie zonder batterij terwijl het bijschrift het
+    // tegenovergestelde belooft.
+    let verschillend = 0;
+    for (let i = 0; i < dag.netKwh.length; i++) {
+      if (Math.abs(dag.netKwh[i]! - dag.residualKwh[i]!) > 1e-9) verschillend++;
+    }
+    expect(verschillend).toBeGreaterThan(0);
+
+    // Het verschil is precies wat de batterij doet: laden erbij, ontladen
+    // eraf, plus het eigen standby-verbruik van de omvormer, min wat er is
+    // afgeregeld — dat laatste gaat niet naar het net en komt dus ook niet
+    // door de meter.
+    const standbyKwh = (PRESETS[1]!.spec.standbyWatt / 1000) * 0.25;
+    for (let i = 0; i < dag.netKwh.length; i++) {
+      const batterij = dag.chargeKwh[i]! - dag.dischargeKwh[i]!;
+      const verwacht =
+        dag.residualKwh[i]! + standbyKwh + batterij + dag.curtailedKwh[i]!;
+      expect(dag.netKwh[i]!).toBeCloseTo(verwacht, 6);
+    }
+  });
+
+  it("vlakt de uitwisseling af in plaats van hem te vergroten", async () => {
+    const manifest = await loadManifest();
+    const invoer = await bouwInvoer(manifest, "2025-01-01", "2025-12-31");
+    const dag = runAnalysis(invoer).sampleDays.find((d) => /zomer/i.test(d.label))!;
+
+    // Op een zomerdag hoort de batterij de teruglever-piek op te vangen, dus de
+    // grootste uitslag naar het net wordt kleiner.
+    const piekZonder = Math.min(...dag.residualKwh);
+    const piekMet = Math.min(...dag.netKwh);
+    expect(piekMet).toBeGreaterThan(piekZonder);
+  });
+});
+
 describe("batterijmaat-raster", () => {
   /**
    * De test die het oude model niet haalt.
@@ -298,5 +342,42 @@ describe("batterijmaat-raster", () => {
     // En het effect moet substantieel zijn: een tienvoudige batterij hoort
     // duidelijk meer op te leveren dan de kleinste.
     expect(raster.at(-1)!.at(-1)!).toBeGreaterThan(raster[0]![0]! * 2);
+  });
+});
+
+describe("prijskloof", () => {
+  /**
+   * De prijskloof staat naast de jaarvolumes die de gebruiker invulde, dus hij
+   * moet ook per jaar gelden. Toen hij over de hele reeks van ruim drie jaar
+   * werd opgeteld, leek er meer teruglevering in negatieve uren te vallen
+   * (1749 kWh) dan er in een heel jaar was (2400 kWh).
+   */
+  it("rekent per jaar, niet over de hele reeks", async () => {
+    const manifest = await loadManifest();
+
+    const eenJaar = runAnalysis(await bouwInvoer(manifest, "2025-01-01", "2025-12-31"));
+    const alles = runAnalysis(await bouwInvoer(manifest, "2023-04-01", "2026-12-31"));
+
+    // Meer jaren erbij mag het VOLUME per jaar niet laten oplopen.
+    expect(alles.priceGap.exportAtNegativePriceKwh).toBeLessThan(
+      eenJaar.priceGap.exportAtNegativePriceKwh * 2,
+    );
+    // En het kan nooit meer zijn dan wat er per jaar wordt teruggeleverd.
+    for (const r of [eenJaar, alles]) {
+      expect(r.priceGap.exportAtNegativePriceKwh).toBeLessThanOrEqual(2000);
+      expect(r.priceGap.exportAtNegativePriceKwh).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it("weegt de prijzen naar wanneer je werkelijk afneemt en teruglevert", async () => {
+    const manifest = await loadManifest();
+    const r = runAnalysis(await bouwInvoer(manifest, "2025-01-01", "2025-12-31"));
+    const g = r.priceGap;
+
+    // Het hele punt van wegen: een huishouden met panelen neemt af als het duur
+    // is en levert terug als het goedkoop is, dus beide wijken af van het
+    // ongewogen gemiddelde — en wel in tegengestelde richting.
+    expect(g.weightedImportPrice).toBeGreaterThan(g.weightedExportPrice);
+    expect(g.weightedExportPrice).toBeLessThan(g.simpleAveragePrice);
   });
 });

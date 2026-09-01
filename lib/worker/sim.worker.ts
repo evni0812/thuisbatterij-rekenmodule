@@ -19,10 +19,10 @@ import type { Manifest } from "../data/manifest";
 import { equivalentCycles, wearCostPerKwh } from "../model/battery";
 import { dispatchBaseline } from "../model/dispatch-baseline";
 import { dispatchRolling } from "../model/dispatch-rolling";
-import { runAnalysis, type AnalysisInput } from "../model/analysis";
+import { findDay, runAnalysis, type AnalysisInput } from "../model/analysis";
 import { buildResidual } from "../model/residual";
 import { buildPriceSeries } from "../model/tariff";
-import type { BatterySpec } from "../model/types";
+import type { BatterySpec, DispatchResult } from "../model/types";
 import type {
   Configuration,
   GridPoint,
@@ -240,6 +240,17 @@ async function runGrid(
 /** Volgnummer van het raster dat nu mag draaien; ouder werk stopt vanzelf. */
 let huidigeGrid = -1;
 
+/**
+ * De laatste doorrekening, bewaard zodat elke kalenderdag opvraagbaar is zonder
+ * opnieuw te rekenen. De dispatch over een heel jaar staat er al; er hoeft
+ * alleen een dag uit gesneden te worden.
+ */
+let laatste: {
+  windows: AnalysisInput["windows"];
+  dispatches: DispatchResult[];
+  spec: BatterySpec;
+} | null = null;
+
 self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
   const msg = event.data;
   try {
@@ -259,16 +270,52 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       await runGrid(msg.id, msg.config, msg.capacities, msg.powers);
       return;
     }
+    if (msg.type === "day") {
+      if (!laatste) throw new Error("er is nog geen doorrekening om een dag uit te halen");
+      let dag = null;
+      for (let i = 0; i < laatste.windows.length; i++) {
+        dag = findDay(
+          laatste.windows[i]!.window,
+          laatste.dispatches[i]!,
+          laatste.spec,
+          msg.date,
+        );
+        if (dag) break;
+      }
+      post({ type: "day", id: msg.id, day: dag, date: msg.date });
+      return;
+    }
     if (msg.type === "analyse") {
       if (!manifest) throw new Error("worker is nog niet geïnitialiseerd");
       const t0 = performance.now();
-      const result = runAnalysis(await buildInput(msg.config));
+      const invoer = await buildInput(msg.config);
+      // De dispatches komen uit dezelfde doorrekening; opnieuw rekenen zou een
+      // paar seconden kosten voor iets dat er al is.
+      const dispatches: DispatchResult[] = [];
+      const result = runAnalysis(invoer, { collectDispatches: dispatches });
+
+      laatste = {
+        windows: invoer.windows,
+        dispatches,
+        spec: {
+          ...invoer.battery,
+          wearCostEurPerKwh: wearCostPerKwh(
+            invoer.investmentEur,
+            invoer.cycleLife,
+            invoer.battery,
+          ),
+        },
+      };
+
       post({ type: "result", id: msg.id, result, elapsedMs: performance.now() - t0 });
     }
   } catch (err) {
     post({
       type: "error",
-      id: msg.type === "analyse" || msg.type === "grid" ? msg.id : null,
+      id:
+        msg.type === "analyse" || msg.type === "grid" || msg.type === "day"
+          ? msg.id
+          : null,
       message: err instanceof Error ? err.message : String(err),
     });
   }

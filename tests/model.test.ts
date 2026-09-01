@@ -10,6 +10,7 @@ import {
 import { dispatchBaseline } from "../lib/model/dispatch-baseline";
 import { dispatchRolling } from "../lib/model/dispatch-rolling";
 import { dispatchOptimal } from "../lib/model/dispatch-optimal";
+import { breakdown as breakdownVoorTest } from "../lib/model/analysis";
 import { buildPriceSeries } from "../lib/model/tariff";
 import { HOURS_PER_STEP, type BatterySpec, type DispatchResult, type TariffSpec, type Window } from "../lib/model/types";
 
@@ -339,5 +340,48 @@ describe("slijtage telt niet dubbel", () => {
     const zonder = dispatchRolling(w, spec({ wearCostEurPerKwh: 0 }), TARIFF);
     const met = dispatchRolling(w, spec({ wearCostEurPerKwh: 0.15 }), TARIFF);
     expect(met.totalCostEur).toBeCloseTo(zonder.totalCostEur, 6);
+  });
+});
+
+describe("uitsplitsing van de besparing", () => {
+  /**
+   * De post "negatieve prijzen ontlopen" hoort nooit negatief te zijn: je kunt
+   * niet minder dan niets ontlopen. Toen het netladen van de batterij er ten
+   * onrechte in werd meegeteld, kwam de post op −€2,68 uit — alsof het ontlopen
+   * van negatieve prijzen geld kostte.
+   */
+  it("laat het ontlopen van negatieve prijzen nooit geld kosten", () => {
+    // Een venster met flink negatieve prijzen midden op de dag.
+    const startMs = buildQuarterAxis("2025-06-01", "2025-06-15");
+    const n = startMs.length;
+    const residual = new Float64Array(n);
+    const market = new Float64Array(n);
+    for (let i = 0; i < n; i++) {
+      const uur = (i % 96) / 4;
+      const zon = Math.max(0, Math.sin(((uur - 6) / 12) * Math.PI)) * 1.5;
+      residual[i] = 0.15 - zon;
+      market[i] = uur > 10 && uur < 16 ? -0.06 : 0.11;
+    }
+    const tarief: TariffSpec = { ...TARIFF, allowCurtailment: false };
+    const w: Window = {
+      startMs,
+      residualKwh: residual,
+      prices: buildPriceSeries(market, tarief),
+    };
+
+    const s = spec({ capacityKwh: 5, maxChargeKw: 2.5, maxDischargeKw: 2.5 });
+    const base = dispatchBaseline(w, tarief);
+    const bat = dispatchRolling(w, s, tarief);
+    const b = breakdownVoorTest(w, base, bat, s);
+
+    // Je kunt niet minder dan niets ontlopen.
+    expect(b.avoidedNegativeExportEur).toBeGreaterThanOrEqual(0);
+    // En de posten tellen nog steeds precies op tot het totaal.
+    const som =
+      b.selfConsumptionEur +
+      b.arbitrageEur +
+      b.avoidedNegativeExportEur +
+      b.lossesEur;
+    expect(som).toBeCloseTo(b.totalEur, 6);
   });
 });

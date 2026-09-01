@@ -567,19 +567,101 @@ input[type="date"] {
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
 }
 
-.dag-uitlezing {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px 18px;
-  font-size: 0.85rem;
-  color: var(--text-secondary);
-  font-variant-numeric: tabular-nums;
-  padding-top: 8px;
+.paneel-titel {
+  fill: var(--text-secondary);
+  font-size: 11.5px;
+  font-weight: 580;
 }
 
-.dag-uitlezing span:first-child {
-  font-weight: 600;
-  color: var(--text-primary);
+.dagkiezer {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+}
+
+.dagkiezer-datum {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.dagkiezer-datum input {
+  width: auto;
+  padding: 7px 9px;
+  font-size: 0.85rem;
+}
+
+.dag-melding {
+  margin: 0 0 14px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  border-left: 3px solid var(--warning);
+  font-size: 0.87rem;
+  color: var(--text-secondary);
+}
+
+/*
+ * De waarden staan in een vaste balk onder de grafiek, niet in een zwevende
+ * tooltip: die dekte precies de data af die je wilde aflezen, en op een
+ * telefoon is er geen ruimte om iets te laten zweven. De balk blijft ook staan
+ * zonder cursor, zodat de pagina niet op en neer springt.
+ */
+.uitlezing {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 26px;
+  margin: 14px 0 0;
+  padding: 12px 14px;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+}
+
+.uitlezing > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.uitlezing dt {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+.uitlezing dt i {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  flex: none;
+}
+
+.uitlezing dd {
+  margin: 0;
+  font-variant-numeric: tabular-nums;
+  font-weight: 560;
+  white-space: nowrap;
+}
+
+.uitlezing-tijd dd {
+  font-size: 1.05rem;
+}
+
+.uitlezing-leeg {
+  margin: 14px 0 0;
+  padding: 12px 14px;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  font-size: 0.85rem;
+  color: var(--text-muted);
 }
 
 /* ── Kerncijfers ──────────────────────────────────────────────────────────── */
