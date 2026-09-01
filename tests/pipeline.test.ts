@@ -230,3 +230,48 @@ describe("doorrekening op echte data", () => {
     expect(rolling + optimal).toBeLessThan(1500);
   });
 });
+
+describe("vensterselectie", () => {
+  /** Dezelfde grenzenlogica als de worker gebruikt. */
+  function lowerBound(axis: Float64Array, target: number): number {
+    let lo = 0;
+    let hi = axis.length;
+    while (lo < hi) {
+      const mid = (lo + hi) >>> 1;
+      if (axis[mid]! < target) lo = mid + 1;
+      else hi = mid;
+    }
+    return lo;
+  }
+
+  it("selecteert precies de gevraagde dagen, ook rond de zomertijd", () => {
+    const p = profileYear(DOMAIN, 2025);
+    for (const [van, tot, dagen] of [
+      ["2025-01-01", "2025-01-31", 31],
+      ["2025-03-29", "2025-03-31", 3],   // bevat de voorjaarsovergang
+      ["2025-10-25", "2025-10-27", 3],   // bevat de najaarsovergang
+      ["2025-06-01", "2025-08-31", 92],
+    ] as const) {
+      const start = lowerBound(p.startMs, localMidnightUtcMs(van));
+      const end = lowerBound(p.startMs, localMidnightUtcMs(addDays(tot, 1)));
+      const verwacht = buildQuarterAxis(van, addDays(tot, 1)).length;
+      expect(end - start, `${van}…${tot}`).toBe(verwacht);
+      // Een gewone dag telt 96 kwartieren; de overgangsdagen 92 en 100.
+      expect(verwacht).toBeGreaterThanOrEqual(dagen * 96 - 4);
+      expect(verwacht).toBeLessThanOrEqual(dagen * 96 + 4);
+    }
+  });
+
+  it("laat een deelvenster op minder dan het jaarvolume uitkomen", () => {
+    const p = profileYear(DOMAIN, 2025);
+    const start = lowerBound(p.startMs, localMidnightUtcMs("2025-06-01"));
+    const end = lowerBound(p.startMs, localMidnightUtcMs("2025-09-01"));
+    let zomer = 0;
+    for (let i = start; i < end; i++) zomer += p.importFraction[i]!;
+    // Drie zomermaanden: minder dan een kwart van de jaarafname, want de winter
+    // weegt zwaarder. Dit is precies waarom een deelperiode niet opnieuw
+    // genormaliseerd mag worden.
+    expect(zomer).toBeGreaterThan(0.1);
+    expect(zomer).toBeLessThan(0.25);
+  });
+});

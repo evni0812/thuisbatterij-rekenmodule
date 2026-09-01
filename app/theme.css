@@ -1,0 +1,839 @@
+/*
+ * Kleuren en tokens.
+ *
+ * Het categorische palet is gevalideerd op de eerste vier slots, voor beide
+ * thema's: worst adjacent CVD Delta E 9,1 (licht) en 8,4 (donker), normaal zicht
+ * 22,9 en 19,8. In lichte modus blijven aqua en geel onder 3:1 contrast met het
+ * oppervlak — daar staan overal zichtbare labels bij, zodat kleur nooit de enige
+ * drager van betekenis is.
+ */
+
+:root {
+  color-scheme: light;
+
+  --surface-1: #fcfcfb;
+  --surface-2: #f9f9f7;
+  --page: #f4f4f1;
+
+  --text-primary: #0b0b0b;
+  --text-secondary: #52514e;
+  --text-muted: #898781;
+
+  --grid: #e1e0d9;
+  --axis: #c3c2b7;
+  --border: rgba(11, 11, 11, 0.1);
+  --border-strong: rgba(11, 11, 11, 0.18);
+
+  /* Categorisch: identiteit, vaste volgorde, nooit doorgerouleerd. */
+  --series-1: #2a78d6; /* afname van het net */
+  --series-2: #eb6834; /* teruglevering */
+  --series-3: #1baf7a; /* batterij / besparing */
+  --series-4: #eda100; /* vierde post */
+
+  /* Sequentieel: één hue, licht naar donker, voor magnitude. */
+  --seq-100: #cde2fb;
+  --seq-200: #9ec5f4;
+  --seq-300: #6da7ec;
+  --seq-400: #3987e5;
+  --seq-500: #256abf;
+  --seq-600: #184f95;
+  --seq-700: #0d366b;
+
+  --good: #0ca30c;
+  --warning: #fab219;
+  --critical: #d03b3b;
+  --success-text: #006300;
+
+  --radius: 10px;
+  --radius-sm: 6px;
+  --font: system-ui, -apple-system, "Segoe UI", sans-serif;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    color-scheme: dark;
+
+    --surface-1: #1a1a19;
+    --surface-2: #131312;
+    --page: #0d0d0d;
+
+    --text-primary: #ffffff;
+    --text-secondary: #c3c2b7;
+    --text-muted: #898781;
+
+    --grid: #2c2c2a;
+    --axis: #383835;
+    --border: rgba(255, 255, 255, 0.1);
+    --border-strong: rgba(255, 255, 255, 0.18);
+
+    --series-1: #3987e5;
+    --series-2: #d95926;
+    --series-3: #199e70;
+    --series-4: #c98500;
+
+    --seq-100: #0d366b;
+    --seq-200: #184f95;
+    --seq-300: #256abf;
+    --seq-400: #2a78d6;
+    --seq-500: #3987e5;
+    --seq-600: #6da7ec;
+    --seq-700: #9ec5f4;
+
+    --success-text: #0ca30c;
+  }
+}
+
+:root[data-theme="dark"] {
+  color-scheme: dark;
+
+  --surface-1: #1a1a19;
+  --surface-2: #131312;
+  --page: #0d0d0d;
+
+  --text-primary: #ffffff;
+  --text-secondary: #c3c2b7;
+  --text-muted: #898781;
+
+  --grid: #2c2c2a;
+  --axis: #383835;
+  --border: rgba(255, 255, 255, 0.1);
+  --border-strong: rgba(255, 255, 255, 0.18);
+
+  --series-1: #3987e5;
+  --series-2: #d95926;
+  --series-3: #199e70;
+  --series-4: #c98500;
+
+  --seq-100: #0d366b;
+  --seq-200: #184f95;
+  --seq-300: #256abf;
+  --seq-400: #2a78d6;
+  --seq-500: #3987e5;
+  --seq-600: #6da7ec;
+  --seq-700: #9ec5f4;
+
+  --success-text: #0ca30c;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--page);
+  color: var(--text-primary);
+  font-family: var(--font);
+  font-size: 16px;
+  line-height: 1.55;
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3 {
+  line-height: 1.25;
+  margin: 0;
+  font-weight: 620;
+  letter-spacing: -0.011em;
+}
+
+button,
+input,
+select {
+  font: inherit;
+  color: inherit;
+}
+
+/* Toetsenbordfocus blijft altijd zichtbaar. */
+:focus-visible {
+  outline: 2px solid var(--series-1);
+  outline-offset: 2px;
+  border-radius: var(--radius-sm);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* ── Pagina-indeling ──────────────────────────────────────────────────────── */
+
+.pagina {
+  max-width: 860px;
+  margin: 0 auto;
+  padding: 32px 20px 96px;
+  display: flex;
+  flex-direction: column;
+  gap: 28px;
+}
+
+.kop h1 {
+  font-size: clamp(1.75rem, 4.5vw, 2.5rem);
+  margin-bottom: 12px;
+}
+
+.kop-uitleg {
+  color: var(--text-secondary);
+  max-width: 62ch;
+  margin: 0;
+}
+
+/* ── Invoer ───────────────────────────────────────────────────────────────── */
+
+.invoer {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 20px;
+}
+
+.invoer-velden {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 18px;
+}
+
+.veld {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.veld-label {
+  font-weight: 560;
+  font-size: 0.95rem;
+}
+
+.veld-hint,
+.instelling-uitleg {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+  line-height: 1.45;
+  margin: 0;
+}
+
+.getal-veld {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 0 10px;
+}
+
+.getal-veld input {
+  border: 0;
+  background: none;
+  padding: 10px 0;
+  width: 100%;
+  font-size: 1.05rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.getal-veld input:focus {
+  outline: none;
+}
+
+.getal-veld:focus-within {
+  outline: 2px solid var(--series-1);
+  outline-offset: 1px;
+}
+
+.eenheid {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+select,
+input[type="date"] {
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 10px;
+  width: 100%;
+}
+
+.waarschuwingen {
+  list-style: none;
+  margin: 16px 0 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.waarschuwingen li {
+  font-size: 0.87rem;
+  padding: 9px 12px;
+  border-radius: var(--radius-sm);
+  border-left: 3px solid var(--text-muted);
+  background: var(--surface-2);
+  color: var(--text-secondary);
+}
+
+.waarschuwingen li.let-op {
+  border-left-color: var(--warning);
+}
+
+/* ── Het antwoord ─────────────────────────────────────────────────────────── */
+
+.antwoord {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 28px 24px;
+  transition: opacity 0.2s ease;
+}
+
+.antwoord.bezig {
+  opacity: 0.55;
+}
+
+.antwoord-aanhef {
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.antwoord-bedrag {
+  font-size: clamp(2.75rem, 9vw, 4rem);
+  font-weight: 660;
+  letter-spacing: -0.03em;
+  line-height: 1.05;
+  margin: 4px 0 8px;
+  color: var(--series-3);
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.antwoord-eenheid {
+  font-size: 1rem;
+  font-weight: 500;
+  color: var(--text-secondary);
+  letter-spacing: 0;
+}
+
+.antwoord-zin {
+  margin: 0;
+  max-width: 60ch;
+  color: var(--text-secondary);
+}
+
+.antwoord-zin strong {
+  color: var(--text-primary);
+}
+
+/* ── Figuren ──────────────────────────────────────────────────────────────── */
+
+.figure {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 22px;
+  margin: 0;
+}
+
+.figure-kop {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  margin-bottom: 18px;
+  flex-wrap: wrap;
+}
+
+.figure h3 {
+  font-size: 1.12rem;
+  margin-bottom: 6px;
+}
+
+.figure-uitleg {
+  color: var(--text-secondary);
+  font-size: 0.9rem;
+  margin: 0;
+  max-width: 64ch;
+}
+
+.chart-wrap {
+  position: relative;
+  overflow-x: auto;
+}
+
+.chart {
+  width: 100%;
+  height: auto;
+  display: block;
+  overflow: visible;
+}
+
+.as-label {
+  fill: var(--text-muted);
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+}
+
+.as-label.zwak {
+  font-size: 10px;
+  opacity: 0.8;
+}
+
+.mark-label {
+  fill: var(--text-primary);
+  font-size: 11.5px;
+  font-weight: 560;
+  font-variant-numeric: tabular-nums;
+}
+
+.legenda {
+  list-style: none;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  padding: 14px 0 0;
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.legenda li {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+}
+
+.legenda-vlak,
+.post-vlak {
+  width: 11px;
+  height: 11px;
+  border-radius: 3px;
+  flex: none;
+}
+
+/* ── Prijskloof ───────────────────────────────────────────────────────────── */
+
+.kloof {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.kloof-rij {
+  display: grid;
+  grid-template-columns: minmax(150px, 15rem) 1fr auto;
+  align-items: center;
+  gap: 14px;
+}
+
+.kloof-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.kloof-balk,
+.post-balk {
+  background: var(--surface-2);
+  border-radius: 4px;
+  height: 22px;
+  overflow: hidden;
+}
+
+.kloof-vulling,
+.post-vulling {
+  display: block;
+  height: 100%;
+  border-radius: 4px;
+}
+
+.kloof-waarde {
+  font-variant-numeric: tabular-nums;
+  font-size: 1.05rem;
+  min-width: 5.5rem;
+  text-align: right;
+}
+
+.kloof-conclusie {
+  margin: 18px 0 0;
+  color: var(--text-secondary);
+  max-width: 64ch;
+}
+
+.kloof-conclusie strong {
+  color: var(--text-primary);
+}
+
+.kloof-noot,
+.controle-noot,
+.instelling-noot {
+  margin: 12px 0 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  max-width: 68ch;
+}
+
+/* ── Uitsplitsing ─────────────────────────────────────────────────────────── */
+
+.posten {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.post-kop {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+  margin-bottom: 6px;
+}
+
+.post-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-weight: 540;
+}
+
+.post-waarde {
+  font-variant-numeric: tabular-nums;
+  font-weight: 560;
+}
+
+.post-waarde.negatief {
+  color: var(--text-secondary);
+}
+
+.post-uitleg {
+  margin: 7px 0 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  max-width: 68ch;
+}
+
+.posten-totaal {
+  display: flex;
+  justify-content: space-between;
+  border-top: 1px solid var(--border);
+  margin-top: 20px;
+  padding-top: 14px;
+  font-size: 1.05rem;
+}
+
+.posten-totaal strong {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Dagprofiel ───────────────────────────────────────────────────────────── */
+
+.segment {
+  display: flex;
+  background: var(--surface-2);
+  border-radius: var(--radius-sm);
+  padding: 3px;
+  gap: 3px;
+}
+
+.segment-knop {
+  border: 0;
+  background: none;
+  padding: 6px 12px;
+  border-radius: 5px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
+.segment-knop.actief {
+  background: var(--surface-1);
+  color: var(--text-primary);
+  font-weight: 550;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.08);
+}
+
+.dag-uitlezing {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 18px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+  padding-top: 8px;
+}
+
+.dag-uitlezing span:first-child {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* ── Kerncijfers ──────────────────────────────────────────────────────────── */
+
+.kerncijfers {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
+  gap: 16px;
+  margin: 20px 0 0;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+
+.kerncijfers dt {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin-bottom: 3px;
+}
+
+.kerncijfers dd {
+  margin: 0;
+  font-size: 1.15rem;
+  font-weight: 580;
+  font-variant-numeric: tabular-nums;
+}
+
+.kerncijfers dd.goed {
+  color: var(--success-text);
+}
+
+.kerncijfers dd.slecht {
+  color: var(--critical);
+}
+
+.dd-noot {
+  display: block;
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+.hint {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 14px;
+  height: 14px;
+  margin-left: 5px;
+  border-radius: 50%;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  font-size: 9px;
+  cursor: help;
+  vertical-align: middle;
+}
+
+/* ── Geavanceerd ──────────────────────────────────────────────────────────── */
+
+.geavanceerd,
+.controle {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+}
+
+.geavanceerd > summary,
+.controle > summary {
+  padding: 16px 22px;
+  cursor: pointer;
+  font-weight: 560;
+  list-style-position: inside;
+}
+
+.geavanceerd-inhoud {
+  padding: 0 22px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 30px;
+}
+
+.geavanceerd-inhoud h3 {
+  font-size: 0.95rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--text-muted);
+  margin-bottom: 14px;
+}
+
+.instelling-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  gap: 22px;
+}
+
+.instelling-kop {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  margin-bottom: 4px;
+}
+
+.instelling label {
+  font-size: 0.9rem;
+  font-weight: 540;
+}
+
+.instelling output {
+  font-variant-numeric: tabular-nums;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+}
+
+.instelling input[type="range"] {
+  width: 100%;
+  accent-color: var(--series-1);
+  margin: 4px 0 2px;
+}
+
+.datum-paar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 4px 0;
+}
+
+.datum-paar span {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
+.schakel {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  cursor: pointer;
+}
+
+.schakel input {
+  accent-color: var(--series-1);
+  width: 17px;
+  height: 17px;
+}
+
+.reset {
+  align-self: flex-start;
+  background: var(--surface-2);
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius-sm);
+  padding: 9px 16px;
+  cursor: pointer;
+}
+
+/* ── Verantwoording ───────────────────────────────────────────────────────── */
+
+.verantwoording {
+  border-top: 1px solid var(--border);
+  padding-top: 28px;
+  color: var(--text-secondary);
+}
+
+.verantwoording h2 {
+  font-size: 1.15rem;
+  margin-bottom: 18px;
+  color: var(--text-primary);
+}
+
+.verantwoording h3 {
+  font-size: 0.92rem;
+  color: var(--text-primary);
+  margin-bottom: 8px;
+}
+
+.verantwoording-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  gap: 26px;
+  font-size: 0.9rem;
+}
+
+.verantwoording p {
+  margin: 0 0 10px;
+  max-width: 60ch;
+}
+
+.verantwoording ul {
+  margin: 0;
+  padding-left: 18px;
+  display: flex;
+  flex-direction: column;
+  gap: 9px;
+  max-width: 60ch;
+}
+
+.controle {
+  margin-top: 22px;
+}
+
+.controle table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.controle th,
+.controle td {
+  text-align: right;
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+  white-space: nowrap;
+}
+
+.controle th:first-child,
+.controle td:first-child {
+  text-align: left;
+}
+
+.controle th {
+  color: var(--text-muted);
+  font-weight: 540;
+}
+
+.controle > table {
+  display: block;
+  overflow-x: auto;
+}
+
+.controle-noot {
+  padding: 0 22px 18px;
+}
+
+/* ── Status ───────────────────────────────────────────────────────────────── */
+
+.laden,
+.fout {
+  padding: 20px;
+  border-radius: var(--radius);
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  color: var(--text-secondary);
+  margin: 0;
+}
+
+.fout {
+  border-left: 3px solid var(--critical);
+}
+
+@media (max-width: 560px) {
+  .kloof-rij {
+    grid-template-columns: 1fr;
+    gap: 6px;
+  }
+  .kloof-waarde {
+    text-align: left;
+  }
+}

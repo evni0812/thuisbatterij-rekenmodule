@@ -1,0 +1,110 @@
+"use client";
+
+/**
+ * React-hook om de rekenworker aan te sturen.
+ *
+ * De worker wordt één keer opgestart en hergebruikt; elke aanvraag krijgt een
+ * volgnummer zodat een laat antwoord op een inmiddels achterhaalde configuratie
+ * genegeerd kan worden. Zonder die controle zou snel schuiven met een regelaar
+ * de resultaten door elkaar kunnen gooien.
+ */
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import type { AnalysisResult } from "./model/analysis";
+import type { Manifest } from "./data/manifest";
+import type { Configuration, WorkerRequest, WorkerResponse } from "./worker/protocol";
+
+export interface AnalysisState {
+  manifest: Manifest | null;
+  result: AnalysisResult | null;
+  /** Er loopt een berekening; toon het vorige resultaat gedimd in plaats van leeg. */
+  busy: boolean;
+  error: string | null;
+  elapsedMs: number | null;
+}
+
+/** Wachttijd voordat een wijziging een herberekening start, in milliseconden. */
+const DEBOUNCE_MS = 180;
+
+export function useAnalysis(config: Configuration | null): AnalysisState {
+  const workerRef = useRef<Worker | null>(null);
+  const nextId = useRef(0);
+  const pendingId = useRef<number | null>(null);
+
+  const [state, setState] = useState<AnalysisState>({
+    manifest: null,
+    result: null,
+    busy: false,
+    error: null,
+    elapsedMs: null,
+  });
+
+  useEffect(() => {
+    const worker = new Worker(
+      new URL("./worker/sim.worker.ts", import.meta.url),
+      { type: "module" },
+    );
+    workerRef.current = worker;
+
+    worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
+      const msg = event.data;
+      if (msg.type === "ready") {
+        setState((s) => ({ ...s, manifest: msg.manifest as Manifest }));
+        return;
+      }
+      if (msg.type === "result") {
+        // Een antwoord op een achterhaalde aanvraag negeren we: anders zou een
+        // trage berekening een nieuwere overschrijven.
+        if (msg.id !== pendingId.current) return;
+        setState((s) => ({
+          ...s,
+          result: msg.result,
+          busy: false,
+          error: null,
+          elapsedMs: msg.elapsedMs,
+        }));
+        return;
+      }
+      if (msg.type === "error") {
+        if (msg.id !== null && msg.id !== pendingId.current) return;
+        setState((s) => ({ ...s, busy: false, error: msg.message }));
+      }
+    };
+
+    worker.onerror = (event) => {
+      setState((s) => ({
+        ...s,
+        busy: false,
+        error: event.message || "de rekenmodule kon niet starten",
+      }));
+    };
+
+    const init: WorkerRequest = { type: "init", baseUrl: "/data" };
+    worker.postMessage(init);
+
+    return () => {
+      worker.terminate();
+      workerRef.current = null;
+    };
+  }, []);
+
+  const send = useCallback((cfg: Configuration) => {
+    const worker = workerRef.current;
+    if (!worker) return;
+    const id = ++nextId.current;
+    pendingId.current = id;
+    setState((s) => ({ ...s, busy: true }));
+    const msg: WorkerRequest = { type: "analyse", id, config: cfg };
+    worker.postMessage(msg);
+  }, []);
+
+  useEffect(() => {
+    if (!config || !state.manifest) return;
+    const timer = setTimeout(() => send(config), DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+    // De configuratie is een gewoon object; serialiseren is de eenvoudigste
+    // manier om op inhoud te vergelijken in plaats van op referentie.
+  }, [JSON.stringify(config), state.manifest, send]);
+
+  return state;
+}
