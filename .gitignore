@@ -22,3 +22,13 @@ env/
 
 # Streamlit
 .streamlit/secrets.toml
+
+# Node / Next.js
+node_modules/
+.next/
+out/
+next-env.d.ts
+*.tsbuildinfo
+
+# Ruwe energiedata (build-time opgehaald, niet in git)
+data/raw/
