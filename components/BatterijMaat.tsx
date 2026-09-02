@@ -54,7 +54,7 @@ export function BatterijMaat({
           className="start-knop"
           onClick={() => onStart(CAPACITEITEN, VERMOGENS)}
         >
-          Bereken de vergelijking
+          Reken de maten door
         </button>
       </Figure>
     );
@@ -68,14 +68,12 @@ export function BatterijMaat({
   );
 
   // Sequentiële schaal: één hue, licht naar donker, want dit is magnitude.
-  const kleur = (waarde: number): string => {
-    const t = Math.max(0, Math.min(1, waarde / max));
-    const stappen = [
-      "var(--seq-100)", "var(--seq-200)", "var(--seq-300)",
-      "var(--seq-400)", "var(--seq-500)", "var(--seq-600)", "var(--seq-700)",
-    ];
-    return stappen[Math.min(stappen.length - 1, Math.floor(t * stappen.length))]!;
-  };
+  // De stap bepaalt ook de tekstkleur: wit op elke stap zetten maakte het
+  // bedrag op de lichtste cellen onleesbaar (1,3:1). De eerste drie stappen
+  // krijgen donkere tekst, de rest wit.
+  const STAPPEN = 7;
+  const stap = (waarde: number): number =>
+    Math.min(STAPPEN - 1, Math.floor(Math.max(0, Math.min(1, waarde / max)) * STAPPEN));
 
   const actief = gehoverd ? grid.rows[gehoverd.r]?.[gehoverd.k] ?? null : null;
 
@@ -99,7 +97,7 @@ export function BatterijMaat({
           <thead>
             <tr>
               <th scope="col" className="heat-hoek">
-                kWh \ kW
+                
               </th>
               {grid.powers.map((kw) => (
                 <th key={kw} scope="col">
@@ -122,8 +120,13 @@ export function BatterijMaat({
                       {punt ? (
                         <button
                           type="button"
-                          className={isHuidig ? "heat-cel huidig" : "heat-cel"}
-                          style={{ background: kleur(punt.savingEur) }}
+                          className={[
+                            "heat-cel",
+                            `stap-${stap(punt.savingEur)}`,
+                            isHuidig ? "huidig" : "",
+                          ]
+                            .filter(Boolean)
+                            .join(" ")}
                           onMouseEnter={() => setGehoverd({ r, k })}
                           onMouseLeave={() => setGehoverd(null)}
                           onFocus={() => setGehoverd({ r, k })}
@@ -164,7 +167,7 @@ export function BatterijMaat({
             dan de vorige, terwijl de aanschafprijs gewoon doorloopt.
           </p>
         ) : (
-          <p>Beweeg over een vakje voor de details.</p>
+          <p>Wijs een vakje aan voor de details.</p>
         )}
         <p className="heat-noot">
           Bedragen in euro per jaar, doorgerekend over het meest recente

@@ -34,8 +34,8 @@ export function Prijskloof({
       toelichting={
         <>
           Dit is het gat waar een thuisbatterij in stapt. Beide bedragen zijn
-          gewogen naar wanneer je werkelijk afneemt en teruglevert — niet het
-          gemiddelde over alle uren, want dat verhult juist het effect.
+          gewogen naar wanneer je werkelijk afneemt en teruglevert. Niet het
+          gemiddelde over alle uren dus, want dat verhult juist het effect.
         </>
       }
     >
@@ -74,8 +74,8 @@ export function Prijskloof({
       </div>
 
       <p className="kloof-conclusie">
-        Elke kilowattuur die je zelf gebruikt in plaats van teruglevert, is dus{" "}
-        <strong>{centPerKwh(verschil)}</strong> waard. Je levert{" "}
+        Elke kilowattuur die je zelf gebruikt in plaats van teruglevert, scheelt je
+        dus <strong>{centPerKwh(verschil)}</strong>. Je levert{" "}
         {kwh(terugleveringKwh)} terug en neemt {kwh(afnameKwh)} af, dus daar valt
         wat te halen.
       </p>
@@ -85,8 +85,8 @@ export function Prijskloof({
           In {procent(gap.negativePriceShare, 1)} van de tijd was de prijs
           negatief: terugleveren kostte dan geld in plaats van dat het iets
           opbracht. Daar viel {kwh(gap.exportAtNegativePriceKwh)} van jouw
-          jaarlijkse teruglevering in — veel meer dan dat tijdsaandeel doet
-          vermoeden, want je levert nu eenmaal terug op precies de zonnige uren
+          jaarlijkse teruglevering in. Veel meer dan dat tijdsaandeel doet vermoeden,
+          want je levert nu eenmaal terug op precies de zonnige uren
           waarop iedereen dat doet en de prijs onderuit gaat.
         </p>
       ) : null}

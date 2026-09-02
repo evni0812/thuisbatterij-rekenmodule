@@ -9,7 +9,7 @@
  */
 
 import type { SavingBreakdown } from "../lib/model/analysis";
-import { euro } from "../lib/format";
+import { euro, kwh } from "../lib/format";
 import { Figure } from "./chart-parts";
 
 interface Post {
@@ -49,14 +49,7 @@ export function Uitsplitsing({
       waarde: breakdown.avoidedNegativeExportEur,
       kleur: "var(--series-3)",
     },
-    {
-      label: "Omzettingsverlies",
-      uitleg:
-        "Een deel van de stroom gaat verloren bij het laden en ontladen. Die " +
-        "kilowatturen moet je alsnog van het net halen, dus dat kost geld.",
-      waarde: breakdown.lossesEur,
-      kleur: "var(--series-4)",
-    },
+
   ];
 
   const zichtbaar = posten.filter((p) => Math.abs(p.waarde) > 0.5);
@@ -66,15 +59,26 @@ export function Uitsplitsing({
     1,
   );
 
+  // De titel volgt de uitkomst. Een vaste kop zou de balken eronder kunnen
+  // tegenspreken zodra er weinig wordt teruggeleverd en de winst juist uit
+  // prijsverschillen komt.
+  const zelf = breakdown.selfConsumptionEur;
+  const handel = breakdown.arbitrageEur;
+  const titel =
+    zelf > handel * 1.5
+      ? "De winst zit vooral in zelf verbruiken, niet in slim handelen"
+      : handel > zelf * 1.5
+        ? "Bij jouw invoer verdient de batterij vooral aan prijsverschillen"
+        : "Zelf verbruiken en slim handelen leveren ongeveer evenveel op";
+
   return (
     <Figure
-      titel="De winst zit vooral in zelf verbruiken, niet in slim handelen"
+      titel={titel}
       toelichting={
         <>
-          Zonder saldering is dit het hele verhaal: afnemen kost veel meer dan
-          teruglevering opbrengt, dus elke kilowattuur die je zelf gebruikt in
-          plaats van teruglevert, is het verschil waard. Bedragen over{" "}
-          {periodeLabel}.
+          Zonder saldering kost afnemen veel meer dan teruglevering opbrengt.
+          Elke kilowattuur die je zelf gebruikt in plaats van teruglevert, is dat
+          verschil waard. Bedragen over {periodeLabel}.
         </>
       }
     >
@@ -110,11 +114,18 @@ export function Uitsplitsing({
         <strong>{euro(breakdown.totalEur)}</strong>
       </div>
       <p className="posten-noot">
-        Slijtage staat hier bewust niet tussen. Die is geen aparte kostenpost
-        naast de aanschafprijs — het ís die prijs, verdeeld over de laadbeurten.
-        Je vindt hem terug in de terugverdientijd, waar de hele aanschaf tegen
-        deze besparing wordt afgezet. Zou hij hier óók staan, dan betaalde je
-        hem twee keer.
+        Bij het laden en ontladen ging {kwh(breakdown.conversionLossKwh)}{" "}
+        verloren, goed voor ongeveer {euro(breakdown.conversionLossEur)}. Dat
+        staat hierboven niet als aparte kostenpost, want het is er al vanaf: je
+        bespaart minder afname dan je aan stroom opsloeg, en dat verschil ís het
+        verlies. Zonder omzettingsverlies had de batterij dus zo'n{" "}
+        {euro(breakdown.totalEur + breakdown.conversionLossEur)} opgeleverd.
+      </p>
+      <p className="posten-noot">
+        Slijtage staat er evenmin tussen. Die is geen aparte kostenpost naast de
+        aanschafprijs: het ís die prijs, verdeeld over de laadbeurten. Je vindt
+        hem terug in de terugverdientijd, waar de hele aanschaf tegen deze
+        besparing wordt afgezet.
       </p>
     </Figure>
   );

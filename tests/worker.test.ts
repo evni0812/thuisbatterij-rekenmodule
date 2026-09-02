@@ -150,10 +150,7 @@ describe("volledige keten", () => {
       expect(jaar.realisticSavingEur).toBeGreaterThan(0);
       const b = jaar.breakdown;
       const som =
-        b.selfConsumptionEur +
-        b.arbitrageEur +
-        b.avoidedNegativeExportEur +
-        b.lossesEur;
+        b.selfConsumptionEur + b.arbitrageEur + b.avoidedNegativeExportEur;
       expect(som).toBeCloseTo(b.totalEur, 6);
       expect(b.totalEur).toBeCloseTo(jaar.realisticSavingEur, 6);
     }

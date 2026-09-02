@@ -11,7 +11,7 @@
 
 import type { Manifest } from "../lib/data/manifest";
 import { netgebiedNaam } from "../lib/data/manifest";
-import { euro, procent } from "../lib/format";
+import { euro, getal, procent } from "../lib/format";
 import type { BatteryPreset } from "../lib/presets";
 import type { Instellingen } from "../lib/url-state";
 
@@ -122,7 +122,7 @@ export function Geavanceerd({
               min={0.5}
               max={30}
               stap={0.1}
-              formatteer={(v) => `${v.toFixed(1)} kWh`}
+              formatteer={(v) => `${getal(v, 1)} kWh`}
               onChange={(v) => onChange({ capaciteitKwh: v })}
             />
             <Schuif
@@ -132,7 +132,7 @@ export function Geavanceerd({
               min={0.3}
               max={10}
               stap={0.1}
-              formatteer={(v) => `${v.toFixed(1)} kW`}
+              formatteer={(v) => `${getal(v, 1)} kW`}
               onChange={(v) => onChange({ vermogenKw: v })}
             />
             <Schuif
@@ -149,8 +149,7 @@ export function Geavanceerd({
           <p className="instelling-noot">
             Rendement {procent(preset.spec.efficiency ** 2)} heen en terug,
             bruikbaar deel {procent(preset.spec.depthOfCharge)}, standby{" "}
-            {preset.spec.standbyWatt} W, levensduur {preset.cycleLife} cycli —
-            overgenomen van {preset.naam}.
+            {preset.spec.standbyWatt} W, levensduur {preset.cycleLife} laadbeurten. Overgenomen van {preset.naam}.
           </p>
         </section>
 
@@ -198,7 +197,7 @@ export function Geavanceerd({
               </div>
               <p className="instelling-uitleg">
                 Beschikbaar van {vroegste} tot {laatste}. Een periode korter dan
-                een jaar laat vooral het seizoen zien, niet de businesscase.
+                een jaar laat vooral het seizoen zien, niet of de batterij zich terugverdient.
               </p>
             </div>
 
@@ -213,7 +212,7 @@ export function Geavanceerd({
                   max={30000}
                   step={100}
                   value={inst.opwekKwh ?? ""}
-                  placeholder="onbekend"
+                  placeholder="bijvoorbeeld 3500"
                   onChange={(e) =>
                     onChange({
                       opwekKwh: e.target.value === "" ? null : Number(e.target.value),
@@ -225,18 +224,18 @@ export function Geavanceerd({
               <p className="instelling-uitleg">
                 Optioneel. Hiermee kunnen zelfconsumptie en autarkie berekend
                 worden; die volgen niet uit je meterstanden. Vuistregel: ongeveer
-                900 kWh per kWp.
+                900 kWh per kWp (Milieu Centraal).
               </p>
             </div>
 
             <Schuif
-              label="Scherpte van je profiel"
-              uitleg="Het gemeten profiel is een gemiddelde over veel huishoudens en daardoor vlakker dan één aansluiting. Hoger zet de pieken en dalen aan; je jaarverbruik blijft gelijk."
+              label="Pieken in je verbruik"
+              uitleg="Het gemeten verbruikspatroon is een gemiddelde over veel huishoudens en daardoor vlakker dan één huis. Hoger zet de pieken en dalen aan. Je jaarverbruik blijft gelijk."
               waarde={inst.spreiding}
               min={0.5}
               max={2}
               stap={0.05}
-              formatteer={(v) => `${v.toFixed(2)}×`}
+              formatteer={(v) => `${getal(v, 2)}×`}
               onChange={(v) => onChange({ spreiding: v })}
             />
           </div>
@@ -252,7 +251,7 @@ export function Geavanceerd({
               min={0}
               max={15}
               stap={0.5}
-              formatteer={(v) => `${v.toFixed(1)} ct/kWh`}
+              formatteer={(v) => `${getal(v, 1)} ct/kWh`}
               onChange={(v) => onChange({ terugleverkostenCt: v })}
             />
             <div className="instelling">
@@ -266,15 +265,15 @@ export function Geavanceerd({
               </label>
               <p className="instelling-uitleg">
                 Moderne omvormers stoppen met terugleveren als de prijs negatief
-                is. Zet dit uit als jouw installatie dat niet kan — dan betaal je
-                op die momenten om je stroom kwijt te raken.
+                is. Zet dit uit als jouw installatie dat niet kan. Dan betaal je op die momenten om je
+                stroom kwijt te raken.
               </p>
             </div>
           </div>
           <p className="instelling-noot">
-            Energiebelasting en inkoopvergoeding worden per jaar overgenomen uit
-            de werkelijke tarieven van dat jaar, afgeleid uit het verschil tussen
-            het all-in tarief en de kale marktprijs.
+            Energiebelasting en de opslag van je leverancier komen per jaar uit de
+            tarieven die dat jaar echt golden: het verschil tussen wat je aan de
+            kassa betaalde en de kale marktprijs op de beurs.
           </p>
         </section>
 
@@ -325,7 +324,7 @@ export function Geavanceerd({
         </section>
 
         <button type="button" className="reset" onClick={onReset}>
-          Alles terugzetten
+          Terug naar de standaardwaarden
         </button>
       </div>
     </section>

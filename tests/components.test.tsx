@@ -131,7 +131,9 @@ describe("de pagina toont het antwoord", () => {
     render(<Uitsplitsing breakdown={b} periodeLabel="2025" />);
     expect(screen.getByText("Samen bespaard")).toBeDefined();
     // Slijtage hoort hier niet tussen: dat is de aanschafprijs, geen extra kost.
-    expect(document.body.textContent).toMatch(/Slijtage staat hier bewust niet tussen/);
+    // Het omzettingsverlies staat naast de optelling, met uitleg waarom.
+    expect(document.body.textContent).toMatch(/ging.*verloren/);
+    expect(document.body.textContent).toMatch(/Slijtage staat er evenmin tussen/);
     expect(screen.getByText(/Zelf verbruiken/)).toBeDefined();
   });
 
@@ -149,7 +151,7 @@ describe("de pagina toont het antwoord", () => {
     );
     expect(screen.getAllByRole("tab").length).toBe(2);
     // Elke dag moet opzoekbaar zijn, niet alleen de twee voorbeelden.
-    const datum = screen.getByLabelText(/dag naar keuze/i) as HTMLInputElement;
+    const datum = screen.getByLabelText(/kies zelf een dag/i) as HTMLInputElement;
     expect(datum.type).toBe("date");
     expect(datum.min).toBe("2025-01-01");
     expect(datum.max).toBe("2025-12-31");
@@ -205,7 +207,7 @@ describe("de pagina toont het antwoord", () => {
         onKies={() => {}}
       />,
     );
-    expect(screen.getByRole("button", { name: /Bereken/ })).toBeDefined();
+    expect(screen.getByRole("button", { name: /Reken de maten door/ })).toBeDefined();
   });
 
   it("toont elk vakje van het raster met zijn bedrag als getal", () => {
@@ -281,7 +283,7 @@ describe("kerncijfers en herberekenen", () => {
     // een kaal eindgetal niet.
     expect(tekst).toMatch(/Van het net/);
     expect(tekst).toMatch(/Naar het net/);
-    expect(tekst).toMatch(/Cycli/);
+    expect(tekst).toMatch(/Laadbeurten/);
     expect(tekst).toMatch(/per dag/);
     expect(screen.getAllByLabelText("wordt").length).toBeGreaterThanOrEqual(2);
   });

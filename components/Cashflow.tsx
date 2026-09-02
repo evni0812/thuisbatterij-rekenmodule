@@ -44,22 +44,34 @@ export function Cashflow({
 
   const breakEven = finance.paybackYears;
   const positief = finance.npvEur >= 0;
+  // Drie gevallen, niet twee. De lijn tekent nominale euro's en kan door nul
+  // gaan terwijl de contante waarde negatief blijft; met twee titels zou de kop
+  // dan zeggen dat hij zich niet terugverdient terwijl de grafiek eronder een
+  // break-evenpunt markeert.
+  const titel = positief
+    ? "Over de looptijd levert de batterij meer op dan hij kost"
+    : breakEven !== null
+      ? "Je krijgt je geld terug, maar niet de rente die je erop misloopt"
+      : "Over de looptijd verdient de batterij zichzelf niet terug";
 
   return (
     <Figure
-      titel={
-        positief
-          ? "Over de looptijd levert de batterij meer op dan hij kost"
-          : "Over de looptijd verdient de batterij zichzelf niet terug"
-      }
+      titel={titel}
       toelichting={
         <>
           Wat je tot dat moment in totaal hebt terugverdiend, met de aanschafprijs
-          als startpunt. De besparing loopt terug naarmate de batterij slijt.
+          als startpunt. De lijn telt de euro's zoals je ze krijgt. De contante
+          waarde hieronder trekt daar de rente vanaf die je op dat geld had kunnen
+          maken. De besparing loopt terug naarmate de batterij slijt.
         </>
       }
     >
-      <div className="chart-wrap">
+      <div
+        className="chart-wrap"
+        tabIndex={0}
+        role="group"
+        aria-label="Grafiek, horizontaal scrollbaar"
+      >
         <svg
           viewBox={`0 0 ${B} ${H}`}
           className="chart"
@@ -139,16 +151,16 @@ export function Cashflow({
         <div>
           <dt>
             Rendement
-            <span className="hint" title="Het jaarlijkse rendement waarbij de investering precies uitkomt.">?</span>
+            <span className="hint" title="Wat de batterij per jaar opbrengt, uitgedrukt als rentepercentage. Ligt dat onder wat je op een spaarrekening krijgt, dan was je geld daar beter af.">?</span>
           </dt>
           <dd>{finance.irr === null ? "—" : procent(finance.irr, 1)}</dd>
         </div>
         <div>
-          <dt>Cycli in totaal</dt>
+          <dt>Laadbeurten in totaal</dt>
           <dd>
             {Math.round(finance.totalCycles)}
             {finance.endOfLifeYear !== null ? (
-              <span className="dd-noot">op na {finance.endOfLifeYear} jaar</span>
+              <span className="dd-noot">dan is hij op, na {finance.endOfLifeYear} jaar</span>
             ) : null}
           </dd>
         </div>

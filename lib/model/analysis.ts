@@ -31,8 +31,14 @@ export interface SavingBreakdown {
   arbitrageEur: number;
   /** Niet hoeven terugleveren tegen een negatieve prijs. */
   avoidedNegativeExportEur: number;
-  /** Rendementsverlies: wat er bij het laden en ontladen verdwijnt. */
-  lossesEur: number;
+  /**
+   * Het omzettingsverlies, gewaardeerd tegen wat die kilowatturen hadden
+   * opgeleverd. Staat NAAST de optelling, niet erin: het zit al verwerkt in de
+   * zelfconsumptiepost. Zie breakdown().
+   */
+  conversionLossEur: number;
+  /** Hoeveel kilowattuur er bij het laden en ontladen verdween. */
+  conversionLossKwh: number;
   /** Som van bovenstaande; gelijk aan basiskosten minus kosten met batterij. */
   totalEur: number;
 }
@@ -184,21 +190,27 @@ export interface AnalysisResult {
 /**
  * Splits de besparing uit naar herkomst.
  *
- * De posten zijn zo afgebakend dat ze elkaar niet overlappen en samen exact de
- * totale besparing vormen:
+ * Drie posten die samen exact de besparing vormen:
  *
- *   zelfconsumptie  minder van het net afnemen, minus de export-opbrengst die
- *                   je daarvoor opgeeft — maar alleen op momenten dat
- *                   teruglevering iets ópbrengt. Dit is de post die groeit nu
- *                   de saldering weg is: het verschil tussen wat afname kost en
- *                   wat teruglevering opbrengt is de hele businesscase.
+ *   zelfconsumptie  minder van het net afnemen doordat je je eigen stroom
+ *                   bewaart tot je hem nodig hebt, minus de opbrengst die je
+ *                   daarvoor opgeeft. Dit is de post die groeit nu de saldering
+ *                   verdwijnt.
  *   negatieve prijs vermeden kosten op momenten dat terugleveren geld kóst.
- *                   Apart gehouden omdat dit een wezenlijk ander mechanisme is
- *                   en snel groeit met de hoeveelheid zon op het net.
- *   verliezen       het omzettingsverlies bij laden en ontladen: kilowatturen
- *                   die je alsnog van het net moet halen.
- *   arbitrage       wat er dan nog overblijft — het gevolg van op andere
- *                   momenten van het net nemen dan teruggeven.
+ *   arbitrage       de netto waarde van stroom die je van het net kocht om
+ *                   later te gebruiken of te verkopen.
+ *
+ * ── Waarom het omzettingsverlies er NIET tussen staat ───────────────────────
+ * Verleidelijk om het als vierde post op te nemen, maar het zit al in de eerste
+ * verwerkt: `minderImport` is de werkelijke reductie van je afname, en die is al
+ * kleiner dan wat je opsloeg — precies door het verlies. Het er apart bij
+ * aftrekken telt het twee keer, en omdat arbitrage als residu werd berekend,
+ * vulde die het gat op met evenveel nep-arbitrage. Bij een batterij die nooit
+ * van het net laadde stond er zo 32 euro "slim handelen" tegenover 32 euro
+ * verlies, terwijl er geen enkele kilowattuur was ingekocht.
+ *
+ * Het verlies wordt daarom apart teruggegeven, als toelichting: zoveel is de
+ * besparing lager dan hij zonder omzettingsverlies was geweest.
  */
 export function breakdown(
   window: Window,
@@ -207,51 +219,78 @@ export function breakdown(
   spec: BatterySpec,
 ): SavingBreakdown {
   const n = window.residualKwh.length;
-  let self = 0;
   let avoided = 0;
+
+  // Toerekening van de arbitrage: welk deel van alles wat de batterij opsloeg
+  // kwam van het net, en wat leverde de ontlading op? Energie is niet te
+  // labelen zodra ze in de cel zit, dus we rekenen naar rato toe.
+  let geladenTotaal = 0;
+  let geladenUitNet = 0;
+  let kostenNetlading = 0;
+  let ontlaadwaarde = 0;
+
+  // Het omzettingsverlies, gewaardeerd tegen zijn opportuniteitskost.
   let verliesKwh = 0;
-  let gewogenPrijs = 0;
+  let verliesEur = 0;
 
   for (let i = 0; i < n; i++) {
     const ip = window.prices.importPrice[i]!;
     const ep = window.prices.exportPrice[i]!;
-
-    const minderImport = base.gridImportKwh[i]! - bat.gridImportKwh[i]!;
-    const minderExport = base.gridExportKwh[i]! - bat.gridExportKwh[i]!;
+    const laden = bat.chargeKwh[i]!;
+    const ontladen = bat.dischargeKwh[i]!;
+    const overschot = Math.max(0, -window.residualKwh[i]!);
+    const tekort = Math.max(0, window.residualKwh[i]!);
 
     if (ep < 0) {
-      // Terugleveren kost hier geld. Alleen het EXPORT-deel hoort in deze post:
-      // wat de baseline moest weggeven en de batterij opving.
-      //
-      // Het import-deel hoort er nadrukkelijk niet in. Laadt de batterij op zo'n
-      // moment uit het net, dan is dat goedkoop inkopen — arbitrage — en niet
-      // "ontlopen". Toen dat er wél in zat, werd de post negatief en leek het
-      // ontlopen van negatieve prijzen geld te kosten.
-      avoided += minderExport * -ep;
-      self += minderImport * ip;
-    } else {
-      self += minderImport * ip - minderExport * ep;
+      // Terugleveren kost hier geld: wat de baseline moest weggeven en de
+      // batterij opving, is pure winst.
+      avoided += (base.gridExportKwh[i]! - bat.gridExportKwh[i]!) * -ep;
     }
 
-    // Wat er bij laden en ontladen verdwijnt: er gaat meer in dan eruit komt.
-    const verlies =
-      bat.chargeKwh[i]! * (1 - spec.efficiency) +
-      (bat.dischargeKwh[i]! / spec.efficiency) * (1 - spec.efficiency);
-    verliesKwh += verlies;
-    gewogenPrijs += verlies * ip;
+    if (laden > 0) {
+      const uitZon = Math.min(laden, overschot);
+      const uitNet = laden - uitZon;
+      geladenTotaal += laden;
+      geladenUitNet += uitNet;
+      kostenNetlading += uitNet * ip;
+
+      // Een verloren kilowattuur kost je wat hij had opgeleverd als hij níét
+      // verloren was gegaan. Uit eigen overschot is dat de terugleverprijs; van
+      // het net de afnameprijs. Alles tegen de afnameprijs waarderen overschat
+      // de post fors, want het meeste verlies ontstaat bij het opslaan van
+      // overschot — en dat was maar een paar cent waard.
+      const verliesIn = laden * (1 - spec.efficiency);
+      verliesKwh += verliesIn;
+      verliesEur += (verliesIn / laden) * (uitZon * ep + uitNet * ip);
+    }
+
+    if (ontladen > 0) {
+      const naarHuis = Math.min(ontladen, tekort);
+      const naarNet = ontladen - naarHuis;
+      ontlaadwaarde += naarHuis * ip + naarNet * ep;
+
+      const verliesUit = (ontladen / spec.efficiency) * (1 - spec.efficiency);
+      verliesKwh += verliesUit;
+      verliesEur += (verliesUit / ontladen) * (naarHuis * ip + naarNet * ep);
+    }
   }
 
   const totaal = base.totalCostEur - bat.totalCostEur;
-  const verliesEur = verliesKwh > 0 ? gewogenPrijs : 0;
-  // Arbitrage is het residu, zodat de uitsplitsing per definitie optelt tot het
-  // totaal en er geen onverklaard verschil kan ontstaan.
-  const arbitrage = totaal - self - avoided + verliesEur;
+
+  // Wat de ingekochte stroom opbracht, naar rato van zijn aandeel in de lading.
+  const aandeelNet = geladenTotaal > 0 ? geladenUitNet / geladenTotaal : 0;
+  const arbitrage = aandeelNet * ontlaadwaarde - kostenNetlading;
+
+  // Zelfconsumptie is het residu. Zo sluit de uitsplitsing per definitie aan op
+  // het totaal en kan er geen onverklaard verschil ontstaan.
+  const self = totaal - arbitrage - avoided;
 
   return {
     selfConsumptionEur: self,
     arbitrageEur: arbitrage,
     avoidedNegativeExportEur: avoided,
-    lossesEur: -verliesEur,
+    conversionLossEur: verliesEur,
+    conversionLossKwh: verliesKwh,
     totalEur: totaal,
   };
 }
@@ -504,8 +543,8 @@ function pickSampleDays(
   };
 
   return [
-    kies([6, 7, 8], "Een zomerdag"),
-    kies([12, 1, 2], "Een winterdag"),
+    kies([6, 7, 8], "Een doorsnee zomerdag"),
+    kies([12, 1, 2], "Een doorsnee winterdag"),
   ].filter((d): d is SampleDay => d !== null);
 }
 

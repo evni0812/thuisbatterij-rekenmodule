@@ -49,6 +49,8 @@ const STANDAARD: Instellingen = {
 export default function Page() {
   const [inst, setInst] = useState<Instellingen>(STANDAARD);
   const [geladen, setGeladen] = useState(false);
+  /** Zet een doorrekening in de wacht tot de nieuwe invoer is verwerkt. */
+  const [rekenNa, setRekenNa] = useState(false);
 
   // De configuratie staat in de URL, zodat elke doorrekening deelbaar is.
   useEffect(() => {
@@ -115,9 +117,21 @@ export default function Page() {
     vraagDag,
     wisDag,
     herbereken,
-    uitCache,
+    getoondeConfig,
     verouderd,
   } = state;
+
+  // Alles wat naast het resultaat wordt getoond, komt uit de configuratie die
+  // bij dát resultaat hoort — niet uit de live invoer. Anders staat een verse
+  // batterijprijs naast een oude terugverdientijd in dezelfde zin.
+  const toon = getoondeConfig;
+  const toonPrijs = toon?.investmentEur ?? prijs;
+  const toonAfname = toon?.household.annualGridImportKwh ?? inst.afnameKwh;
+  const toonTeruglevering =
+    toon?.household.annualGridExportKwh ?? inst.terugleveringKwh;
+  const toonOpwekBekend = toon?.annualProductionKwh !== undefined;
+  const toonCapaciteit = toon?.battery.capacityKwh ?? capaciteit;
+  const toonVermogen = toon?.battery.maxChargeKw ?? vermogen;
 
   const periodeLabel = result
     ? periode(
@@ -125,6 +139,14 @@ export default function Page() {
         result.perYear[result.perYear.length - 1]?.lastDay ?? "",
       )
     : "";
+
+  // Een klik in het batterijraster is een opdracht om door te rekenen; dat kan
+  // pas als de gewijzigde invoer in de configuratie is verwerkt.
+  useEffect(() => {
+    if (!rekenNa) return;
+    setRekenNa(false);
+    herbereken();
+  }, [rekenNa, herbereken]);
 
   return (
     <main className="pagina">
@@ -154,6 +176,9 @@ export default function Page() {
             prijsEur: null,
           }))
         }
+        onBereken={herbereken}
+        verouderd={verouderd}
+        bezig={busy}
       />
 
       {error ? (
@@ -168,14 +193,14 @@ export default function Page() {
 
       {result ? (
         <>
-          <Antwoord result={result} investeringEur={prijs} bezig={busy} />
+          <Antwoord result={result} investeringEur={toonPrijs} bezig={busy} />
 
-          <Statistieken stats={result.stats} opwekBekend={inst.opwekKwh !== null} />
+          <Statistieken stats={result.stats} opwekBekend={toonOpwekBekend} />
 
           <Prijskloof
             gap={result.priceGap}
-            afnameKwh={inst.afnameKwh}
-            terugleveringKwh={inst.terugleveringKwh}
+            afnameKwh={toonAfname}
+            terugleveringKwh={toonTeruglevering}
           />
 
           <Uitsplitsing
@@ -204,15 +229,19 @@ export default function Page() {
 
           <BatterijMaat
             grid={grid}
-            huidigeCapaciteit={capaciteit}
-            huidigVermogen={vermogen}
+            huidigeCapaciteit={toonCapaciteit}
+            huidigVermogen={toonVermogen}
             onStart={startGrid}
-            onKies={(cap, kw) =>
-              setInst((s) => ({ ...s, capaciteitKwh: cap, vermogenKw: kw }))
-            }
+            onKies={(cap, kw) => {
+              // Een klik op een vakje is een expliciete opdracht: meteen
+              // doorrekenen. Anders kost de klik je het raster en levert hij
+              // niets op, want de rekenknop staat verderop.
+              setInst((s) => ({ ...s, capaciteitKwh: cap, vermogenKw: kw }));
+              setRekenNa(true);
+            }}
           />
 
-          <Cashflow finance={result.finance} investeringEur={prijs} />
+          <Cashflow finance={result.finance} investeringEur={toonPrijs} />
 
           <Geavanceerd
             inst={inst}

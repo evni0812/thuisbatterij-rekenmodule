@@ -17,7 +17,10 @@
 
   --text-primary: #0b0b0b;
   --text-secondary: #52514e;
-  --text-muted: #898781;
+  /* 4,62:1 op de lichte ondergrond. De vorige waarde (#898781) haalde 3,55:1
+     en was daarmee de slechtst leesbare tekst op de pagina — uitgerekend alle
+     uitleg onder de velden en de tegels. */
+  --text-muted: #6e6c67;
 
   --grid: #e1e0d9;
   --axis: #c3c2b7;
@@ -264,6 +267,20 @@ input[type="date"] {
   width: 100%;
 }
 
+.invoer-actie {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  flex-wrap: wrap;
+  margin-top: 18px;
+}
+
+.invoer-hint {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+}
+
 .waarschuwingen {
   list-style: none;
   margin: 16px 0 0;
@@ -376,6 +393,27 @@ input[type="date"] {
   height: auto;
   display: block;
   overflow: visible;
+}
+
+/*
+ * Op smalle schermen schaalt een viewBox van 860 breed naar 0,32x, en worden de
+ * as-labels van 11px zo'n 3,5px hoog. Onleesbaar. Onder 760px laten we de
+ * grafiek daarom op ware grootte staan en horizontaal scrollen.
+ */
+@media (max-width: 759px) {
+  .chart {
+    min-width: 620px;
+  }
+  .dagprofiel-svg {
+    min-width: 720px;
+  }
+}
+
+/* Een scrollende regio zonder focus is voor toetsenbordgebruikers een
+   doodlopende weg. */
+.chart-wrap:focus-visible {
+  outline: 2px solid var(--series-1);
+  outline-offset: 3px;
 }
 
 .as-label {
@@ -1082,6 +1120,34 @@ input[type="date"] {
   }
 }
 
+@media (max-width: 480px) {
+  .pagina {
+    padding: 20px 14px 64px;
+    gap: 20px;
+  }
+  .figure,
+  .invoer,
+  .antwoord,
+  .statistieken {
+    padding: 16px 14px;
+  }
+  .geavanceerd-inhoud,
+  .geavanceerd-kop {
+    padding: 16px 14px;
+  }
+  /* De dagkiezer duwde de titel anders samen tot twee woorden per regel. */
+  .figure-kop {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .antwoord-bedrag {
+    font-size: clamp(2.25rem, 12vw, 4rem);
+  }
+  .uitlezing {
+    gap: 4px 14px;
+  }
+}
+
 /* ── Batterijmaat-raster ──────────────────────────────────────────────────── */
 
 .start-knop {
@@ -1131,13 +1197,47 @@ input[type="date"] {
   border: 0;
   border-radius: 4px;
   cursor: pointer;
-  color: #fff;
   font-size: 0.82rem;
   font-weight: 560;
   font-variant-numeric: tabular-nums;
-  /* Een donkere rand houdt het getal leesbaar op de lichte stappen. */
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.45);
 }
+
+/*
+ * De tekstkleur volgt de stap in plaats van overal wit te zijn. Wit op de
+ * lichtste stap haalde 1,3:1 en was daarmee onleesbaar; een text-shadow als
+ * pleister maakte dat niet goed. Op de lichte helft donkere ink, op de donkere
+ * helft wit — in beide thema's, want de schaal keert daar om.
+ */
+.heat-cel.stap-0 { background: var(--seq-100); color: #0b0b0b; }
+.heat-cel.stap-1 { background: var(--seq-200); color: #0b0b0b; }
+.heat-cel.stap-2 { background: var(--seq-300); color: #0b0b0b; }
+.heat-cel.stap-3 { background: var(--seq-400); color: #fff; }
+.heat-cel.stap-4 { background: var(--seq-500); color: #fff; }
+.heat-cel.stap-5 { background: var(--seq-600); color: #fff; }
+.heat-cel.stap-6 { background: var(--seq-700); color: #fff; }
+
+:root:not([data-theme="light"]) .heat-cel.stap-0,
+:root:not([data-theme="light"]) .heat-cel.stap-1,
+:root:not([data-theme="light"]) .heat-cel.stap-2 { color: #fff; }
+:root:not([data-theme="light"]) .heat-cel.stap-4,
+:root:not([data-theme="light"]) .heat-cel.stap-5,
+:root:not([data-theme="light"]) .heat-cel.stap-6 { color: #0b0b0b; }
+
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) .heat-cel.stap-0,
+  :root:not([data-theme="light"]) .heat-cel.stap-1,
+  :root:not([data-theme="light"]) .heat-cel.stap-2 { color: #fff; }
+  :root:not([data-theme="light"]) .heat-cel.stap-4,
+  :root:not([data-theme="light"]) .heat-cel.stap-5,
+  :root:not([data-theme="light"]) .heat-cel.stap-6 { color: #0b0b0b; }
+}
+
+:root[data-theme="dark"] .heat-cel.stap-0,
+:root[data-theme="dark"] .heat-cel.stap-1,
+:root[data-theme="dark"] .heat-cel.stap-2 { color: #fff; }
+:root[data-theme="dark"] .heat-cel.stap-4,
+:root[data-theme="dark"] .heat-cel.stap-5,
+:root[data-theme="dark"] .heat-cel.stap-6 { color: #0b0b0b; }
 
 .heat-cel.huidig {
   outline: 2px solid var(--text-primary);

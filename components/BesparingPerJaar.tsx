@@ -43,7 +43,12 @@ export function BesparingPerJaar({ jaren }: { jaren: YearAnalysis[] }) {
         </>
       }
     >
-      <div className="chart-wrap">
+      <div
+        className="chart-wrap"
+        tabIndex={0}
+        role="group"
+        aria-label="Grafiek, horizontaal scrollbaar"
+      >
         <svg
           viewBox={`0 0 ${breedte} ${H}`}
           className="chart"

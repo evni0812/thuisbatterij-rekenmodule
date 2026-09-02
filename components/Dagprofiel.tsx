@@ -288,8 +288,9 @@ export function Dagprofiel({
       titel="Wat de batterij op een dag precies doet"
       toelichting={
         <>
-          {datum(dag.date)}. Beweeg over de grafiek — of tik erop — voor de
-          waarden op elk kwartier.
+          {datum(dag.date)}, een dag met een middelmatig prijsverschil. Niet de dag
+          waarop de batterij het best presteerde. Wijs een moment aan voor de
+          waarden op dat kwartier.
         </>
       }
       actie={
@@ -317,7 +318,7 @@ export function Dagprofiel({
             </div>
           ) : null}
           <label className="dagkiezer-datum">
-            <span>of een dag naar keuze</span>
+            <span>of kies zelf een dag</span>
             <input
               type="date"
               min={eersteDag}
@@ -338,7 +339,12 @@ export function Dagprofiel({
         </p>
       ) : null}
 
-      <div className="chart-wrap">
+      <div
+        className="chart-wrap"
+        tabIndex={0}
+        role="group"
+        aria-label="Grafiek, horizontaal scrollbaar"
+      >
         <svg
           viewBox={`0 0 ${B} ${H_TOTAAL}`}
           className="chart dagprofiel-svg"
@@ -664,7 +670,7 @@ function Uitlezing({ dag, i }: { dag: SampleDay; i: number | null }) {
   if (i === null) {
     return (
       <p className="uitlezing-leeg">
-        Beweeg over de grafiek om per kwartier te zien wat er gebeurt.
+        Wijs een moment aan om te zien wat er dan gebeurt.
       </p>
     );
   }
@@ -724,12 +730,12 @@ function Uitlezing({ dag, i }: { dag: SampleDay; i: number | null }) {
       </span>
       <span className="uitlezing-item">
         <i style={{ background: "var(--series-3)" }} />
-        {batterijTekst} · {getal(dag.socKwh[i]!, 1)} kWh in de accu
+        {batterijTekst} · {getal(dag.socKwh[i]!, 1)} kWh in de batterij
       </span>
       <span className="uitlezing-item">
         <i style={{ background: "var(--series-4)" }} />
         {netTekst}
-        {afgeregeld > 0.02 ? ` · ${getal(afgeregeld, 1)} kW afgeregeld` : ""}
+        {afgeregeld > 0.02 ? ` · ${getal(afgeregeld, 1)} kW niet teruggeleverd` : ""}
       </span>
     </div>
   );

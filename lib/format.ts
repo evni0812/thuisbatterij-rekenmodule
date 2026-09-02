@@ -22,6 +22,12 @@ const euro2 = new Intl.NumberFormat("nl-NL", {
 const getal0 = new Intl.NumberFormat("nl-NL", { maximumFractionDigits: 0 });
 const getal1 = new Intl.NumberFormat("nl-NL", { maximumFractionDigits: 1 });
 
+/**
+ * Formatters per aantal decimalen, aangemaakt wanneer ze nodig zijn.
+ * Intl.NumberFormat is duur om te bouwen en wordt hier in lussen aangeroepen.
+ */
+const getalCache = new Map<number, Intl.NumberFormat>();
+
 /** Bedragen boven een tientje zonder centen; daaronder mét, want dan tellen ze. */
 export function euro(value: number): string {
   return Math.abs(value) >= 10 ? euro0.format(value) : euro2.format(value);
@@ -31,9 +37,13 @@ export function euroPrecies(value: number): string {
   return euro2.format(value);
 }
 
-/** Prijzen per kWh in centen: leesbaarder dan 0,1713 EUR. */
+/**
+ * Prijzen per kWh in centen: leesbaarder dan 0,1713 EUR.
+ * De eenheid staat er voluit bij, want "17,1 ct" alleen roept de vraag op
+ * waarvan.
+ */
 export function centPerKwh(eurPerKwh: number): string {
-  return `${getal1.format(eurPerKwh * 100)} ct`;
+  return `${getal1.format(eurPerKwh * 100)} ct/kWh`;
 }
 
 export function kwh(value: number): string {
@@ -49,7 +59,16 @@ export function procent(fraction: number, decimalen = 0): string {
 }
 
 export function getal(value: number, decimalen = 0): string {
-  return decimalen === 0 ? getal0.format(value) : getal1.format(value);
+  if (decimalen === 0) return getal0.format(value);
+  if (decimalen === 1) return getal1.format(value);
+  // Eerder viel alles boven één decimaal stil terug op één. Dagtotalen van
+  // 0,84 kWh werden dan "0,8" en alles onder 0,05 kWh werd "0".
+  let f = getalCache.get(decimalen);
+  if (!f) {
+    f = new Intl.NumberFormat("nl-NL", { maximumFractionDigits: decimalen });
+    getalCache.set(decimalen, f);
+  }
+  return f.format(value);
 }
 
 /** "8 jaar en 4 maanden" leest prettiger dan "8,3 jaar". */
@@ -78,11 +97,11 @@ export function datum(iso: string): string {
 export function periode(vanIso: string, totIso: string): string {
   const [y1, m1] = vanIso.split("-").map(Number);
   const [y2, m2] = totIso.split("-").map(Number);
-  if (!y1 || !m1 || !y2 || !m2) return `${vanIso} – ${totIso}`;
+  if (!y1 || !m1 || !y2 || !m2) return `${vanIso} tot ${totIso}`;
   const kort = (m: number) => MAANDEN[m - 1]!.slice(0, 3);
   if (y1 === y2) {
     if (m1 === 1 && m2 === 12) return String(y1);
-    return `${kort(m1)} – ${kort(m2)} ${y1}`;
+    return `${kort(m1)} tot ${kort(m2)} ${y1}`;
   }
-  return `${kort(m1)} ${y1} – ${kort(m2)} ${y2}`;
+  return `${kort(m1)} ${y1} tot ${kort(m2)} ${y2}`;
 }

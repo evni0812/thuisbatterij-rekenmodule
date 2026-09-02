@@ -379,10 +379,7 @@ describe("uitsplitsing van de besparing", () => {
     expect(b.avoidedNegativeExportEur).toBeGreaterThanOrEqual(0);
     // En de posten tellen nog steeds precies op tot het totaal.
     const som =
-      b.selfConsumptionEur +
-      b.arbitrageEur +
-      b.avoidedNegativeExportEur +
-      b.lossesEur;
+      b.selfConsumptionEur + b.arbitrageEur + b.avoidedNegativeExportEur;
     expect(som).toBeCloseTo(b.totalEur, 6);
   });
 });
@@ -466,5 +463,101 @@ describe("slijtage als schaduwprijs", () => {
   it("laat een batterij die niets kostte vrij cyclen", () => {
     const s = spec();
     expect(marginalWearCostPerKwh(0, 6000, s, 5000, 15)).toBe(0);
+  });
+});
+
+describe("de uitsplitsing telt niet dubbel", () => {
+  /**
+   * Het omzettingsverlies hoort niet als vierde post in de optelling.
+   *
+   * `minderImport × prijs` is de werkelijke reductie van je afname, en die is al
+   * kleiner dan wat je opsloeg — precies door het verlies. Het er apart bij
+   * aftrekken telt het twee keer, en omdat arbitrage als residu werd berekend,
+   * vulde die het gat op met evenveel nep-arbitrage: 32 euro "slim handelen"
+   * naast 32 euro verlies, bij een batterij die geen kilowattuur van het net had
+   * gekocht.
+   */
+  it("meldt geen arbitrage als er nooit uit het net is geladen", () => {
+    // Een venster met alleen zonoverschot en avondverbruik: er valt niets in te
+    // kopen, want de prijs is 's nachts niet lager dan overdag.
+    const startMs = buildQuarterAxis("2025-06-01", "2025-06-15");
+    const n = startMs.length;
+    const residual = new Float64Array(n);
+    const market = new Float64Array(n);
+    for (let i = 0; i < n; i++) {
+      const uur = (i % 96) / 4;
+      const zon = Math.max(0, Math.sin(((uur - 6) / 12) * Math.PI)) * 1.2;
+      residual[i] = 0.18 - zon;
+      market[i] = 0.05;
+    }
+    const w: Window = {
+      startMs,
+      residualKwh: residual,
+      prices: buildPriceSeries(market, TARIFF),
+    };
+    const s = spec({ capacityKwh: 5, maxChargeKw: 2.5, maxDischargeKw: 2.5 });
+    const base = dispatchBaseline(w, TARIFF);
+    const bat = dispatchRolling(w, s, TARIFF);
+    const b = breakdownVoorTest(w, base, bat, s);
+
+    let uitNet = 0;
+    for (let i = 0; i < n; i++) {
+      uitNet += Math.max(0, bat.chargeKwh[i]! - Math.max(0, -residual[i]!));
+    }
+    expect(uitNet).toBeLessThan(0.5);
+    // Geen inkoop, dus vrijwel geen arbitrage.
+    expect(Math.abs(b.arbitrageEur)).toBeLessThan(1);
+    // En de besparing zit dan vrijwel geheel in zelf verbruiken.
+    expect(b.selfConsumptionEur).toBeGreaterThan(b.totalEur * 0.9);
+  });
+
+  it("rapporteert het verlies naast de optelling, niet erin", () => {
+    const w = makeWindow(14);
+    const s = spec();
+    const base = dispatchBaseline(w, TARIFF);
+    const bat = dispatchRolling(w, s, TARIFF);
+    const b = breakdownVoorTest(w, base, bat, s);
+
+    const som =
+      b.selfConsumptionEur + b.arbitrageEur + b.avoidedNegativeExportEur;
+    expect(som).toBeCloseTo(b.totalEur, 6);
+    // Het verlies is echt en positief, maar telt niet mee in die som.
+    expect(b.conversionLossKwh).toBeGreaterThan(0);
+    expect(b.conversionLossEur).toBeGreaterThan(0);
+  });
+
+  it("waardeert verlies uit eigen zon lager dan verlies uit inkoop", () => {
+    // Dezelfde hoeveelheid verlies is minder waard als de stroom uit een
+    // overschot kwam dat je toch maar voor een paar cent had verkocht.
+    const n = 96 * 4;
+    const startMs = buildQuarterAxis("2025-06-01", "2025-06-05");
+    const market = new Float64Array(n).fill(0.02);
+
+    const zonnig = new Float64Array(n);
+    const kaal = new Float64Array(n);
+    for (let i = 0; i < n; i++) {
+      const uur = (i % 96) / 4;
+      zonnig[i] = uur > 9 && uur < 15 ? -1.5 : 0.2;
+      kaal[i] = 0.2;
+    }
+    const s = spec({ capacityKwh: 5, maxChargeKw: 2.5, maxDischargeKw: 2.5 });
+    const maak = (r: Float64Array) => ({
+      startMs,
+      residualKwh: r,
+      prices: buildPriceSeries(market, TARIFF),
+    });
+
+    const wZon = maak(zonnig);
+    const bZon = breakdownVoorTest(
+      wZon,
+      dispatchBaseline(wZon, TARIFF),
+      dispatchRolling(wZon, s, TARIFF),
+      s,
+    );
+    // Bij een overschot van 2 ct is elke verloren kilowattuur weinig waard.
+    if (bZon.conversionLossKwh > 0.1) {
+      const perKwh = bZon.conversionLossEur / bZon.conversionLossKwh;
+      expect(perKwh).toBeLessThan(TARIFF.energyTaxEurPerKwh);
+    }
   });
 });

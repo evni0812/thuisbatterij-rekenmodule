@@ -11,7 +11,7 @@
 
 import type { ReactNode } from "react";
 import { PRESETS, type BatteryPreset } from "../lib/presets";
-import { euro, kwh } from "../lib/format";
+import { euro, getal, kwh } from "../lib/format";
 
 export interface Waarschuwing {
   ernst: "info" | "let-op";
@@ -64,8 +64,8 @@ export function controleerInvoer(
   if (preset.capaciteitKwh > dagverbruik * 3 && dagverbruik > 0) {
     uit.push({
       ernst: "info",
-      tekst: `Deze batterij (${preset.capaciteitKwh} kWh) is groot ten opzichte van je ` +
-        `dagelijkse afname van ongeveer ${dagverbruik.toFixed(1)} kWh. Hij zal zelden vollopen.`,
+      tekst: `Deze batterij (${getal(preset.capaciteitKwh, 2)} kWh) is groot ten opzichte van je ` +
+        `dagelijkse afname van ongeveer ${getal(dagverbruik, 1)} kWh. Hij zal zelden vollopen.`,
     });
   }
 
@@ -83,17 +83,24 @@ export function controleerInvoer(
 function Veld({
   label,
   hint,
+  hintId,
   children,
 }: {
   label: string;
   hint?: ReactNode;
+  /** Zodat het invoerveld met aria-describedby naar de hint kan wijzen. */
+  hintId?: string;
   children: ReactNode;
 }) {
   return (
     <label className="veld">
       <span className="veld-label">{label}</span>
       {children}
-      {hint ? <span className="veld-hint">{hint}</span> : null}
+      {hint ? (
+        <span className="veld-hint" id={hintId}>
+          {hint}
+        </span>
+      ) : null}
     </label>
   );
 }
@@ -105,6 +112,9 @@ export function Invoer({
   onAfname,
   onTeruglevering,
   onPreset,
+  onBereken,
+  verouderd,
+  bezig,
 }: {
   afnameKwh: number;
   terugleveringKwh: number;
@@ -112,6 +122,11 @@ export function Invoer({
   onAfname: (v: number) => void;
   onTeruglevering: (v: number) => void;
   onPreset: (id: string) => void;
+  /** Reken door met de huidige invoer. */
+  onBereken: () => void;
+  /** De invoer is gewijzigd sinds de getoonde uitkomst. */
+  verouderd: boolean;
+  bezig: boolean;
 }) {
   const preset = PRESETS.find((p) => p.id === presetId) ?? PRESETS[0]!;
   const waarschuwingen = controleerInvoer(afnameKwh, terugleveringKwh, preset);
@@ -122,6 +137,7 @@ export function Invoer({
         <Veld
           label="Hoeveel stroom neem je per jaar van het net af?"
           hint="Staat op je jaarafrekening onder 'verbruik' of 'geleverd'."
+          hintId="afname-hint"
         >
           <div className="getal-veld">
             <input
@@ -141,6 +157,7 @@ export function Invoer({
         <Veld
           label="Hoeveel lever je per jaar terug?"
           hint="Staat op je jaarafrekening onder 'teruglevering' of 'ingevoed'."
+          hintId="teruglevering-hint"
         >
           <div className="getal-veld">
             <input
@@ -151,12 +168,13 @@ export function Invoer({
               step={50}
               value={terugleveringKwh}
               onChange={(e) => onTeruglevering(Math.max(0, Number(e.target.value)))}
+              aria-describedby="teruglevering-hint"
             />
             <span className="eenheid">kWh</span>
           </div>
         </Veld>
 
-        <Veld label="Welke batterij?" hint={`${preset.capaciteitKwh} kWh · ${preset.vermogenKw} kW · ${euro(preset.prijsEur)}`}>
+        <Veld label="Welke batterij?" hint={`${getal(preset.capaciteitKwh, 2)} kWh · ${getal(preset.vermogenKw, 1)} kW · ${euro(preset.prijsEur)}`}>
           <select value={presetId} onChange={(e) => onPreset(e.target.value)}>
             {PRESETS.map((p) => (
               <option key={p.id} value={p.id}>
@@ -167,8 +185,27 @@ export function Invoer({
         </Veld>
       </div>
 
+      {/* De knop staat bij de velden, niet acht secties lager: wie zijn eigen
+          getallen intikt moet daar zien dat er nog gerekend moet worden. */}
+      <div className="invoer-actie">
+        <button
+          type="button"
+          className={verouderd ? "bereken-knop nadruk" : "bereken-knop"}
+          onClick={onBereken}
+          disabled={bezig}
+        >
+          {bezig ? "Bezig met rekenen…" : "Reken door"}
+        </button>
+        {verouderd ? (
+          <p className="invoer-hint" role="status">
+            Je invoer is gewijzigd. Het antwoord hieronder hoort nog bij je
+            vorige invoer.
+          </p>
+        ) : null}
+      </div>
+
       {waarschuwingen.length > 0 ? (
-        <ul className="waarschuwingen">
+        <ul className="waarschuwingen" role="status">
           {waarschuwingen.map((w) => (
             <li key={w.tekst} className={w.ernst}>
               {w.tekst}

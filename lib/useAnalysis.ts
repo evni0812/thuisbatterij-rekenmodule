@@ -37,6 +37,15 @@ export interface AnalysisState {
   busy: boolean;
   error: string | null;
   elapsedMs: number | null;
+  /**
+   * De configuratie die bij het GETOONDE resultaat hoort.
+   *
+   * Presentatiecomponenten moeten hieruit lezen, niet uit de live invoer. Anders
+   * komt een verse batterijprijs naast een oude terugverdientijd te staan, in
+   * dezelfde zin — en dat is geen verouderd antwoord meer maar een verzonnen
+   * antwoord.
+   */
+  getoondeConfig: Configuration | null;
   /** Het getoonde resultaat komt uit een eerdere doorrekening. */
   uitCache: boolean;
   /** De invoer is gewijzigd sinds het getoonde resultaat. */
@@ -76,6 +85,7 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
     busy: false,
     error: null,
     elapsedMs: null,
+    getoondeConfig: null,
     uitCache: false,
     verouderd: false,
     grid: null,
@@ -110,6 +120,7 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
           busy: false,
           error: null,
           elapsedMs: msg.elapsedMs,
+          getoondeConfig: laatsteConfig.current,
           uitCache: false,
           verouderd: false,
         }));
@@ -243,6 +254,7 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
         result: bewaard,
         busy: false,
         error: null,
+        getoondeConfig: config,
         uitCache: true,
         verouderd: false,
       }));

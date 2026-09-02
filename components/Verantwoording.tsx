@@ -10,7 +10,7 @@
 import type { Manifest } from "../lib/data/manifest";
 import { netgebiedNaam } from "../lib/data/manifest";
 import type { AnalysisResult } from "../lib/model/analysis";
-import { centPerKwh, datum, procent } from "../lib/format";
+import { centPerKwh, datum, euroPrecies, procent } from "../lib/format";
 
 export function Verantwoording({
   manifest,
@@ -41,15 +41,15 @@ export function Verantwoording({
             <strong>werkelijk gemeten kwartierprofielen</strong> van MFFBAS voor{" "}
             {netgebiedNaam(domein)}
             {eerste && laatste ? (
-              <> , van {datum(eerste)} tot {datum(laatste)}</>
+              <>, van {datum(eerste)} tot {datum(laatste)}</>
             ) : null}
             . De prijzen zijn de <strong>werkelijke uurtarieven</strong> van ANWB
             Energie over diezelfde periode, inclusief btw.
           </p>
           <p>
             Er wordt niets voorspeld. De vraag is wat een batterij zou hebben
-            opgeleverd als de saldering toen al was afgeschaft — met de tarieven
-            zoals ze werkelijk golden.
+            opgeleverd als de saldering toen al was afgeschaft, met de tarieven zoals ze werkelijk
+            golden.
           </p>
         </div>
 
@@ -63,12 +63,14 @@ export function Verantwoording({
             </li>
             <li>
               Het profiel is een <strong>gemiddelde over veel huishoudens</strong> en
-              daardoor gladder dan één aansluiting. Dat onderschat de waarde van
-              een batterij eerder dan dat het hem overdrijft.
+              daardoor gladder dan één aansluiting. Wat dat scheelt kun je zelf
+              zien: zet bij de instellingen „Pieken in je verbruik” hoger en reken
+              opnieuw.
             </li>
             <li>
-              De batterij plant met de day-ahead prijzen en een verwachting van je
-              verbruik, niet met kennis van de toekomst. Hij haalt daarmee{" "}
+              De batterij plant met de prijzen die een dag van tevoren bekend worden,
+              en met een verwachting van je verbruik. Niet met kennis van de
+              toekomst. Hij haalt daarmee{" "}
               {procent(gemiddeldeCapture)} van wat met perfecte kennis mogelijk
               was geweest.
             </li>
@@ -104,10 +106,10 @@ export function Verantwoording({
                 </td>
                 <td>{Math.round(j.gridImportKwh)} kWh</td>
                 <td>{Math.round(j.gridExportKwh)} kWh</td>
-                <td>{j.baselineCostEur.toFixed(2)}</td>
-                <td>{j.realisticCostEur.toFixed(2)}</td>
-                <td>{j.realisticSavingEur.toFixed(2)}</td>
-                <td>{j.optimalSavingEur.toFixed(2)}</td>
+                <td>{euroPrecies(j.baselineCostEur)}</td>
+                <td>{euroPrecies(j.realisticCostEur)}</td>
+                <td>{euroPrecies(j.realisticSavingEur)}</td>
+                <td>{euroPrecies(j.optimalSavingEur)}</td>
                 <td>{Math.round(j.cyclesPerYear)}</td>
               </tr>
             ))}

@@ -75,7 +75,7 @@ export function Statistieken({
         {stats.selfConsumptionBaseline !== null &&
         stats.selfConsumptionBattery !== null ? (
           <Tegel
-            label="Zelfconsumptie"
+            label="Eigen zon zelf gebruikt"
             van={procent(stats.selfConsumptionBaseline)}
             naar={procent(stats.selfConsumptionBattery)}
             uitleg="Welk deel van wat je panelen opwekken, je ook zelf gebruikt."
@@ -85,7 +85,7 @@ export function Statistieken({
         {stats.selfSufficiencyBaseline !== null &&
         stats.selfSufficiencyBattery !== null ? (
           <Tegel
-            label="Autarkie"
+            label="Zelf gedekt"
             van={procent(stats.selfSufficiencyBaseline)}
             naar={procent(stats.selfSufficiencyBattery)}
             uitleg="Welk deel van je verbruik je zelf dekt, zonder het net."
@@ -107,9 +107,9 @@ export function Statistieken({
         />
 
         <Tegel
-          label="Cycli"
+          label="Laadbeurten"
           waarde={`${getal(stats.cyclesPerDay, 2)} per dag`}
-          uitleg={`${Math.round(stats.cyclesPerYear)} volledige laadbeurten per jaar. Meer cycli betekent meer opbrengst, maar ook snellere slijtage.`}
+          uitleg={`${Math.round(stats.cyclesPerYear)} volledige beurten per jaar. Meer beurten betekent meer opbrengst, maar ook snellere slijtage.`}
         />
 
         <Tegel
@@ -121,10 +121,11 @@ export function Statistieken({
 
       {!opwekBekend ? (
         <p className="statistieken-noot">
-          Vul bij de instellingen in hoeveel je panelen per jaar opwekken, dan
-          komen daar zelfconsumptie en autarkie bij. Die zijn niet uit je
-          meterstanden af te leiden: daar staat alleen wat er door de meter ging,
-          niet wat je direct zelf verbruikte.
+          Vul <a href="#instellingen">bij de instellingen</a> in hoeveel je
+          panelen per jaar opwekken, dan kunnen we ook laten zien welk deel van
+          je eigen zon je zelf gebruikt, en welk deel van je verbruik je zelf
+          dekt. Die volgen niet uit je meterstanden: daar staat alleen wat er
+          door de meter ging, niet wat je direct zelf verbruikte.
         </p>
       ) : null}
     </section>
