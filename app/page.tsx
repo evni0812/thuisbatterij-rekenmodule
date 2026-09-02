@@ -12,6 +12,7 @@ import { Prijskloof } from "../components/Prijskloof";
 import { Statistieken } from "../components/Statistieken";
 import { Uitsplitsing } from "../components/Uitsplitsing";
 import { Verantwoording } from "../components/Verantwoording";
+import { Verliezen } from "../components/Verliezen";
 import { periode } from "../lib/format";
 import {
   PRESETS,
@@ -213,6 +214,12 @@ export default function Page() {
                 ? String(result.perYear.find((j) => j.isFullYear)!.year)
                 : periodeLabel
             }
+          />
+
+          <Verliezen
+            losses={result.losses}
+            afnameKwh={toonAfname}
+            besparingEur={result.averageSavingEur}
           />
 
           <Dagprofiel

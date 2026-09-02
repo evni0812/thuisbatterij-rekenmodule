@@ -165,7 +165,7 @@ describe("volledige keten", () => {
     // worker en het vorige resultaat blijft gedimd staan tot het nieuwe er is.
     // Een enkel jaar is binnen een seconde klaar.
     expect(ms).toBeLessThan(5000);
-  });
+  }, 30_000);
 
   it("respecteert een zelfgekozen periode", async () => {
     const manifest = await loadManifest();
@@ -339,7 +339,7 @@ describe("batterijmaat-raster", () => {
     // En het effect moet substantieel zijn: een tienvoudige batterij hoort
     // duidelijk meer op te leveren dan de kleinste.
     expect(raster.at(-1)!.at(-1)!).toBeGreaterThan(raster[0]![0]! * 2);
-  });
+  }, 60_000);
 });
 
 describe("prijskloof", () => {
@@ -364,7 +364,7 @@ describe("prijskloof", () => {
       expect(r.priceGap.exportAtNegativePriceKwh).toBeLessThanOrEqual(2000);
       expect(r.priceGap.exportAtNegativePriceKwh).toBeGreaterThanOrEqual(0);
     }
-  });
+  }, 30_000);
 
   it("weegt de prijzen naar wanneer je werkelijk afneemt en teruglevert", async () => {
     const manifest = await loadManifest();

@@ -11,7 +11,7 @@ import {
 import { dispatchBaseline } from "../lib/model/dispatch-baseline";
 import { dispatchRolling } from "../lib/model/dispatch-rolling";
 import { dispatchOptimal } from "../lib/model/dispatch-optimal";
-import { breakdown as breakdownVoorTest } from "../lib/model/analysis";
+import { breakdown as breakdownVoorTest, energyLosses } from "../lib/model/analysis";
 import { buildPriceSeries } from "../lib/model/tariff";
 import { HOURS_PER_STEP, type BatterySpec, type DispatchResult, type TariffSpec, type Window } from "../lib/model/types";
 
@@ -559,5 +559,63 @@ describe("de uitsplitsing telt niet dubbel", () => {
       const perKwh = bZon.conversionLossEur / bZon.conversionLossKwh;
       expect(perKwh).toBeLessThan(TARIFF.energyTaxEurPerKwh);
     }
+  });
+});
+
+describe("de verliesboekhouding sluit", () => {
+  it("verdeelt alles wat erin gaat over levering, laadverlies en ontlaadverlies", () => {
+    const w = makeWindow(30, 3);
+    const s = spec({ capacityKwh: 8, maxChargeKw: 2.5, maxDischargeKw: 2.5 });
+    const r = dispatchRolling(w, s, TARIFF);
+    const v = energyLosses(w, r, s);
+
+    // De identiteit is exact: charged·(1−η) + charged·η·(1−η) + charged·η² = charged.
+    // Wat er van afwijkt is de lading die aan het eind nog in de cel zit.
+    const som = v.deliveredKwh + v.chargeLossKwh + v.dischargeLossKwh;
+    expect(som).toBeGreaterThan(0);
+    expect(Math.abs(som - v.chargedKwh) / v.chargedKwh).toBeLessThan(0.02);
+  });
+
+  it("telt standby los van de omzetting, evenredig met de tijd", () => {
+    const w = makeWindow(20, 4);
+    const s = spec({ standbyWatt: 12 });
+    const v = energyLosses(w, dispatchRolling(w, s, TARIFF), s);
+
+    // 12 W over 20 dagen is 5,76 kWh, ongeacht wat de batterij doet.
+    expect(v.standbyKwh).toBeCloseTo((12 / 1000) * 24 * 20, 6);
+    expect(v.totalKwh).toBeCloseTo(
+      v.chargeLossKwh + v.dischargeLossKwh + v.standbyKwh,
+      9,
+    );
+  });
+
+  it("geeft geen verlies bij een verliesvrije batterij die stilstaat", () => {
+    const w = makeWindow(10, 5);
+    const s = spec({ efficiency: 1, standbyWatt: 0 });
+    const v = energyLosses(w, dispatchRolling(w, s, TARIFF), s);
+    expect(v.totalKwh).toBeCloseTo(0, 9);
+    expect(v.totalEur).toBeCloseTo(0, 9);
+  });
+
+  it("waardeert het verlies onder de afnameprijs, want het meeste komt uit eigen zon", () => {
+    const w = makeWindow(30, 6);
+    const s = spec({ capacityKwh: 8, maxChargeKw: 2.5, maxDischargeKw: 2.5 });
+    const v = energyLosses(w, dispatchRolling(w, s, TARIFF), s);
+    let hoogste = 0;
+    for (let i = 0; i < w.prices.importPrice.length; i++) {
+      hoogste = Math.max(hoogste, w.prices.importPrice[i]!);
+    }
+    const omzetting = v.chargeLossKwh + v.dischargeLossKwh;
+    expect(v.chargeLossEur + v.dischargeLossEur).toBeLessThan(omzetting * hoogste);
+  });
+
+  it("is de rondgang die de specificatie belooft", () => {
+    const w = makeWindow(60, 7);
+    const s = spec({ capacityKwh: 8, maxChargeKw: 2.5, maxDischargeKw: 2.5 });
+    const v = energyLosses(w, dispatchRolling(w, s, TARIFF), s);
+    // deliveredKwh / chargedKwh moet η² benaderen; het verschil is de lading
+    // die aan het eind van het venster nog in de cel staat.
+    expect(v.roundtrip).toBeGreaterThan(s.efficiency ** 2 - 0.03);
+    expect(v.roundtrip).toBeLessThanOrEqual(s.efficiency ** 2 + 1e-9);
   });
 });

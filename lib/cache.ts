@@ -17,7 +17,7 @@ import type { Configuration } from "./worker/protocol";
  * Ophogen bij elke wijziging die de uitkomst beïnvloedt: de solver, de
  * tariefopbouw, de assets. Anders serveren we verouderde antwoorden.
  */
-const MODEL_VERSIE = 5;
+const MODEL_VERSIE = 6;
 
 const SLEUTEL_PREFIX = "tbat:v" + MODEL_VERSIE + ":";
 /** Hoeveel doorrekeningen we bewaren voordat de oudste eruit gaat. */

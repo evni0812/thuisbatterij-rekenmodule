@@ -19,6 +19,7 @@ import { Prijskloof } from "../components/Prijskloof";
 import { Statistieken } from "../components/Statistieken";
 import { Uitsplitsing } from "../components/Uitsplitsing";
 import { Verantwoording } from "../components/Verantwoording";
+import { Verliezen } from "../components/Verliezen";
 import { controleerInvoer } from "../components/Invoer";
 import { expandPricesToQuarters, loadManifest, loadPriceYear, loadProfileYear } from "../lib/data/loader";
 import type { Manifest } from "../lib/data/manifest";
@@ -320,5 +321,50 @@ describe("kerncijfers en herberekenen", () => {
     const knop = screen.getByRole("button", { name: /Bereken opnieuw/ });
     fireEvent.click(knop);
     expect(opBereken).toHaveBeenCalledOnce();
+  });
+});
+
+describe("de verliezensectie", () => {
+  it("noemt alle drie de posten met kilowatturen en een bedrag", () => {
+    render(<Verliezen losses={result.losses} afnameKwh={2500} besparingEur={result.averageSavingEur} />);
+    const tekst = document.body.textContent ?? "";
+    expect(tekst).toMatch(/Verlies bij het laden/);
+    expect(tekst).toMatch(/Verlies bij het ontladen/);
+    expect(tekst).toMatch(/Stroom voor de batterij zelf/);
+    expect(tekst).toMatch(/Samen verloren/);
+    expect(tekst).toMatch(/kWh/);
+    expect(tekst).toMatch(/€/);
+    // Geen Engelse decimaalpunt in getallen.
+    expect(tekst).not.toMatch(/\d\.\d{1,2} kWh/);
+  });
+
+  it("toont in de kop een conclusie die bij de cijfers past", () => {
+    render(<Verliezen losses={result.losses} afnameKwh={2500} besparingEur={result.averageSavingEur} />);
+    const l = result.losses;
+    const kop = screen.getByRole("heading", { level: 3 }).textContent ?? "";
+    if (l.standbyKwh > l.chargeLossKwh + l.dischargeLossKwh) {
+      expect(kop).toMatch(/niet in de omzetting/);
+    } else {
+      expect(kop).toMatch(/komt er \d+ weer uit/);
+    }
+  });
+
+  it("laat de balken binnen hun schaal blijven", () => {
+    const { container } = render(
+      <Verliezen losses={result.losses} afnameKwh={2500} besparingEur={result.averageSavingEur} />,
+    );
+    const delen = container.querySelectorAll<HTMLElement>(".verlies-deel");
+    expect(delen.length).toBe(3);
+    for (const d of delen) {
+      const pct = Number.parseFloat(d.style.width);
+      expect(pct).toBeGreaterThan(0);
+      expect(pct).toBeLessThanOrEqual(100.0001);
+    }
+  });
+
+  it("verdwijnt als er nooit geladen is", () => {
+    const leeg = { ...result.losses, chargedKwh: 0 };
+    const { container } = render(<Verliezen losses={leeg} afnameKwh={2500} besparingEur={100} />);
+    expect(container.textContent).toBe("");
   });
 });

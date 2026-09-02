@@ -10,6 +10,7 @@ import { LocalTimeIndex } from "../data/timeaxis";
 import {
   equivalentCycles,
   marginalWearCostPerKwh,
+  standbyKwhPerStep,
   usableCapacityKwh,
 } from "./battery";
 import { dispatchBaseline } from "./dispatch-baseline";
@@ -43,6 +44,46 @@ export interface SavingBreakdown {
   totalEur: number;
 }
 
+/**
+ * De energieboekhouding van de batterij: wat erin ging, wat eruit kwam, en waar
+ * het verschil bleef.
+ *
+ * Drie verliezen, en ze zijn wezenlijk anders van aard:
+ *
+ *   laadverlies     omzetting van wisselstroom naar de cel. Evenredig met wat
+ *                   je erin stopt.
+ *   ontlaadverlies  omzetting terug. Evenredig met wat je eruit haalt.
+ *   standby         de elektronica die dag en nacht aan staat, ook als er niets
+ *                   gebeurt. Hangt níét van het gebruik af, en is bij een
+ *                   kleine batterij daarom relatief het zwaarst.
+ *
+ * De euro's zijn opportuniteitskosten: een verloren kilowattuur kost je wat hij
+ * had opgeleverd als hij er nog was geweest. Uit eigen overschot is dat de
+ * terugleverprijs, van het net de afnameprijs. Alles tegen de afnameprijs
+ * waarderen zou de post fors overschatten.
+ */
+export interface EnergyLosses {
+  /** Wat er aan de AC-zijde in de batterij ging, kWh. */
+  chargedKwh: number;
+  /** Wat de batterij aan de AC-zijde weer afgaf, kWh. */
+  deliveredKwh: number;
+  chargeLossKwh: number;
+  dischargeLossKwh: number;
+  standbyKwh: number;
+  /** Som van de drie verliezen, kWh. */
+  totalKwh: number;
+  chargeLossEur: number;
+  dischargeLossEur: number;
+  standbyEur: number;
+  totalEur: number;
+  /**
+   * De gemeten rondgang: hoeveel er per ingaande kilowattuur weer uit komt.
+   * Ligt iets onder het rendement uit de specificatie, want aan het eind van
+   * het venster zit er nog lading in de cel die niet meer geleverd is.
+   */
+  roundtrip: number;
+}
+
 /** Uitkomsten voor één profieljaar. */
 export interface YearAnalysis {
   year: number;
@@ -67,6 +108,8 @@ export interface YearAnalysis {
   gridExportWithBatteryKwh: number;
   /** Energie die door de batterij ging, AC-zijdig geleverd, kWh. */
   throughputKwh: number;
+  /** Wat er onderweg verloren ging. */
+  losses: EnergyLosses;
 }
 
 /**
@@ -185,6 +228,8 @@ export interface AnalysisResult {
   priceGap: PriceGap;
   sampleDays: SampleDay[];
   stats: KeyStats;
+  /** Verliezen per jaar, gemiddeld over de volledige profieljaren. */
+  losses: EnergyLosses;
 }
 
 /**
@@ -295,6 +340,78 @@ export function breakdown(
   };
 }
 
+/**
+ * Tel op hoeveel energie er in de batterij verdween, en wat dat kostte.
+ *
+ * Los van breakdown(), want dit is een andere vraag. Daar gaat het om waar de
+ * besparing vandaan komt — hier om waar de kilowatturen bleven. Het
+ * omzettingsverlies in euro's komt in beide op hetzelfde neer; standby staat
+ * alleen hier, omdat het geen omzettingsverlies is maar eigen verbruik.
+ */
+export function energyLosses(
+  window: Window,
+  bat: DispatchResult,
+  spec: BatterySpec,
+): EnergyLosses {
+  const n = window.residualKwh.length;
+  const standbyPerStap = standbyKwhPerStep(spec);
+
+  let geladen = 0;
+  let geleverd = 0;
+  let laadverliesKwh = 0;
+  let laadverliesEur = 0;
+  let ontlaadverliesKwh = 0;
+  let ontlaadverliesEur = 0;
+  let standbyEur = 0;
+
+  for (let i = 0; i < n; i++) {
+    const ip = window.prices.importPrice[i]!;
+    const ep = window.prices.exportPrice[i]!;
+    const laden = bat.chargeKwh[i]!;
+    const ontladen = bat.dischargeKwh[i]!;
+    const overschot = Math.max(0, -window.residualKwh[i]!);
+    const tekort = Math.max(0, window.residualKwh[i]!);
+
+    if (laden > 0) {
+      const uitZon = Math.min(laden, overschot);
+      const uitNet = laden - uitZon;
+      const verlies = laden * (1 - spec.efficiency);
+      geladen += laden;
+      laadverliesKwh += verlies;
+      laadverliesEur += (verlies / laden) * (uitZon * ep + uitNet * ip);
+    }
+
+    if (ontladen > 0) {
+      const naarHuis = Math.min(ontladen, tekort);
+      const naarNet = ontladen - naarHuis;
+      const verlies = (ontladen / spec.efficiency) * (1 - spec.efficiency);
+      geleverd += ontladen;
+      ontlaadverliesKwh += verlies;
+      ontlaadverliesEur += (verlies / ontladen) * (naarHuis * ip + naarNet * ep);
+    }
+
+    // Standby loopt door of de batterij nu werkt of niet. Wat het kost hangt af
+    // van waar je op dat moment staat: koop je bij, dan de afnameprijs; lever je
+    // terug, dan de opbrengst die je misloopt.
+    standbyEur += standbyPerStap * (bat.gridImportKwh[i]! > 0 ? ip : ep);
+  }
+
+  const standbyKwh = standbyPerStap * n;
+  return {
+    chargedKwh: geladen,
+    deliveredKwh: geleverd,
+    chargeLossKwh: laadverliesKwh,
+    dischargeLossKwh: ontlaadverliesKwh,
+    standbyKwh,
+    totalKwh: laadverliesKwh + ontlaadverliesKwh + standbyKwh,
+    chargeLossEur: laadverliesEur,
+    dischargeLossEur: ontlaadverliesEur,
+    standbyEur,
+    totalEur: laadverliesEur + ontlaadverliesEur + standbyEur,
+    roundtrip: geladen > 0 ? geleverd / geladen : 0,
+  };
+}
+
 /** Alleen de besparing, zonder baseline en optimum: voor de besparingscurve. */
 function quickSaving(
   entry: AnalysisInput["windows"][number],
@@ -362,6 +479,7 @@ function analyseWindow(
     gridImportWithBatteryKwh: importWithBattery,
     gridExportWithBatteryKwh: exportWithBattery,
     throughputKwh: dischargeTotal,
+    losses: energyLosses(window, real, spec),
   };
   void totaalBehoefte;
   return { analysis, realistic: real, baselineCost: base.totalCostEur };
@@ -701,9 +819,28 @@ export function runAnalysis(
         : null,
   };
 
+  // Verliezen per jaar. Alle posten zijn optelbaar en dus middelbaar; de
+  // rondgang niet — die volgt uit de gemiddelde in- en uitgaande energie.
+  const geladenGem = gem((y) => y.losses.chargedKwh);
+  const geleverdGem = gem((y) => y.losses.deliveredKwh);
+  const losses: EnergyLosses = {
+    chargedKwh: geladenGem,
+    deliveredKwh: geleverdGem,
+    chargeLossKwh: gem((y) => y.losses.chargeLossKwh),
+    dischargeLossKwh: gem((y) => y.losses.dischargeLossKwh),
+    standbyKwh: gem((y) => y.losses.standbyKwh),
+    totalKwh: gem((y) => y.losses.totalKwh),
+    chargeLossEur: gem((y) => y.losses.chargeLossEur),
+    dischargeLossEur: gem((y) => y.losses.dischargeLossEur),
+    standbyEur: gem((y) => y.losses.standbyEur),
+    totalEur: gem((y) => y.losses.totalEur),
+    roundtrip: geladenGem > 0 ? geleverdGem / geladenGem : 0,
+  };
+
   return {
     perYear,
     stats,
+    losses,
     averageSavingEur: gemiddeld,
     minSavingEur: Math.min(...besparingen),
     maxSavingEur: Math.max(...besparingen),
