@@ -6,7 +6,14 @@
 # er meegaat. Zonder deze regel duwt een CLI-deploy de hele download naar boven.
 data/raw/
 
+# Buildoutput hoort nooit mee omhoog: Vercel bouwt zelf. Erger nog, turbopack
+# laat de worker als los .ts-bestand in out/_next/static/media/ achter, en
+# tsconfig globt op **/*.ts. Vercel type-checkte dat bestand dan op een plek
+# waar zijn relatieve imports niet bestaan, en de build viel om.
+out/
+.next/
+.next-build/
+
 # Lokale rommel die niets met de build te maken heeft.
 venv/
 legacy/
-.next-build/
