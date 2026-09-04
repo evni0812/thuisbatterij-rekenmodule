@@ -37,7 +37,7 @@ const DOMAIN = "871685900000056162";
 
 /** Minimale instellingen voor het instellingenpaneel. */
 const LEGE_INSTELLINGEN = {
-  afnameKwh: 2500, terugleveringKwh: 2000, presetId: "foxess-s22",
+  afnameKwh: 2500, terugleveringKwh: 2000, presetId: "marstek-venus-e3", heffing: "toen" as const,
   domein: DOMAIN, van: "", tot: "", spreiding: 1, terugleverkostenCt: 0,
   curtailment: true, analysejaren: 15, discontovoet: 0.03, prijsstijging: 0.02,
   degradatie: 0.015, prijsEur: null, capaciteitKwh: null, vermogenKw: null,
@@ -156,6 +156,74 @@ describe("de pagina toont het antwoord", () => {
     expect(datum.type).toBe("date");
     expect(datum.min).toBe("2025-01-01");
     expect(datum.max).toBe("2025-12-31");
+    // De kiezer staat op de dag die in beeld is, niet leeg: anders lijkt er
+    // niets gekozen terwijl er een voorbeelddag wordt getoond.
+    expect(datum.value).toBe(result.sampleDays[0]!.date);
+  });
+
+  it("toont de kerncijfers van de dag naast de grafieken", () => {
+    render(
+      <Dagprofiel
+        voorbeelden={result.sampleDays}
+        losseDag={null}
+        ontbreekt={null}
+        eersteDag="2025-01-01"
+        laatsteDag="2025-12-31"
+        onVraagDag={() => {}}
+        onWisDag={() => {}}
+      />,
+    );
+    const tekst = document.body.textContent ?? "";
+    expect(tekst).toMatch(/bespaard op deze dag/);
+    expect(tekst).toMatch(/uit de batterij gehaald/);
+    expect(tekst).toMatch(/laadbeurten/);
+    expect(tekst).toMatch(/minder van het net/);
+    expect(tekst).toMatch(/prijsverschil op deze dag/);
+    // De vergelijking met perfecte kennis: dat is waar het verschil tussen de
+    // twee strategieën zichtbaar wordt.
+    expect(tekst).toMatch(/van wat er in zat/);
+    expect(tekst).toMatch(/met perfecte kennis/);
+  });
+
+  it("laat met de pijltjes naar de dag ernaast springen", () => {
+    const gevraagd: string[] = [];
+    render(
+      <Dagprofiel
+        voorbeelden={result.sampleDays}
+        losseDag={null}
+        ontbreekt={null}
+        eersteDag="2025-01-01"
+        laatsteDag="2025-12-31"
+        onVraagDag={(d) => gevraagd.push(d)}
+        onWisDag={() => {}}
+      />,
+    );
+    const huidig = result.sampleDays[0]!.date;
+    fireEvent.click(screen.getByLabelText("Volgende dag"));
+    fireEvent.click(screen.getByLabelText("Vorige dag"));
+    expect(gevraagd).toEqual([addDays(huidig, 1), addDays(huidig, -1)]);
+
+    // En met de pijltjestoetsen in het datumveld hetzelfde.
+    const datum = screen.getByLabelText(/kies zelf een dag/i);
+    fireEvent.keyDown(datum, { key: "ArrowRight" });
+    expect(gevraagd.at(-1)).toBe(addDays(huidig, 1));
+  });
+
+  it("stopt bij de rand van de beschikbare periode", () => {
+    const eenDag = result.sampleDays[0]!;
+    render(
+      <Dagprofiel
+        voorbeelden={[eenDag]}
+        losseDag={eenDag}
+        ontbreekt={null}
+        eersteDag={eenDag.date}
+        laatsteDag={eenDag.date}
+        onVraagDag={() => {}}
+        onWisDag={() => {}}
+      />,
+    );
+    expect((screen.getByLabelText("Vorige dag") as HTMLButtonElement).disabled).toBe(true);
+    expect((screen.getByLabelText("Volgende dag") as HTMLButtonElement).disabled).toBe(true);
   });
 
   it("meldt het als er voor de gekozen dag geen gegevens zijn", () => {

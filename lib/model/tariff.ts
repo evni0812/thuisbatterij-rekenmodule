@@ -16,18 +16,35 @@ import type { PriceSeries, TariffSpec } from "./types";
  * Bouw de import- en exportprijsreeksen uit de kale marktprijs.
  *
  * @param marketPrice marktprijs per kwartier in EUR/kWh (incl. btw)
+ * @param levyPerStep Heffing per kwartier (energiebelasting plus inkoopopslag),
+ *   EUR/kWh. Vervangt de vaste `energyTaxEurPerKwh` uit het tarief.
+ *
+ *   De heffing is binnen een jaar niet constant: in 2025 was hij tot september
+ *   17,13 ct en daarna 14,29 ct, en in 2026 verschoof hij halverwege van 12,88
+ *   naar 13,00 ct. Eén jaarconstante rekent dan een kwartaal lang 2,8 ct per
+ *   kWh te veel op elke afname. Met de reeks uit allInPrijs − marktprijs klopt
+ *   elk uur.
  */
 export function buildPriceSeries(
   marketPrice: Float64Array,
   tariff: TariffSpec,
+  levyPerStep?: Float64Array,
 ): PriceSeries {
   const n = marketPrice.length;
+  if (levyPerStep && levyPerStep.length !== n) {
+    throw new Error(
+      `heffingsreeks van ${levyPerStep.length} kwartieren past niet op ${n} prijzen`,
+    );
+  }
   const importPrice = new Float64Array(n);
   const exportPrice = new Float64Array(n);
   const surcharge = tariff.purchaseSurchargeEurPerKwh + tariff.energyTaxEurPerKwh;
 
   for (let i = 0; i < n; i++) {
-    importPrice[i] = marketPrice[i]! + surcharge;
+    const heffing = levyPerStep
+      ? levyPerStep[i]! + tariff.purchaseSurchargeEurPerKwh
+      : surcharge;
+    importPrice[i] = marketPrice[i]! + heffing;
     exportPrice[i] = marketPrice[i]! - tariff.feedInCostEurPerKwh;
   }
   return { importPrice, exportPrice };

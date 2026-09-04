@@ -16,8 +16,18 @@ import type { Configuration } from "./worker/protocol";
 /**
  * Ophogen bij elke wijziging die de uitkomst beïnvloedt: de solver, de
  * tariefopbouw, de assets. Anders serveren we verouderde antwoorden.
+ *
+ * Ook ophogen bij een wijziging in de VORM van het resultaat. Versie 7 voegde
+ * `stats` toe aan elke voorbeelddag en `gap` aan het resultaat; een bewaard
+ * antwoord van versie 6 mist die velden, en de dagweergave liep daarop stuk met
+ * "Cannot read properties of undefined". Een nieuw veld is dus net zo goed een
+ * reden om deze teller te verhogen als een nieuw getal.
+ *
+ * Versie 7 bevat verder: de schaling die de meterstanden reproduceert, de
+ * heffing per uur in plaats van een jaarconstante, en de uitvoerder die bewuste
+ * verkoop aan het net doorlaat. Alle drie veranderen de bedragen.
  */
-const MODEL_VERSIE = 6;
+const MODEL_VERSIE = 7;
 
 const SLEUTEL_PREFIX = "tbat:v" + MODEL_VERSIE + ":";
 /** Hoeveel doorrekeningen we bewaren voordat de oudste eruit gaat. */

@@ -31,9 +31,15 @@ describe("interpolateCurve", () => {
     expect(interpolateCurve(CURVE, 0.925).savingEur).toBeCloseTo(92.5, 6);
   });
 
-  it("kapt af buiten het gemeten bereik in plaats van te extrapoleren", () => {
-    expect(interpolateCurve(CURVE, 0.1).savingEur).toBe(70);
+  it("kapt boven het gemeten bereik af, en loopt eronder naar nul", () => {
+    // Meer dan nominaal bestaat niet.
     expect(interpolateCurve(CURVE, 5).savingEur).toBe(100);
+    // Onder het laagste steunpunt: lineair naar nul bij nul capaciteit. Een
+    // batterij die tot 35% is gesleten bespaart de helft van die op 70%, niet
+    // hetzelfde.
+    expect(interpolateCurve(CURVE, 0.35).savingEur).toBeCloseTo(35, 6);
+    expect(interpolateCurve(CURVE, 0).savingEur).toBe(0);
+    expect(interpolateCurve(CURVE, -1).savingEur).toBe(0);
   });
 });
 

@@ -17,6 +17,12 @@ export interface Instellingen {
   spreiding: number;
   terugleverkostenCt: number;
   curtailment: boolean;
+  /**
+   * Met welke heffing (energiebelasting plus opslag) er gerekend wordt:
+   * "toen" is de heffing zoals die op elk uur van de gekozen periode gold,
+   * "nu" is die van het meest recente jaar in de data, over alle jaren.
+   */
+  heffing: "toen" | "nu";
   analysejaren: number;
   discontovoet: number;
   prijsstijging: number;
@@ -40,6 +46,7 @@ const SLEUTELS: Record<keyof Instellingen, string> = {
   spreiding: "spr",
   terugleverkostenCt: "tlk",
   curtailment: "afr",
+  heffing: "hef",
   analysejaren: "jr",
   discontovoet: "disc",
   prijsstijging: "stg",
@@ -89,6 +96,8 @@ export function leesUrl(): Partial<Instellingen> {
   if (tot) uit.tot = tot;
   const afr = p.get(SLEUTELS.curtailment);
   if (afr !== null) uit.curtailment = afr === "1";
+  const hef = p.get(SLEUTELS.heffing);
+  if (hef === "toen" || hef === "nu") uit.heffing = hef;
 
   return uit;
 }

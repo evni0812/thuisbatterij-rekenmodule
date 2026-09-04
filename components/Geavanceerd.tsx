@@ -11,9 +11,16 @@
 
 import type { Manifest } from "../lib/data/manifest";
 import { netgebiedNaam } from "../lib/data/manifest";
-import { euro, getal, procent } from "../lib/format";
-import type { BatteryPreset } from "../lib/presets";
+import { centPerKwh, euro, getal, procent } from "../lib/format";
+import { PRIJSPEILDATUM, type BatteryPreset } from "../lib/presets";
 import type { Instellingen } from "../lib/url-state";
+
+/** De heffing van het meest recente prijsjaar in de data, of null zonder manifest. */
+function actueleHeffingUit(manifest: Manifest | null): number | null {
+  if (!manifest) return null;
+  const laatste = Object.keys(manifest.prijzen).sort().at(-1);
+  return laatste ? manifest.prijzen[laatste]!.jaarconstante_eur_per_kwh : null;
+}
 
 function Schuif({
   label,
@@ -150,6 +157,7 @@ export function Geavanceerd({
             Rendement {procent(preset.spec.efficiency ** 2)} heen en terug,
             bruikbaar deel {procent(preset.spec.depthOfCharge)}, standby{" "}
             {preset.spec.standbyWatt} W, levensduur {preset.cycleLife} laadbeurten. Overgenomen van {preset.naam}.
+            Prijs: {preset.prijsNoot}, richtprijs {PRIJSPEILDATUM}.
           </p>
         </section>
 
@@ -270,11 +278,29 @@ export function Geavanceerd({
               </p>
             </div>
           </div>
-          <p className="instelling-noot">
-            Energiebelasting en de opslag van je leverancier komen per jaar uit de
-            tarieven die dat jaar echt golden: het verschil tussen wat je aan de
-            kassa betaalde en de kale marktprijs op de beurs.
-          </p>
+          <div className="instelling">
+            <label className="schakel">
+              <input
+                type="checkbox"
+                checked={inst.heffing === "nu"}
+                onChange={(e) => onChange({ heffing: e.target.checked ? "nu" : "toen" })}
+              />
+              <span>
+                Reken met de energiebelasting van nu
+                {actueleHeffingUit(manifest) !== null
+                  ? ` (${centPerKwh(actueleHeffingUit(manifest)!)})`
+                  : ""}
+              </span>
+            </label>
+            <p className="instelling-uitleg">
+              Standaard geldt per uur de belasting en opslag die toen echt golden:
+              het verschil tussen wat je aan de kassa betaalde en de kale
+              marktprijs. In 2024 en 2025 lag die heffing een kwart tot een derde
+              hoger dan nu, en de besparing van een batterij schaalt daar bijna
+              één-op-één mee. Zet dit aan om de prijzen van toen te combineren
+              met de belasting van vandaag.
+            </p>
+          </div>
         </section>
 
         <section>

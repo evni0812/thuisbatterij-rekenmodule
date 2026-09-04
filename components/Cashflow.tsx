@@ -160,7 +160,10 @@ export function Cashflow({
           <dd>
             {Math.round(finance.totalCycles)}
             {finance.endOfLifeYear !== null ? (
-              <span className="dd-noot">dan is hij op, na {finance.endOfLifeYear} jaar</span>
+              <span className="dd-noot">
+                na {finance.endOfLifeYear} jaar zijn de beloofde laadbeurten op; daarna
+                rekenen we door met een batterij die verder slijt
+              </span>
             ) : null}
           </dd>
         </div>

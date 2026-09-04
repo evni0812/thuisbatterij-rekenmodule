@@ -16,7 +16,7 @@ gebruik, alles vanaf de CDN.
 ```bash
 npm install
 npm run dev          # http://localhost:3000
-npm test             # 86 tests, waaronder de modelinvarianten
+npm test             # 133 tests, waaronder de modelinvarianten
 npm run build        # statische export naar out/
 npm run clean        # bij een vastgelopen build-cache
 ```
@@ -26,6 +26,20 @@ draaiende dev-server laat die omvallen met `Cannot find module './833.js'` of ee
 fout over het React Client Manifest. De build schrijft naar een eigen map
 (`.next-build`), wat de ergste chunk-corruptie voorkomt, maar niet alles.
 Loopt het toch vast: `npm run clean`.
+
+**Breekt de build af zonder foutmelding?** Als `next build` stopt na
+`Creating an optimized production build ...` en exitcode 0 geeft zonder `out/`
+te maken, is de webpack-compile gesmoord door geheugendruk — kijk naar
+`vm.swapusage`. `npx next build --turbopack` doet hetzelfde werk in een fractie
+van het geheugen en levert dezelfde export op.
+
+## Publiceren
+
+De app staat op Vercel en bouwt bij elke push naar `main`. `vercel.json`
+overschrijft het buildcommando bewust met `next build` in plaats van
+`npm run build`: dat laatste zet `NEXT_BUILD_DIR=.next-build`, en die map vindt
+Vercel niet terug omdat het zijn eigen configuratie leest zonder die variabele.
+Zo blijft alles op `.next` staan en komt de export in `out/`.
 
 De data staat al in `public/data/`. Alleen als je die wilt verversen zijn de
 Python-scripts nodig — zie [Data verversen](#data-verversen).
@@ -64,8 +78,32 @@ de toekomst. Herplannen gebeurt eens per dag, uitgelijnd op het publicatiemoment
 van de nieuwe prijzen.
 
 Het verschil tussen beide is zelf een resultaat: het laat zien wat onvolmaakte
-informatie kost. Op de echte data haalt de realistische strategie 50 tot 60% van
-het optimum.
+informatie kost. Op de echte data haalt de realistische strategie ruwweg 85 tot
+90% van het optimum, afhankelijk van de batterij; de app toont het werkelijke
+percentage bij de verantwoording.
+
+**Waar dat gat vandaan komt.** Twee dingen weet een echte batterij niet: de
+prijzen van morgen vóór de publicatie om 13:00, en hoeveel zon en verbruik
+morgen brengt. Die twee zijn te scheiden door de strategie nog eens te laten
+draaien met de werkelijke residual als "voorspelling", en dat is wat
+`computeStrategyGap` doet. Gemeten op Liander 2025:
+
+| Batterij | Gat met het optimum | Prijshorizon | Verbruiksvoorspelling |
+|---|---|---|---|
+| 5,1 kWh / 2,5 kW | € 28,60 | € 1,73 (6%) | € 26,90 (94%) |
+| 10 kWh / 3,6 kW | € 56,60 | € 6,37 (11%) | € 50,20 (89%) |
+
+De prijshorizon is dus bijna niet het probleem, en dat is te begrijpen: het plan
+dat om 13:00 wordt gemaakt reikt tot morgen 24:00 en wordt maar vierentwintig uur
+uitgevoerd, dus er is altijd ruim tien uur zicht voorbij de uitvoering. Het weer
+is wat de strategie beperkt. Vaker herplannen helpt daarom niet: van eens per dag
+naar elk uur verandert de opbrengst met dertig cent per jaar.
+
+Beide strategieën mogen de batterij ook **naar het net ontladen** als de prijs
+dat waard maakt. Dat is de handelsmodus van een moderne thuisbatterij op een
+dynamisch contract. De uitvoerder van de realistische strategie krijgt het plan
+én de voorspelling waarop het gemaakt is, zodat hij bewuste verkoop doorlaat maar
+een tegenvallend tekort niet met extra netlevering opvult.
 
 Beide gebruiken dezelfde solver (`solver.ts`): dynamisch programmeren over een
 SoC-grid, met **lineaire interpolatie van de waardefunctie**. Dat laatste is geen
@@ -103,6 +141,44 @@ gemeten voor 2025: 1,0178 voor afname en 1,0495 voor invoeding. De build-stap
 normaliseert per kalenderjaar naar exact 1. Een deelperiode wordt bewust **niet**
 opnieuw genormaliseerd: drie wintermaanden horen meer dan een kwart van het
 jaarvolume te bevatten.
+
+**Netten en de meterstanden.** E17 en E18 zijn gemiddelden over veel
+huishoudens en overlappen elkaar op veel kwartieren; het model trekt ze per
+kwartier van elkaar af, want één aansluiting kan maar één kant op. Daarbij valt
+volume weg: met 2.500/2.000 kWh bleef er zonder correctie 2.086/1.586 over. De
+jaartotalen op de afrekening zijn zelf al genette sommen, dus het model schaalt
+de twee fracties met factoren (`solveNettingScale`, ruwweg 1,20 en 1,25) zodat de
+genette reeks over een vol jaar exact op de meterstanden uitkomt. Deeljaren lenen
+die factoren van het meest recente volle jaar. Het scheelt bijna een vijfde in de
+besparing.
+
+**Heffing per uur.** Energiebelasting plus inkoopopslag komt uit
+allInPrijs − marktprijs, per uur en niet als jaarconstante: in 2025 zakte de
+heffing in september van 17,13 naar 14,29 ct. Wie met de heffing van nu wil
+rekenen — die ligt een kwart tot een derde onder die van 2024 en 2025, en de
+besparing schaalt daar bijna één-op-één mee — zet dat aan bij de instellingen;
+dan geldt de heffing van het meest recente prijsjaar over alle jaren.
+
+**Een dag is geen sluitende eenheid.** Een batterij houdt zich niet aan de
+kalender: laden in de nacht van de 19e om te ontladen op de 20e is precies wat
+je wilt op een dynamisch tarief, maar de inkoop valt dan op de ene dag en de
+opbrengst op de andere. Op 2025 sluiten daardoor 64 van de 365 dagen negatief af,
+samen € 18,63, terwijl diezelfde dagen met hun buurdag positief zijn. Van die 64
+zijn er 41 puur dagovergang; de 23 waarop de batterij begint en eindigt op
+dezelfde stand kosten samen € 0,89 over het hele jaar, en dat is de echte prijs
+van een verkeerde inschatting.
+
+Dat het geen modelfout is, blijkt uit het optimum: dat kent de hele periode
+vooraf en maakt op zulke dagen dezelfde keuze, tot op de cent. De dagweergave
+laat daarom de stand om 00:00 en om 24:00 zien, zodat een negatief dagbedrag
+verklaard is in plaats van verdacht.
+
+**Bruto zonopwek zit niet in de data.** De bron is meterdata: E17 is wat het huis
+van het net haalde, E18 wat het erop zette. Wat de panelen produceerden en direct
+werd opgemaakt, komt nooit langs de meter en staat dus in geen van beide reeksen.
+De dagweergave toont daarom de **teruglevering** per kwartier, met dat voorbehoud
+er expliciet bij. Voor bruto opwek per kwartier zou je de opbrengstmeting van de
+omvormer nodig hebben.
 
 ### Wat er niet in zit
 
@@ -142,6 +218,16 @@ De tests bewaken de eigenschappen die het prototype miste:
 - **Normalisatie** — volledige jaren op exact 1, deelperioden bewust lager.
 - **Integratie** op de echte assets, met `fetch` naar het bestandssysteem, zodat
   het binaire formaat en de loader echt getest worden.
+- **De worker als geheel** (`tests/dagkiezer.test.ts`) — berichten erin,
+  berichten eruit, met `self` nagebootst. Dat vangt de fouten die tussen de
+  modules vallen in plaats van erin. De dagkiezer was daar stuk: hij vroeg een
+  dag op die de worker alleen kon leveren als hij de analyse zélf had gedraaid,
+  en na een refresh komt die uit de browsercache. Elke modeltest bleef groen.
+
+De bestanden draaien **achter elkaar** (`fileParallelism: false`). Twee tests
+meten hoe lang een doorrekening duurt, en parallel meten die de bezetting van de
+machine in plaats van het model: hetzelfde werk kwam op 3,7 seconden uit alleen
+en op 10,8 naast de andere bestanden.
 
 ## Data verversen
 
@@ -156,6 +242,15 @@ dag per IP toe; alle netgebieden over de volle periode kost er ongeveer 700.
 DYNAMIC loopt twee dagen achter en recente dagen kunnen nog wijzigen, dus ververs
 de laatste maanden opnieuw.
 
-Prestaties: ongeveer 430 ms voor de realistische strategie en 280 ms voor het
-optimum per profieljaar; vier jaar met beide strategieën en de besparingscurve in
-ruim drie seconden.
+Prestaties: ongeveer 450 ms voor de realistische strategie en 270 ms voor het
+optimum per profieljaar; vier jaar met beide strategieën, de besparingscurve en
+de ontleding van het gat met het optimum in ruim drie en een halve seconde. De proefrun die bepaalt of laadbeurten schaars zijn, draait
+op volle resolutie en wordt hergebruikt als de drempel nul blijkt — bij vrijwel
+elke preset. Het raster van batterijmaten doet hetzelfde per punt en kost
+daardoor in de regel één doorrekening per punt in plaats van twee.
+
+De binnenste lus van de solver is bewust niet verder geoptimaliseerd: delingen
+vervangen door vermenigvuldigingen gaf tot 30% winst maar veranderde het antwoord
+met twaalf cent per jaar, doordat het laatste bit een keuze tussen bijna gelijke
+kandidaten kan kantelen. Wie meer snelheid wil, haalt die uit parallelle workers
+per profieljaar, niet uit de rekenkunde.

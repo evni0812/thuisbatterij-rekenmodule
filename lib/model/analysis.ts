@@ -194,6 +194,87 @@ export interface SampleDay {
   importPrice: number[];
   exportPrice: number[];
   usableCapacityKwh: number;
+  /**
+   * Teruglevering aan het net per kwartier zonder batterij, kWh: het deel van
+   * de zonopwek dat het huis niet zelf gebruikte. Leeg als de componenten van
+   * de residual niet zijn meegegeven.
+   *
+   * Niet hetzelfde als bruto zonopwek. Zie ResidualParts in residual.ts.
+   */
+  meterExportKwh: number[];
+  /** Afname van het net per kwartier zonder batterij, kWh. Leeg zonder componenten. */
+  meterImportKwh: number[];
+  /** De kerngetallen van deze dag, los van de grafieken. */
+  stats: SampleDayStats;
+}
+
+/**
+ * Wat deze dag heeft opgeleverd, in getallen.
+ *
+ * Dezelfde grootheden als de jaarcijfers, maar over één etmaal, zodat je kunt
+ * zien waar een jaarbedrag uit is opgebouwd. Ze worden hier berekend en niet in
+ * de component, omdat er tarieflogica in zit: bij een negatieve prijs wordt een
+ * overschot afgeregeld in plaats van verkocht, en dan kost het niets in plaats
+ * van geld.
+ */
+export interface SampleDayStats {
+  /** Variabele stroomkosten van deze dag zonder en met batterij, EUR. */
+  baselineCostEur: number;
+  batteryCostEur: number;
+  /** Wat de batterij deze dag opleverde, EUR. Negatief kan: een misser. */
+  savingEur: number;
+  /**
+   * Wat perfecte kennis van prijzen én verbruik deze dag had opgeleverd, EUR.
+   * Null als het optimum niet is meegerekend.
+   */
+  optimalSavingEur: number | null;
+  /** Afname van het net zonder en met batterij, kWh. */
+  gridImportBaselineKwh: number;
+  gridImportBatteryKwh: number;
+  /** Teruglevering aan het net zonder en met batterij, kWh. */
+  gridExportBaselineKwh: number;
+  gridExportBatteryKwh: number;
+  /** Wat er de batterij in ging en weer uit kwam, AC-zijdig, kWh. */
+  chargedKwh: number;
+  deliveredKwh: number;
+  /** Waar de lading vandaan kwam: eigen overschot of inkoop, kWh. */
+  chargedFromSolarKwh: number;
+  chargedFromGridKwh: number;
+  /** Equivalente volledige cycli op deze dag. */
+  cycles: number;
+  /** Hoogste lading van de dag, kWh. */
+  socMaxKwh: number;
+  /**
+   * Lading aan het begin en het einde van de dag, kWh.
+   *
+   * ── Waarom dit een kerncijfer is ──────────────────────────────────────────
+   * Een batterij houdt zich niet aan de kalender. Laden in de nacht van de 19e
+   * om te ontladen op de 20e is precies wat je wilt op een dynamisch tarief,
+   * maar de kosten vallen dan op de ene dag en de opbrengst op de andere. Op de
+   * echte data van 2025 sluiten 64 dagen daardoor negatief af, samen ruim
+   * achttien euro, terwijl die dagen samen met hun buurdag positief zijn.
+   *
+   * Zonder deze twee getallen leest zo'n dag als een misser van het model. Het
+   * is er geen: het optimum met perfecte kennis maakt dezelfde keuze en komt op
+   * exact hetzelfde negatieve dagbedrag uit.
+   */
+  socStartKwh: number;
+  socEndKwh: number;
+  /** Afgeregeld overschot, kWh. */
+  curtailedKwh: number;
+  /** Hoogste en laagste afnameprijs van de dag, EUR/kWh. */
+  priceMinEurPerKwh: number;
+  priceMaxEurPerKwh: number;
+  /**
+   * Wat er zonder batterij die dag langs de meter ging, kWh: afname en
+   * teruglevering apart, vóór het netten. Null als de componenten ontbreken.
+   *
+   * De teruglevering is het deel van de zonopwek dat het huis niet zelf
+   * opmaakte. Het is niet de bruto opwek: wat direct werd gebruikt komt nooit
+   * langs de meter en staat in geen enkele bron die deze tool gebruikt.
+   */
+  meterImportKwh: number | null;
+  meterExportKwh: number | null;
 }
 
 /**
@@ -217,6 +298,39 @@ export interface PriceGap {
   exportAtNegativePriceKwh: number;
 }
 
+/**
+ * Waarom de realistische strategie niet aan het optimum komt.
+ *
+ * Het optimum kent de hele periode vooraf; een echte batterij weet twee dingen
+ * niet, en die zijn te scheiden door de strategie één keer te laten draaien met
+ * een perfecte verbruiksvoorspelling maar dezelfde beperkte prijshorizon:
+ *
+ *   prijshorizon    Om 12:30 reiken de day-ahead prijzen tot vanavond 24:00;
+ *                   pas na 13:00 tot morgen 24:00. De batterij plant dus soms
+ *                   zonder te weten wat de nacht erna kost.
+ *   verbruiksfout   Hoeveel zon er morgen valt en hoeveel er verbruikt wordt,
+ *                   is een verwachting uit de voorgaande week. Dat is de grote
+ *                   post: op de echte data 89 tot 94% van het gat.
+ *
+ * Gemeten op één representatief jaar, niet op alle jaren: het kost een extra
+ * doorrekening en de verhouding tussen de twee posten verschilt nauwelijks per
+ * jaar.
+ */
+export interface StrategyGap {
+  /** Het jaar waarop dit is gemeten. */
+  year: number;
+  /** Besparing met perfecte kennis van alles, EUR. */
+  optimalSavingEur: number;
+  /** Besparing met perfect verbruik maar de echte prijshorizon, EUR. */
+  perfectForecastSavingEur: number;
+  /** Besparing zoals de tool hem rapporteert, EUR. */
+  realisticSavingEur: number;
+  /** Verlies doordat de prijzen van morgen pas om 13:00 bekend zijn, EUR. */
+  horizonCostEur: number;
+  /** Verlies doordat zon en verbruik van morgen een verwachting zijn, EUR. */
+  forecastCostEur: number;
+}
+
 export interface AnalysisResult {
   perYear: YearAnalysis[];
   /** Gemiddelde jaarbesparing over de volledige profieljaren, EUR. */
@@ -230,6 +344,8 @@ export interface AnalysisResult {
   stats: KeyStats;
   /** Verliezen per jaar, gemiddeld over de volledige profieljaren. */
   losses: EnergyLosses;
+  /** Waarom de realistische strategie onder het optimum blijft. */
+  gap: StrategyGap | null;
 }
 
 /**
@@ -432,10 +548,17 @@ function analyseWindow(
   entry: AnalysisInput["windows"][number],
   spec: BatterySpec,
   tariff: TariffSpec,
-): { analysis: YearAnalysis; realistic: DispatchResult; baselineCost: number } {
+  /** Een al berekende realistische dispatch voor precies deze spec, indien voorhanden. */
+  realistischAlBerekend?: DispatchResult,
+): {
+  analysis: YearAnalysis;
+  realistic: DispatchResult;
+  optimal: DispatchResult;
+  baselineCost: number;
+} {
   const { window, year, firstDay, lastDay, isFullYear } = entry;
   const base = dispatchBaseline(window, tariff);
-  const real = dispatchRolling(window, spec, tariff);
+  const real = realistischAlBerekend ?? dispatchRolling(window, spec, tariff);
   const opt = dispatchOptimal(window, spec, tariff);
 
   let imp = 0;
@@ -482,7 +605,12 @@ function analyseWindow(
     losses: energyLosses(window, real, spec),
   };
   void totaalBehoefte;
-  return { analysis, realistic: real, baselineCost: base.totalCostEur };
+  return {
+    analysis,
+    realistic: real,
+    optimal: opt,
+    baselineCost: base.totalCostEur,
+  };
 }
 
 /**
@@ -493,7 +621,10 @@ function analyseWindow(
  * ruim drie jaar — terwijl het naast een jaarvolume wordt getoond. Dan lijkt
  * er meer teruglevering in negatieve uren te vallen dan er in een heel jaar is.
  */
-function computePriceGap(windows: AnalysisInput["windows"]): PriceGap {
+function computePriceGap(
+  windows: AnalysisInput["windows"],
+  tariff: TariffSpec,
+): PriceGap {
   const volledig = windows.filter((w) => w.isFullYear);
   const basis = volledig.length > 0 ? volledig : windows;
   const jaren = Math.max(1, basis.length);
@@ -512,7 +643,10 @@ function computePriceGap(windows: AnalysisInput["windows"]): PriceGap {
       const r = window.residualKwh[i]!;
       const ip = window.prices.importPrice[i]!;
       const ep = window.prices.exportPrice[i]!;
-      prijsSom += ep;
+      // De kale marktprijs: de exportprijs zonder de terugleverkosten die er in
+      // buildPriceSeries af zijn gegaan. Anders verschuift het "ongewogen
+      // gemiddelde" mee met een instelling die er niets mee te maken heeft.
+      prijsSom += ep + tariff.feedInCostEurPerKwh;
       stappen++;
       if (ep < 0) negatief++;
       if (r > 0) {
@@ -559,15 +693,138 @@ export function dayBoundaries(
   return { starts, index };
 }
 
+/**
+ * De kerngetallen van één dag.
+ *
+ * De kosten worden hier opnieuw opgeteld over alleen deze dag, met dezelfde
+ * tarieflogica als de jaardoorrekening: bij een negatieve terugleverprijs kost
+ * afgeregeld overschot niets, en teruglevering die wél doorgaat brengt dan geld
+ * mee dat je moet betalen.
+ *
+ * De baseline wordt uit de residual herleid in plaats van uit een aparte
+ * dispatch. Dat kan exact: zonder batterij gaat de residual ongewijzigd het net
+ * op of af, met curtailment op precies dezelfde voorwaarde.
+ */
+export function dayStats(
+  window: Window,
+  dispatch: DispatchResult,
+  spec: BatterySpec,
+  tariff: TariffSpec,
+  start: number,
+  end: number,
+  optimal?: DispatchResult,
+): SampleDayStats {
+  let baselineCost = 0;
+  let batteryCost = 0;
+  let optimalCost = 0;
+  let impBasis = 0;
+  let expBasis = 0;
+  let impBat = 0;
+  let expBat = 0;
+  let geladen = 0;
+  let geleverd = 0;
+  let uitZon = 0;
+  let uitNet = 0;
+  let afgeregeld = 0;
+  let socMax = 0;
+  let prijsMin = Infinity;
+  let prijsMax = -Infinity;
+  let meterImp = 0;
+  let meterExp = 0;
+
+  const standby = standbyKwhPerStep(spec);
+  const parts = window.parts;
+
+  for (let i = start; i < end; i++) {
+    const ip = window.prices.importPrice[i]!;
+    const ep = window.prices.exportPrice[i]!;
+    const r = window.residualKwh[i]!;
+
+    if (ip < prijsMin) prijsMin = ip;
+    if (ip > prijsMax) prijsMax = ip;
+
+    // Zonder batterij: de residual gaat ongewijzigd het net op of af.
+    if (r > 0) {
+      impBasis += r;
+      baselineCost += r * ip;
+    } else if (r < 0) {
+      const overschot = -r;
+      const weg = tariff.allowCurtailment && ep < 0 ? overschot : 0;
+      expBasis += overschot - weg;
+      baselineCost -= (overschot - weg) * ep;
+    }
+
+    // Met batterij: uit de dispatch, die de standby al in het net verwerkt.
+    const gi = dispatch.gridImportKwh[i]!;
+    const ge = dispatch.gridExportKwh[i]!;
+    impBat += gi;
+    expBat += ge;
+    batteryCost += gi * ip - ge * ep;
+    afgeregeld += dispatch.curtailedKwh[i]!;
+
+    if (optimal) {
+      optimalCost +=
+        optimal.gridImportKwh[i]! * ip - optimal.gridExportKwh[i]! * ep;
+    }
+
+    const laden = dispatch.chargeKwh[i]!;
+    const ontladen = dispatch.dischargeKwh[i]!;
+    geladen += laden;
+    geleverd += ontladen;
+    if (laden > 0) {
+      // Zolang er overschot is komt de lading daaruit; de rest is inkoop. Het
+      // standby-verbruik hoort bij het huis, niet bij het overschot.
+      const overschot = Math.max(0, -r - standby);
+      const zon = Math.min(laden, overschot);
+      uitZon += zon;
+      uitNet += laden - zon;
+    }
+    if (dispatch.socKwh[i]! > socMax) socMax = dispatch.socKwh[i]!;
+
+    if (parts) {
+      meterImp += parts.gridImportKwh[i]!;
+      meterExp += parts.gridExportKwh[i]!;
+    }
+  }
+
+  return {
+    baselineCostEur: baselineCost,
+    batteryCostEur: batteryCost,
+    savingEur: baselineCost - batteryCost,
+    optimalSavingEur: optimal ? baselineCost - optimalCost : null,
+    gridImportBaselineKwh: impBasis,
+    gridImportBatteryKwh: impBat,
+    gridExportBaselineKwh: expBasis,
+    gridExportBatteryKwh: expBat,
+    chargedKwh: geladen,
+    deliveredKwh: geleverd,
+    chargedFromSolarKwh: uitZon,
+    chargedFromGridKwh: uitNet,
+    cycles: equivalentCycles(geleverd, spec),
+    socMaxKwh: socMax,
+    // De stand vóór deze dag is de eindstand van het vorige kwartier; op de
+    // eerste dag van het venster begint de batterij leeg.
+    socStartKwh: start > 0 ? dispatch.socKwh[start - 1]! : 0,
+    socEndKwh: end > start ? dispatch.socKwh[end - 1]! : 0,
+    curtailedKwh: afgeregeld,
+    priceMinEurPerKwh: prijsMin === Infinity ? 0 : prijsMin,
+    priceMaxEurPerKwh: prijsMax === -Infinity ? 0 : prijsMax,
+    meterImportKwh: parts ? meterImp : null,
+    meterExportKwh: parts ? meterExp : null,
+  };
+}
+
 /** Snijd één dag uit een venster plus de bijbehorende dispatch. */
 export function extractDay(
   window: Window,
   dispatch: DispatchResult,
   spec: BatterySpec,
+  tariff: TariffSpec,
   start: number,
   end: number,
   label: string,
   date: string,
+  optimal?: DispatchResult,
 ): SampleDay {
   const plak = (arr: { [k: number]: number }): number[] => {
     const uit: number[] = [];
@@ -591,6 +848,9 @@ export function extractDay(
     importPrice: plak(window.prices.importPrice),
     exportPrice: plak(window.prices.exportPrice),
     usableCapacityKwh: usableCapacityKwh(spec),
+    meterExportKwh: window.parts ? plak(window.parts.gridExportKwh) : [],
+    meterImportKwh: window.parts ? plak(window.parts.gridImportKwh) : [],
+    stats: dayStats(window, dispatch, spec, tariff, start, end, optimal),
   };
 }
 
@@ -599,13 +859,25 @@ export function findDay(
   window: Window,
   dispatch: DispatchResult,
   spec: BatterySpec,
+  tariff: TariffSpec,
   isoDate: string,
+  optimal?: DispatchResult,
 ): SampleDay | null {
   const { starts, index } = dayBoundaries(window.startMs);
   for (let d = 0; d + 1 < starts.length; d++) {
     const start = starts[d]!;
     if (index.localDate(window.startMs[start]!) === isoDate) {
-      return extractDay(window, dispatch, spec, start, starts[d + 1]!, "", isoDate);
+      return extractDay(
+        window,
+        dispatch,
+        spec,
+        tariff,
+        start,
+        starts[d + 1]!,
+        "",
+        isoDate,
+        optimal,
+      );
     }
   }
   return null;
@@ -621,7 +893,9 @@ export function findDay(
 function pickSampleDays(
   entry: AnalysisInput["windows"][number],
   spec: BatterySpec,
+  tariff: TariffSpec,
   dispatch: DispatchResult,
+  optimal?: DispatchResult,
 ): SampleDay[] {
   const { window } = entry;
   const n = window.residualKwh.length;
@@ -653,10 +927,12 @@ function pickSampleDays(
       window,
       dispatch,
       spec,
+      tariff,
       g.start,
       g.end,
       label,
       index.localDate(window.startMs[g.start]!),
+      optimal,
     );
   };
 
@@ -664,6 +940,39 @@ function pickSampleDays(
     kies([6, 7, 8], "Een doorsnee zomerdag"),
     kies([12, 1, 2], "Een doorsnee winterdag"),
   ].filter((d): d is SampleDay => d !== null);
+}
+
+/**
+ * Ontleed het gat tussen de realistische strategie en het optimum.
+ *
+ * Eén extra doorrekening: dezelfde rollende strategie, maar met de werkelijke
+ * residual als "voorspelling". Wat er dan nog aan het optimum ontbreekt, komt
+ * uitsluitend door de beperkte prijshorizon en het herplanmoment; de rest van
+ * het gat is de verbruiksvoorspelling.
+ */
+export function computeStrategyGap(
+  entry: AnalysisInput["windows"][number],
+  spec: BatterySpec,
+  tariff: TariffSpec,
+  baselineCost: number,
+  realisticSavingEur: number,
+  optimalSavingEur: number,
+): StrategyGap {
+  const perfect = dispatchRolling(entry.window, spec, tariff, {
+    perfectForecast: true,
+  });
+  const perfectSaving = baselineCost - perfect.totalCostEur;
+
+  // De twee posten kunnen door discretisatieruis een fractie negatief
+  // uitvallen; dat is geen informatieverlies en hoort niet als zodanig getoond.
+  return {
+    year: entry.year,
+    optimalSavingEur,
+    perfectForecastSavingEur: perfectSaving,
+    realisticSavingEur,
+    horizonCostEur: Math.max(0, optimalSavingEur - perfectSaving),
+    forecastCostEur: Math.max(0, perfectSaving - realisticSavingEur),
+  };
 }
 
 export interface AnalysisOptions {
@@ -676,6 +985,15 @@ export interface AnalysisOptions {
    * heeft zolang er geen dag wordt opgevraagd.
    */
   collectDispatches?: DispatchResult[];
+  /**
+   * Wordt gevuld met de perfect-foresight dispatch per venster, in dezelfde
+   * volgorde als `collectDispatches`.
+   *
+   * Nodig om bij een losse dag te laten zien wat er die dag maximaal in zat.
+   * Dat is precies waar de vraag "waar zit het verschil in" wordt beslecht: op
+   * dagniveau zie je of de batterij een piek miste of een dal verkeerd inschatte.
+   */
+  collectOptimal?: DispatchResult[];
 }
 
 export function runAnalysis(
@@ -686,18 +1004,19 @@ export function runAnalysis(
   // hoeveel de batterij er zonder drempel zou maken: pas als hij ze binnen zijn
   // kalenderlevensduur opmaakt, kost een extra beurt iets. Eén proefjaar is
   // genoeg voor die schatting.
+  //
+  // De proefrun draait op volle resolutie, niet op een grof rooster. Dat lijkt
+  // duurder, maar in de regel is de drempel nul — bij vrijwel elke preset —
+  // en dan is de proefrun exact de realistische dispatch van dat jaar en wordt
+  // hij hergebruikt. Netto scheelt dat een halve run. Alleen als de beurten wél
+  // schaars blijken, wordt het proefjaar opnieuw gerekend mét drempel.
   const zonderDrempel: BatterySpec = { ...input.battery, wearCostEurPerKwh: 0 };
   const proef = input.windows.find((w) => w.isFullYear) ?? input.windows[0];
   let verwachteCycli = 0;
+  let proefRun: DispatchResult | undefined;
   if (proef) {
-    // Een grover SoC-rooster volstaat: we hoeven alleen te weten of het aantal
-    // beurten boven of onder de levensduur uitkomt, niet wat het precies is.
-    const p = dispatchRolling(proef.window, zonderDrempel, input.tariff, {
-      socLevels: 41,
-    });
-    let ontladen = 0;
-    for (let i = 0; i < p.dischargeKwh.length; i++) ontladen += p.dischargeKwh[i]!;
-    verwachteCycli = equivalentCycles(ontladen, zonderDrempel);
+    proefRun = dispatchRolling(proef.window, zonderDrempel, input.tariff);
+    verwachteCycli = proefRun.equivalentCycles;
   }
 
   const spec: BatterySpec = {
@@ -711,11 +1030,22 @@ export function runAnalysis(
     ),
   };
 
-  const uitkomsten = input.windows.map((w) => analyseWindow(w, spec, input.tariff));
+  const uitkomsten = input.windows.map((w) =>
+    analyseWindow(
+      w,
+      spec,
+      input.tariff,
+      w === proef && spec.wearCostEurPerKwh === 0 ? proefRun : undefined,
+    ),
+  );
   const perYear = uitkomsten.map((u) => u.analysis);
   if (options.collectDispatches) {
     options.collectDispatches.length = 0;
     for (const u of uitkomsten) options.collectDispatches.push(u.realistic);
+  }
+  if (options.collectOptimal) {
+    options.collectOptimal.length = 0;
+    for (const u of uitkomsten) options.collectOptimal.push(u.optimal);
   }
 
   // Alleen volledige jaren tellen mee voor het gemiddelde en de bandbreedte:
@@ -780,6 +1110,7 @@ export function runAnalysis(
   const toonIndex = referentieIndex >= 0 ? referentieIndex : perYear.length - 1;
   const toonVenster = input.windows[toonIndex];
   const toonDispatch = uitkomsten[toonIndex]?.realistic;
+  const toonOptimaal = uitkomsten[toonIndex]?.optimal;
 
   // Kerncijfers over de volledige jaren, per jaar gemiddeld.
   const gem = (f: (y: YearAnalysis) => number) =>
@@ -846,11 +1177,22 @@ export function runAnalysis(
     maxSavingEur: Math.max(...besparingen),
     finance,
     curve,
-    priceGap: computePriceGap(input.windows),
+    priceGap: computePriceGap(input.windows, input.tariff),
     sampleDays:
       toonVenster && toonDispatch
-        ? pickSampleDays(toonVenster, spec, toonDispatch)
+        ? pickSampleDays(toonVenster, spec, input.tariff, toonDispatch, toonOptimaal)
         : [],
+    gap:
+      referentieIndex >= 0
+        ? computeStrategyGap(
+            referentieEntry,
+            spec,
+            input.tariff,
+            referentieBasis,
+            referentieJaar.realisticSavingEur,
+            referentieJaar.optimalSavingEur,
+          )
+        : null,
   };
 }
 

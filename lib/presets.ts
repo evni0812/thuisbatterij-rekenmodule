@@ -1,10 +1,35 @@
 /**
  * Uitgangswaarden en batterijpresets.
  *
- * De presets komen uit de opgeslagen profielen van het Streamlit-prototype
- * (data/saved_profiles/) en zijn aangevuld met een standby-verbruik, dat daar
- * ontbrak maar bij een klein systeem zwaar meetelt: 15 W continu is 131 kWh per
- * jaar, en bij een batterij van 2 kWh eet dat een flink deel van de opbrengst op.
+ * De lijst is bedoeld als dwarsdoorsnede van wat een Nederlands huishouden in
+ * 2026 daadwerkelijk kan kopen: van een stekkerbatterij van twee kilowattuur
+ * tot een vaste thuisaccu van tien. Modellen die alleen in capaciteit en prijs
+ * op een ander lijken, staan er niet in — die voegen niets toe aan de keuze en
+ * maken de lijst alleen langer.
+ *
+ * PRIJZEN — richtprijs van een wérkende set, peildatum september 2026. Bij de
+ * stekkerbatterijen zit de P1-meter erbij: zonder die meter kan het ding niet
+ * op uurtarieven sturen, en dan is deze hele rekentool niet van toepassing.
+ * Waar de meter niet in de doos zit, is hij opgeteld (circa 25 tot 35 euro).
+ * Bij de twee generieke thuisaccu's is het een geïnstalleerde prijs inclusief
+ * omvormer en montage; dat is wat zo'n systeem in de praktijk kost, en de oude
+ * waarden hier (2.500 en 4.500 euro) waren kale hardwareprijzen die de
+ * businesscase te rooskleurig maakten.
+ *
+ * RENDEMENT — het rondgangsrendement is waar mogelijk een gemeten waarde uit
+ * onafhankelijke tests, niet het getal van het datasheet. Die twee lopen flink
+ * uiteen: fabrikanten meten de cel, de praktijk meet de wandcontactdoos.
+ *
+ * BRUIKBAAR DEEL — 90% voor de stekkerbatterijen en 95% voor de vaste accu's,
+ * als modelaanname. Fabrikanten definiëren "bruikbaar" onderling verschillend
+ * (de een noemt de celcapaciteit, de ander wat eruit komt), dus een uniforme
+ * aanname vergelijkt eerlijker dan de opgaves door elkaar gebruiken.
+ *
+ * STANDBY — het eigen verbruik van de omvormer stond niet in de profielen van
+ * het Streamlit-prototype, maar telt bij een klein systeem zwaar mee: 15 W
+ * continu is 131 kWh per jaar, en bij een batterij van 2 kWh eet dat een flink
+ * deel van de opbrengst op. Waar een test een getal noemt, staat dat getal er;
+ * anders een schatting die past bij de omvormerklasse.
  */
 
 import type { BatterySpec } from "./model/types";
@@ -16,6 +41,8 @@ export interface BatteryPreset {
   capaciteitKwh: number;
   vermogenKw: number;
   prijsEur: number;
+  /** Waar de prijs vandaan komt: wat er wel en niet in zit. */
+  prijsNoot: string;
   spec: Omit<BatterySpec, "wearCostEurPerKwh">;
   cycleLife: number;
 }
@@ -40,66 +67,108 @@ function spec(
 
 export const PRESETS: BatteryPreset[] = [
   {
-    id: "zendure-800pro",
-    naam: "Zendure SolarFlow 800 Pro",
+    id: "zendure-800pro2",
+    naam: "Zendure SolarFlow 800 Pro 2",
     merk: "Zendure",
     capaciteitKwh: 1.92,
     vermogenKw: 0.8,
-    prijsEur: 829,
+    prijsEur: 819,
+    prijsNoot: "789 euro plus de P1-meter van 30",
     spec: spec(1.92, 0.8, 0.88, 0.9, 12),
     cycleLife: 6000,
   },
   {
-    id: "foxess-s22",
-    naam: "FoxESS S22",
-    merk: "FoxESS",
-    capaciteitKwh: 2.1,
+    id: "homewizard-plugin",
+    naam: "HomeWizard Plug-In Battery",
+    merk: "HomeWizard",
+    capaciteitKwh: 2.7,
     vermogenKw: 0.8,
-    prijsEur: 1199,
-    spec: spec(2.1, 0.8, 0.88, 0.9, 12),
+    prijsEur: 1220,
+    prijsNoot: "1.195 euro plus de P1-meter van 25",
+    // 85% is het midden van wat gebruikers meten; het datasheet claimt 92%.
+    spec: spec(2.7, 0.8, 0.85, 0.9, 10),
     cycleLife: 6000,
   },
   {
     id: "anker-solarbank3",
-    naam: "Anker Solarbank 3 E2700 Pro",
+    naam: "Anker SOLIX Solarbank 3 E2700 Pro",
     merk: "Anker",
-    capaciteitKwh: 2.7,
+    capaciteitKwh: 2.69,
     vermogenKw: 0.8,
-    prijsEur: 1099,
-    spec: spec(2.7, 0.8, 0.88, 0.9, 12),
+    prijsEur: 1134,
+    prijsNoot: "1.099 euro plus de P1-meter van 35",
+    // Laadt tot 1.200 W maar levert 800 W terug; het model rekent met de
+    // laagste van de twee, want die bepaalt hoeveel er 's avonds uit kan.
+    spec: spec(2.69, 0.8, 0.8, 0.9, 12),
     cycleLife: 6000,
   },
   {
     id: "zendure-2400ac",
-    naam: "Zendure SolarFlow 2400 AC Plus",
+    naam: "Zendure SolarFlow 2400 AC+",
     merk: "Zendure",
     capaciteitKwh: 2.4,
     vermogenKw: 2.4,
-    prijsEur: 998,
+    prijsEur: 879,
+    prijsNoot: "849 euro plus de P1-meter van 30",
     spec: spec(2.4, 2.4, 0.88, 0.9, 15),
     cycleLife: 6000,
   },
   {
+    id: "marstek-venus-e3",
+    naam: "Marstek Venus E 3.0",
+    merk: "Marstek",
+    capaciteitKwh: 5.12,
+    vermogenKw: 2.5,
+    prijsEur: 1199,
+    prijsNoot: "1.199 euro, P1-meter zit erbij",
+    // 7 W standby is gemeten met een slimme stekker; laag voor deze klasse.
+    spec: spec(5.12, 2.5, 0.83, 0.9, 7),
+    cycleLife: 6000,
+  },
+  {
+    id: "anker-solarbank-max",
+    naam: "Anker SOLIX Solarbank Max AC",
+    merk: "Anker",
+    capaciteitKwh: 7,
+    vermogenKw: 3.5,
+    prijsEur: 2134,
+    prijsNoot: "2.099 euro plus de P1-meter van 35",
+    spec: spec(7, 3.5, 0.85, 0.9, 20),
+    cycleLife: 6000,
+  },
+  {
     id: "thuisaccu-5kwh",
-    naam: "Thuisaccu 5 kWh",
+    naam: "Thuisaccu 5 kWh, geïnstalleerd",
     merk: "Generiek",
     capaciteitKwh: 5,
     vermogenKw: 2.5,
-    prijsEur: 2500,
+    prijsEur: 3750,
+    prijsNoot: "inclusief omvormer en installatie",
     spec: spec(5, 2.5, 0.9, 0.95, 20),
     cycleLife: 6000,
   },
   {
     id: "thuisaccu-10kwh",
-    naam: "Thuisaccu 10 kWh",
+    naam: "Thuisaccu 10 kWh, geïnstalleerd",
     merk: "Generiek",
     capaciteitKwh: 10,
     vermogenKw: 3.6,
-    prijsEur: 4500,
+    prijsEur: 5750,
+    prijsNoot: "inclusief omvormer en installatie",
     spec: spec(10, 3.6, 0.9, 0.95, 25),
     cycleLife: 6000,
   },
 ];
+
+/**
+ * Waar de tool mee opent. De Marstek is het meest verkochte model van dit
+ * moment en zit qua maat in het midden van de lijst, dus wie niets kiest ziet
+ * een uitkomst die voor de meeste huishoudens herkenbaar is.
+ */
+export const STANDAARD_PRESET_ID = "marstek-venus-e3";
+
+/** Peildatum van de prijzen hierboven, voor wie ze wil narekenen. */
+export const PRIJSPEILDATUM = "september 2026";
 
 /**
  * Gemiddelde Nederlandse aansluiting mét zonnepanelen, als startpunt.

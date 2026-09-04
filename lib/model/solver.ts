@@ -138,13 +138,26 @@ export function planSocPath(
     for (let j = 0; j < levels; j++) next[j] = -j * stepKwh * eta * avgImport;
   }
 
-  // De gekozen actie per (stap, niveau), als AC-uitwisseling in kWh.
-  const action = new Float64Array(n * levels);
+  // De gekozen actie per (stap, niveau), als AC-uitwisseling in kWh. Float32
+  // volstaat: een kwartieractie is hooguit enkele kWh en de zeven decimalen van
+  // een float32 zitten ver onder de gridstap. Dat halveert het geheugen, en
+  // deze tabel is de grootste allocatie van de hele doorrekening — voor een
+  // heel jaar 35.040 × niveaus × 4 bytes, dus 14 MB bij 101 niveaus en 56 MB
+  // bij de 401 die een grote batterij met klein vermogen nodig heeft.
+  const action = new Float32Array(n * levels);
   // Kandidaat-acties in een vooraf gealloceerde buffer: deze lus draait
   // miljoenen keren per jaar, en een groeiende JS-array kost daar meer dan de
   // rekenkunde zelf.
   const cand = new Float64Array(2 * ACTION_SUBDIVISIONS + 4);
 
+  // ── Waarom deze lus niet verder is geoptimaliseerd ──────────────────────
+  // Delingen vervangen door vermenigvuldigen met het omgekeerde, en de
+  // interpolatie herschrijven als n0 + (n1 − n0)·frac, gaf 10 tot 30% winst —
+  // maar ook 12 cent verschil op een jaar. Het laatste bit verschuift, en in
+  // een argmin over bijna gelijke kandidaten kantelt dat soms een keuze. Een
+  // optimalisatie hoort het antwoord niet te veranderen. Wat bit-exact kon
+  // (aanroepen hoisten, floor via `| 0`) bleek binnen de meetruis: V8 doet dat
+  // al. Dus staat hier de leesbare versie.
   for (let t = to - 1; t >= from; t--) {
     const r = residual[t]!;
     const ip = importPrice[t]!;
@@ -236,13 +249,33 @@ export function planSocPath(
  *   gebeurt. Aanzetten wanneer het plan op een VOORSPELLING is gemaakt: dan doet
  *   de regelaar wat elke echte omvormer doet — onverwacht overschot alsnog
  *   opslaan (zelfconsumptie gaat voor, terugleveren levert veel minder op) en
- *   nooit méér ontladen dan het tekort vraagt.
+ *   een tekort dat kleiner uitvalt dan verwacht niet met extra ontlading naar
+ *   het net opvullen.
  *
  *   Uitzetten bij perfect foresight: het plan is dan al optimaal op de
  *   werkelijke residual, en elke "correctie" maakt het aantoonbaar slechter.
  *   Met correcties aan is het resultaat niet meer monotoon in capaciteit en
  *   vermogen, en kan de rollende strategie er zelfs bovenuit komen — waarmee de
  *   benchmark waardeloos zou zijn.
+ *
+ * @param plannedResidual  De residual waarop het plan is gemaakt, geïndexeerd
+ *   als het venster. Nodig om bij `adaptToActual` te onderscheiden wat het plan
+ *   BEDOELDE: ontladen voor het eigen tekort, of bewust verkopen aan het net.
+ *
+ *   ── Waarom dat onderscheid er moet zijn ──────────────────────────────────
+ *   De planner mag verkopen aan het net op dure uren, en het optimum doet dat
+ *   ook. Toen de uitvoerder de ontlading domweg op het werkelijke tekort
+ *   afkapte, werd elke geplande verkoop stilzwijgend geblokkeerd: de planner
+ *   optimaliseerde voor een vrijheid die de uitvoerder niet gaf. Voor een
+ *   5 kWh-batterij op 2,5 kW kostte dat 21 euro op 198 per jaar, en de
+ *   "capture rate" vergeleek daardoor een beperkt beleid met een onbeperkt
+ *   optimum.
+ *
+ *   Nu mag de ontlading boven het werkelijke tekort uitkomen tot precies wat het
+ *   plan aan export bedoelde. Een tekort dat kleiner uitvalt dan voorspeld
+ *   wordt dus nog steeds niet met extra netlevering opgevuld — dat blijft de
+ *   verstandige reflex bij een voorspelfout — maar bewuste verkoop gaat door.
+ *   Zonder plan-residual (perfect foresight) is er niets te onderscheiden.
  *
  * @returns de lading aan het einde van het blok
  */
@@ -256,6 +289,7 @@ export function executePath(
   socStart: number,
   out: DispatchResult,
   adaptToActual = true,
+  plannedResidual: Float64Array | null = null,
 ): number {
   const usable = usableCapacityKwh(spec);
   const maxIn = maxChargeKwhPerStep(spec);
@@ -291,8 +325,23 @@ export function executePath(
         }
         discharge = 0;
       } else if (r > 0) {
-        // Tekort: ontlaad hooguit tot het tekort gedekt is.
-        discharge = Math.min(discharge, r);
+        // Tekort: ontlaad tot het tekort gedekt is, plus wat het plan bewust
+        // aan het net wilde verkopen.
+        //
+        // Wat het plan BEDOELDE lees je af aan het pad zelf: de stap tussen
+        // twee opeenvolgende doelen. Niet aan `discharge` hierboven, want die
+        // volgt uit het verschil met de werkelijke lading, en dat verschil
+        // groeit ook door drift na een voorspelfout — een batterij die gisteren
+        // minder kwijt kon dan gepland, zou vandaag die achterstand als
+        // "geplande verkoop" naar het net duwen.
+        let geplandeExport = 0;
+        if (plannedResidual) {
+          const doelVorig = local === 0 ? socStart : socTarget[local - 1]!;
+          const geplandeOntlading = Math.max(0, (doelVorig - socTarget[local]!) * eta);
+          const verwachtTekort = Math.max(0, plannedResidual[t]! + standby);
+          geplandeExport = Math.max(0, geplandeOntlading - verwachtTekort);
+        }
+        discharge = Math.min(discharge, r + geplandeExport);
       }
     }
 

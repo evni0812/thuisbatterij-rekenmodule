@@ -51,24 +51,52 @@ export const DAY_AHEAD_PUBLICATION_HOUR = 13;
 const FORECAST_WINDOW_DAYS = 7;
 
 /**
- * Herplanintervaal in kwartieren; 96 is één keer per etmaal.
+ * Standaard wordt één keer per etmaal herpland, op het publicatie-uur, zodat
+ * elk plan de verse day-ahead prijzen meeneemt en een horizon van ruim 30 uur
+ * heeft.
  *
- * Herplanmomenten worden uitgelijnd op het publicatie-uur, zodat elk plan de
- * verse day-ahead prijzen meeneemt en een horizon van ruim 30 uur heeft.
+ * Dat moment wordt elke dag opnieuw in lokale tijd opgezocht, niet als "96
+ * kwartieren verder". Een etmaal is niet altijd 96 kwartieren: op de dag dat de
+ * klok teruggaat zijn het er 100, en wie dan 96 optelt komt op 12:00 uit — vóór
+ * de publicatie. Elk plan daarna zag alleen nog de prijzen tot middernacht en
+ * nooit meer die van morgen. Voor een venster dat in de zomertijd begon
+ * scheelde dat 3% van de besparing over het najaar.
  *
  * Vaker herplannen is gemeten niet beter: van eens per dag tot elk kwartier
- * blijft de opbrengst rond 90% van het optimum en blijft de restdip in de
- * monotonie rond 1%. Het kost alleen evenredig meer rekentijd — elk kwartier
- * herplannen maakt de doorrekening zes keer zo traag zonder iets op te leveren.
- * De voorspelfout, niet de planfrequentie, is wat de strategie beperkt.
+ * blijft de restdip in de monotonie rond 1%. Het kost alleen evenredig meer
+ * rekentijd — elk kwartier herplannen maakt de doorrekening zes keer zo traag
+ * zonder iets op te leveren. De voorspelfout, niet de planfrequentie, is wat de
+ * strategie beperkt.
  */
-const DEFAULT_REPLAN_STEPS = 96;
-
 export interface RollingOptions {
   socLevels?: number;
+  /**
+   * Vast herplaninterval in kwartieren, voor experimenten. Zonder deze optie
+   * wordt op elk publicatie-uur herpland.
+   */
   replanSteps?: number;
   /** Plan op de werkelijke residual in plaats van op een voorspelling. */
   perfectForecast?: boolean;
+}
+
+/**
+ * Indices van de kwartieren waarop de day-ahead prijzen binnenkomen: het eerste
+ * kwartier van het publicatie-uur, elke lokale dag.
+ */
+export function publicationMoments(
+  startMs: Float64Array,
+  index: LocalTimeIndex,
+): number[] {
+  const uit: number[] = [];
+  let vorigUur = -1;
+  for (let i = 0; i < startMs.length; i++) {
+    const uur = index.localHour(startMs[i]!);
+    if (uur === DAY_AHEAD_PUBLICATION_HOUR && vorigUur !== DAY_AHEAD_PUBLICATION_HOUR) {
+      uit.push(i);
+    }
+    vorigUur = uur;
+  }
+  return uit;
 }
 
 /**
@@ -124,6 +152,14 @@ export function knownHorizonEnd(
  * Rond de zomertijdovergangen verschilt het aantal kwartieren per dag, dus we
  * indexeren op positie binnen de dag en slaan posities over die op een eerdere
  * dag niet bestonden.
+ *
+ * Alleen metingen van vóór het planmoment tellen mee. Het plan voor morgen
+ * wordt om 13:00 gemaakt; de rest van vandaag is dan nog niet gemeten en mag
+ * dus niet in het gemiddelde voor morgenavond zitten. Het effect was klein
+ * (minder dan tien cent per jaar), maar een strategie die "geen kennis van de
+ * toekomst" claimt, hoort die ook niet stiekem te hebben.
+ *
+ * @param from  het planmoment: metingen vanaf deze index zijn nog onbekend
  */
 export function forecastResidual(
   actual: Float64Array,
@@ -144,7 +180,7 @@ export function forecastResidual(
     for (let prev = firstDay; prev < day; prev++) {
       const idx = dayStarts[prev]! + pos;
       const end = prev + 1 < dayStarts.length ? dayStarts[prev + 1]! : n;
-      if (idx < end) {
+      if (idx < end && idx < from) {
         sum += actual[idx]!;
         count++;
       }
@@ -180,7 +216,7 @@ export function dispatchRolling(
     maxDischargeKwhPerStep(spec) / spec.efficiency,
   );
   const levels = chooseSocLevels(usable, maxTransfer, options.socLevels);
-  const replanSteps = options.replanSteps ?? DEFAULT_REPLAN_STEPS;
+  const replanSteps = options.replanSteps;
 
   const index = new LocalTimeIndex(
     window.startMs[0]!,
@@ -198,16 +234,20 @@ export function dispatchRolling(
   const planResidual = new Float64Array(n);
   let soc = 0;
 
-  // Het eerste herplanmoment valt op het eerstvolgende publicatie-uur; daarna
-  // telkens een vast interval later. Zo maakt de batterij zijn plan op het
-  // moment dat de nieuwe prijzen binnenkomen, niet midden in de nacht.
-  let volgendeHerplan = 0;
-  for (let i = 0; i < n; i++) {
-    if (index.localHour(window.startMs[i]!) === DAY_AHEAD_PUBLICATION_HOUR) {
-      volgendeHerplan = i;
-      break;
+  // Herplannen gebeurt op elk publicatie-uur: het moment dat de nieuwe prijzen
+  // binnenkomen, niet midden in de nacht. Bij een vast interval (experimenten)
+  // begint de reeks op het eerste publicatie-uur en telt daarna door.
+  const publicaties = publicationMoments(window.startMs, index);
+  let publicatieIdx = 0;
+  let volgendeHerplan = publicaties[0] ?? n;
+
+  const naVolgende = (vanaf: number): number => {
+    if (replanSteps !== undefined) return vanaf + replanSteps;
+    while (publicatieIdx < publicaties.length && publicaties[publicatieIdx]! <= vanaf) {
+      publicatieIdx++;
     }
-  }
+    return publicatieIdx < publicaties.length ? publicaties[publicatieIdx]! : n;
+  };
 
   for (let t = 0; t < n; ) {
     const horizonTo = Math.max(
@@ -236,7 +276,7 @@ export function dispatchRolling(
     // Alleen het eerste stuk van het plan wordt uitgevoerd; daarna herplannen we
     // met de werkelijke lading en een bijgewerkte verwachting.
     // Loop tot het volgende herplanmoment, maar nooit voorbij de horizon.
-    if (volgendeHerplan <= t) volgendeHerplan = t + replanSteps;
+    if (volgendeHerplan <= t) volgendeHerplan = naVolgende(t);
     const execTo = Math.min(volgendeHerplan, horizonTo, n);
     soc = executePath(
       window,
@@ -247,8 +287,12 @@ export function dispatchRolling(
       tariff,
       soc,
       out,
+      true,
+      // De uitvoerder moet weten wat het plan bedoelde: eigen tekort dekken of
+      // bewust verkopen. Zie executePath().
+      planResidual,
     );
-    if (execTo >= volgendeHerplan) volgendeHerplan += replanSteps;
+    if (execTo >= volgendeHerplan) volgendeHerplan = naVolgende(execTo);
     t = execTo;
   }
   return finalize(window, spec, tariff, out);

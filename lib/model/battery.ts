@@ -74,10 +74,18 @@ export function marginalWearCostPerKwh(
   const verwachtTotaal = expectedCyclesPerYear * calendarYears;
   if (verwachtTotaal <= cycleLife) return 0;
 
-  // De beurten zijn schaars: schaal de prijs naar de mate van schaarste. Wie
-  // twee keer zoveel beurten wil als er zijn, moet ze twee keer zo streng
-  // afwegen. Zo komt het gebruik vanzelf in de buurt van wat de batterij aankan.
-  return vol * Math.min(1, (verwachtTotaal - cycleLife) / cycleLife + 0.5);
+  // De beurten zijn schaars: laat de prijs lineair oplopen met de mate van
+  // schaarste, vanaf nul op de grens tot de volle prijs bij twee keer zoveel
+  // beurten als er zijn. Zo komt het gebruik vanzelf in de buurt van wat de
+  // batterij aankan.
+  //
+  // Vanaf NUL, niet vanaf de helft. De aanloop begon eerder op 0,5 × vol, en dan
+  // sprong de drempel bij de FoxESS-preset van 0,00 naar 5,60 ct/kWh tussen 400
+  // en 401 verwachte beurten per jaar. Omdat die verwachting uit een proefrun
+  // komt, wisselde de dispatch abrupt van gedrag bij een kleine wijziging in
+  // capaciteit of vermogen — een sprong die in het raster van batterijmaten als
+  // een dip zichtbaar werd.
+  return vol * Math.min(1, (verwachtTotaal - cycleLife) / cycleLife);
 }
 
 /**

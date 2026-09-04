@@ -80,6 +80,18 @@ export interface Window {
    */
   residualKwh: Float64Array;
   prices: PriceSeries;
+  /**
+   * De twee reeksen waaruit `residualKwh` is samengesteld, kWh per kwartier.
+   *
+   * Optioneel, en nergens nodig om te rekenen: de dispatch werkt uitsluitend op
+   * de netto residual. Ze zijn er om bij één dag te kunnen laten zien wat er
+   * van het dak kwam en wat het huis van het net haalde, want in de netto reeks
+   * vallen die twee tegen elkaar weg.
+   */
+  parts?: {
+    gridImportKwh: Float64Array;
+    gridExportKwh: Float64Array;
+  };
 }
 
 /** Uitkomst van één doorrekening. */

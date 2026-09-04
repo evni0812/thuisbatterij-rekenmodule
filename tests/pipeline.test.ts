@@ -18,7 +18,7 @@ import { addDays, buildQuarterAxis, localMidnightUtcMs } from "../lib/data/timea
 import { dispatchBaseline } from "../lib/model/dispatch-baseline";
 import { dispatchOptimal } from "../lib/model/dispatch-optimal";
 import { dispatchRolling } from "../lib/model/dispatch-rolling";
-import { buildResidual, summarizeResidual } from "../lib/model/residual";
+import { buildResidual, solveNettingScale, summarizeResidual } from "../lib/model/residual";
 import { buildPriceSeries } from "../lib/model/tariff";
 import type { BatterySpec, HouseholdSpec, TariffSpec, Window } from "../lib/model/types";
 
@@ -150,7 +150,7 @@ describe("assets", () => {
 });
 
 describe("volumes", () => {
-  it("schaalt naar de opgegeven jaarvolumes", () => {
+  it("verliest zonder schaling volume aan het netten", () => {
     const prof = profileYear(DOMAIN, 2025);
     const residual = buildResidual(
       prof.importFraction,
@@ -158,16 +158,59 @@ describe("volumes", () => {
       HOUSEHOLD,
     );
     const s = summarizeResidual(residual, HOUSEHOLD);
-    // Netto salderen binnen het kwartier: afname en teruglevering vallen deels
-    // tegen elkaar weg, dus de netto volumes liggen onder de invoer.
-    expect(s.gridImportKwh).toBeGreaterThan(0);
-    expect(s.gridExportKwh).toBeGreaterThan(0);
-    expect(s.gridImportKwh).toBeLessThanOrEqual(2500);
-    expect(s.gridExportKwh).toBeLessThanOrEqual(2000);
+    // Netto salderen binnen het kwartier: waar E17 en E18 elkaar overlappen
+    // valt volume weg. Op deze data is dat ruim een zesde van de afname.
+    expect(s.gridImportKwh).toBeLessThan(2500 * 0.9);
+    expect(s.gridExportKwh).toBeLessThan(2000 * 0.9);
     // Het verschil tussen afname en teruglevering blijft wel behouden: het is
     // de som van de residual, en die is per constructie 2500 - 2000. De marge
     // is de float32-precisie van de fracties, opgeteld over 35.040 kwartieren.
     expect(s.gridImportKwh - s.gridExportKwh).toBeCloseTo(2500 - 2000, 1);
+  });
+
+  it("reproduceert met schaling exact de meterstanden", () => {
+    /**
+     * Eén meter kan binnen een kwartier niet tegelijk afnemen en terugleveren,
+     * dus de jaartotalen op de afrekening zijn al genette sommen. Het model
+     * hoort ze terug te geven, niet 83% ervan.
+     */
+    for (const year of [2024, 2025]) {
+      const prof = profileYear(DOMAIN, year);
+      const scale = solveNettingScale(prof.importFraction, prof.exportFraction, HOUSEHOLD);
+      // Beide factoren liggen boven 1 (er moet volume bij), en niet absurd ver.
+      expect(scale.importScale).toBeGreaterThan(1);
+      expect(scale.exportScale).toBeGreaterThan(1);
+      expect(scale.importScale).toBeLessThan(1.5);
+      expect(scale.exportScale).toBeLessThan(1.5);
+
+      const residual = buildResidual(
+        prof.importFraction,
+        prof.exportFraction,
+        HOUSEHOLD,
+        prof.startMs,
+        scale,
+      );
+      const s = summarizeResidual(residual, HOUSEHOLD);
+      expect(s.gridImportKwh).toBeCloseTo(2500, 0);
+      expect(s.gridExportKwh).toBeCloseTo(2000, 0);
+    }
+  });
+
+  it("laat de schaling van een vol jaar een deeljaar niet opblazen", () => {
+    // De factoren van 2025 op het deeljaar 2023 (april t/m december): de
+    // afname hoort onder een heel jaar te blijven, de teruglevering vrijwel
+    // compleet te zijn, precies zoals de ongeschaalde fracties dat al deden.
+    const vol = profileYear(DOMAIN, 2025);
+    const scale = solveNettingScale(vol.importFraction, vol.exportFraction, HOUSEHOLD);
+    const deel = profileYear(DOMAIN, 2023);
+    const s = summarizeResidual(
+      buildResidual(deel.importFraction, deel.exportFraction, HOUSEHOLD, deel.startMs, scale),
+      HOUSEHOLD,
+    );
+    expect(s.importFractionOfYear).toBeGreaterThan(0.6);
+    expect(s.importFractionOfYear).toBeLessThan(0.85);
+    expect(s.exportFractionOfYear).toBeGreaterThan(s.importFractionOfYear);
+    expect(s.exportFractionOfYear).toBeLessThanOrEqual(1.02);
   });
 });
 

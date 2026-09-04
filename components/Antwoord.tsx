@@ -15,10 +15,18 @@ export function Antwoord({
   result,
   investeringEur,
   bezig,
+  heffingVanNu = false,
 }: {
   result: AnalysisResult;
   investeringEur: number;
   bezig: boolean;
+  /**
+   * Er is gerekend met de energiebelasting en opslag van nu in plaats van die
+   * van toen. De aanhef moet dat zeggen: de heffing was in 2024 en 2025 een
+   * kwart tot een derde hoger dan nu, en de besparing schaalt daar bijna
+   * één-op-één mee.
+   */
+  heffingVanNu?: boolean;
 }) {
   const { averageSavingEur, minSavingEur, maxSavingEur, finance } = result;
   const spreiding = maxSavingEur - minSavingEur > 1;
@@ -27,7 +35,11 @@ export function Antwoord({
 
   return (
     <section className={bezig ? "antwoord bezig" : "antwoord"} aria-live="polite">
-      <p className="antwoord-aanhef">Zonder saldering had deze batterij je</p>
+      <p className="antwoord-aanhef">
+        {heffingVanNu
+          ? "Zonder saldering, met de energiebelasting van nu, had deze batterij je"
+          : "Zonder saldering had deze batterij je"}
+      </p>
       <p className="antwoord-bedrag">
         {euro(averageSavingEur)}
         <span className="antwoord-eenheid">per jaar</span>

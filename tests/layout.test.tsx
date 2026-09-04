@@ -190,7 +190,11 @@ describe("kolomindeling van het dagprofiel", () => {
     );
     // Op een zomerdag laadt de batterij uit eigen zon en gebruikt hij dat zelf;
     // dat onderscheid is het hele verhaal van dit paneel.
-    expect(namen).toContain("zon over");
+    //
+    // "netto over" heette eerder "zon over". Dat was verwarrend zodra er ook
+    // een lijn bij kwam voor de zon die de meter passeerde: die twee schelen
+    // precies wat het huis op dat moment zelf verbruikte.
+    expect(namen).toContain("netto over");
     expect(namen).toContain("opgeslagen");
     expect(namen).toContain("zelf gebruikt");
   });

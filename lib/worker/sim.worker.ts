@@ -16,13 +16,24 @@ import {
 } from "../data/loader";
 import { addDays, localMidnightUtcMs } from "../data/timeaxis";
 import type { Manifest } from "../data/manifest";
-import { equivalentCycles, marginalWearCostPerKwh } from "../model/battery";
+import { marginalWearCostPerKwh } from "../model/battery";
 import { dispatchBaseline } from "../model/dispatch-baseline";
+import { dispatchOptimal } from "../model/dispatch-optimal";
 import { dispatchRolling } from "../model/dispatch-rolling";
-import { findDay, runAnalysis, type AnalysisInput } from "../model/analysis";
-import { buildResidual } from "../model/residual";
+import {
+  findDay,
+  runAnalysis,
+  type AnalysisInput,
+  type SampleDay,
+} from "../model/analysis";
+import {
+  buildResidualParts,
+  GEEN_SCHALING,
+  solveNettingScale,
+  type NettingScale,
+} from "../model/residual";
 import { buildPriceSeries } from "../model/tariff";
-import type { BatterySpec, DispatchResult, TariffSpec } from "../model/types";
+import type { BatterySpec, DispatchResult } from "../model/types";
 import type {
   Configuration,
   GridPoint,
@@ -115,6 +126,43 @@ function lowerBound(axis: Float64Array, target: number): number {
   return lo;
 }
 
+/** Het meest recente jaar waarvoor er prijzen zijn. */
+function laatstePrijsjaar(m: Manifest): string {
+  return Object.keys(m.prijzen).sort().at(-1)!;
+}
+
+/**
+ * Schaalfactoren voor het netten, per netgebied en per stel jaarvolumes.
+ *
+ * Gebufferd, want de oplossing kost een tiental passes over een jaar en het
+ * antwoord verandert alleen als het netgebied of de meterstanden veranderen —
+ * niet als de gebruiker aan de batterij schuift.
+ */
+const scaleCache = new Map<string, NettingScale>();
+
+async function nettingScaleFor(
+  m: Manifest,
+  config: Configuration,
+): Promise<NettingScale> {
+  const hh = config.household;
+  const key = `${config.domain}:${hh.annualGridImportKwh}:${hh.annualGridExportKwh}`;
+  const hit = scaleCache.get(key);
+  if (hit) return hit;
+
+  const jaren = Object.entries(m.profielen[config.domain] ?? {})
+    .filter(([, info]) => info.volledig_jaar)
+    .map(([y]) => Number(y))
+    .sort((a, b) => b - a);
+  // Zonder vol jaar valt er niets betrouwbaars op te lossen; dan blijft de
+  // reeks ongeschaald en komen de volumes onder de meterstanden uit.
+  if (jaren.length === 0) return GEEN_SCHALING;
+
+  const prof = await getProfile(config.domain, jaren[0]!);
+  const scale = solveNettingScale(prof.importFraction, prof.exportFraction, hh);
+  scaleCache.set(key, scale);
+  return scale;
+}
+
 async function buildInput(config: Configuration): Promise<AnalysisInput> {
   const m = manifest!;
   const jaren = yearsInRange(m, config.domain, config.from, config.to);
@@ -123,6 +171,19 @@ async function buildInput(config: Configuration): Promise<AnalysisInput> {
       `geen profieldata voor netgebied ${config.domain} tussen ${config.from} en ${config.to}`,
     );
   }
+
+  // De schaalfactoren die de genette reeks op de meterstanden laten uitkomen
+  // worden op één VOL kalenderjaar bepaald en voor alle jaren gebruikt, ook de
+  // deeljaren. Een deeljaar zou anders de jaartotalen in een deel van het jaar
+  // proppen. Het meest recente volle jaar is het representatiefst.
+  const schaling = await nettingScaleFor(m, config);
+
+  // Zonder historische heffing rekenen we met de heffing van nu: die van het
+  // meest recente prijsjaar in de data, tenzij de gebruiker er zelf een opgaf.
+  const actueleHeffing =
+    config.tariff.energyTaxEurPerKwh > 0
+      ? config.tariff.energyTaxEurPerKwh
+      : m.prijzen[laatstePrijsjaar(m)]!.jaarconstante_eur_per_kwh;
 
   const windows: AnalysisInput["windows"] = [];
   for (const year of jaren) {
@@ -134,12 +195,30 @@ async function buildInput(config: Configuration): Promise<AnalysisInput> {
     const startMs = prof.startMs.slice(start, end);
     const market = expandPricesToQuarters(startMs, price, "market");
 
-    // Standaard rekenen we met de heffing zoals die in dat jaar werkelijk gold,
-    // afgeleid uit allInPrijs minus marktprijs. Dat maakt de uitkomst een
-    // tegenfeitelijke doorrekening van wat er echt gebeurd is, geen voorspelling.
-    const tariff = config.useHistoricalLevy
-      ? { ...config.tariff, energyTaxEurPerKwh: price.levyEurPerKwh }
-      : config.tariff;
+    // Standaard rekenen we met de heffing zoals die op elk uur werkelijk gold:
+    // allInPrijs minus marktprijs, per uur, want binnen een jaar verschuift hij
+    // (2025: 17,13 ct tot september, daarna 14,29 ct). Dat maakt de uitkomst
+    // een tegenfeitelijke doorrekening van wat er echt gebeurd is.
+    //
+    // Met de heffing van nu wordt dezelfde vraag naar het heden getrokken: wat
+    // had deze batterij opgeleverd op de prijzen van toen, maar met de
+    // belasting en opslag van vandaag. Dat is wat een koper wil weten.
+    let heffing: Float64Array;
+    if (config.useHistoricalLevy) {
+      const allIn = expandPricesToQuarters(startMs, price, "allIn");
+      heffing = new Float64Array(market.length);
+      for (let i = 0; i < heffing.length; i++) heffing[i] = allIn[i]! - market[i]!;
+    } else {
+      heffing = new Float64Array(market.length).fill(actueleHeffing);
+    }
+
+    const delen = buildResidualParts(
+      prof.importFraction.slice(start, end),
+      prof.exportFraction.slice(start, end),
+      config.household,
+      startMs,
+      schaling,
+    );
 
     windows.push({
       year,
@@ -151,12 +230,12 @@ async function buildInput(config: Configuration): Promise<AnalysisInput> {
         prof.isFullYear,
       window: {
         startMs,
-        residualKwh: buildResidual(
-          prof.importFraction.slice(start, end),
-          prof.exportFraction.slice(start, end),
-          config.household,
-        ),
-        prices: buildPriceSeries(market, tariff),
+        residualKwh: delen.residualKwh,
+        parts: {
+          gridImportKwh: delen.gridImportKwh,
+          gridExportKwh: delen.gridExportKwh,
+        },
+        prices: buildPriceSeries(market, config.tariff, heffing),
       },
     });
   }
@@ -209,31 +288,45 @@ async function runGrid(
     const cap = capacities[r]!;
     const points: GridPoint[] = [];
 
+    // De investering schaalt mee met de capaciteit: een batterij van 20 kWh kost
+    // niet hetzelfde als de gekozen batterij van 2 kWh. Zonder die correctie
+    // kreeg elke maat de prijs van de gekozen batterij, en werd een grote
+    // batterij vrijwel zonder slijtagedrempel doorgerekend.
+    const prijsPerKwh =
+      invoer.battery.capacityKwh > 0
+        ? config.investmentEur / invoer.battery.capacityKwh
+        : 0;
+
     for (const kw of powers) {
-      const spec: BatterySpec = {
+      const zonderDrempel: BatterySpec = {
         ...invoer.battery,
         capacityKwh: cap,
         maxChargeKw: kw,
         maxDischargeKw: kw,
-        // Voor het raster schatten we de beurten per maat uit een proefrun
-        // zonder drempel; anders zou een grote batterij ten onrechte streng
-        // worden afgerekend op beurten die hij nooit opmaakt.
-        wearCostEurPerKwh: marginalWearCostPerKwh(
-          config.investmentEur,
-          config.cycleLife,
-          { ...invoer.battery, capacityKwh: cap },
-          rasterCycli(entry, { ...invoer.battery, capacityKwh: cap, maxChargeKw: kw, maxDischargeKw: kw }, invoer.tariff),
-          config.analysisYears,
-        ),
+        wearCostEurPerKwh: 0,
       };
-      const res = dispatchRolling(entry.window, spec, invoer.tariff);
-      let ontladen = 0;
-      for (let i = 0; i < res.dischargeKwh.length; i++) ontladen += res.dischargeKwh[i]!;
+      // Eerst zonder drempel: dat vertelt of de beurten voor deze maat schaars
+      // zijn. Zijn ze dat niet, dan is de drempel nul en ís deze run al het
+      // antwoord. Alleen bij schaarste volgt een tweede run mét drempel. Zo
+      // kost het raster in de regel één doorrekening per punt in plaats van
+      // twee — en bij de presets zijn de beurten bijna nooit schaars.
+      const vrij = dispatchRolling(entry.window, zonderDrempel, invoer.tariff);
+      const wear = marginalWearCostPerKwh(
+        prijsPerKwh * cap,
+        config.cycleLife,
+        zonderDrempel,
+        vrij.equivalentCycles,
+        config.analysisYears,
+      );
+      const res =
+        wear > 0
+          ? dispatchRolling(entry.window, { ...zonderDrempel, wearCostEurPerKwh: wear }, invoer.tariff)
+          : vrij;
       points.push({
         capacityKwh: cap,
         powerKw: kw,
         savingEur: basis.totalCostEur - res.totalCostEur,
-        cyclesPerYear: equivalentCycles(ontladen, spec),
+        cyclesPerYear: res.equivalentCycles,
       });
     }
 
@@ -246,28 +339,114 @@ async function runGrid(
 /** Volgnummer van het raster dat nu mag draaien; ouder werk stopt vanzelf. */
 let huidigeGrid = -1;
 
-/** Beurten per jaar zonder drempel, voor de marginale slijtageprijs. */
-function rasterCycli(
-  entry: AnalysisInput["windows"][number],
-  spec: BatterySpec,
-  tariff: TariffSpec,
-): number {
-  const p = dispatchRolling(entry.window, { ...spec, wearCostEurPerKwh: 0 }, tariff);
-  let ontladen = 0;
-  for (let i = 0; i < p.dischargeKwh.length; i++) ontladen += p.dischargeKwh[i]!;
-  return equivalentCycles(ontladen, spec);
-}
-
 /**
  * De laatste doorrekening, bewaard zodat elke kalenderdag opvraagbaar is zonder
  * opnieuw te rekenen. De dispatch over een heel jaar staat er al; er hoeft
  * alleen een dag uit gesneden te worden.
+ *
+ * ── Waarom hier een sleutel bij hoort ───────────────────────────────────────
+ * Een resultaat kan ook uit de browsercache komen. Dan heeft de worker nooit
+ * gerekend en stond hier `null`, waardoor élke dagaanvraag afketste op "er is
+ * nog geen doorrekening" — en die fout werd in de UI stilzwijgend genegeerd,
+ * want hij hoorde bij een ander volgnummer dan de lopende analyse. Voor de
+ * gebruiker deed de dagkiezer dus gewoon niets, en juist na een refresh, want
+ * dan komt het resultaat altijd uit de cache.
+ *
+ * Nu weet de worker bij welke configuratie zijn dispatches horen en kan hij ze
+ * alsnog maken als ze ontbreken. Per jaar, en alleen het jaar dat gevraagd
+ * wordt: dat is één doorrekening van ruim 400 ms in plaats van de volle analyse.
  */
 let laatste: {
-  windows: AnalysisInput["windows"];
-  dispatches: DispatchResult[];
+  sleutel: string;
+  invoer: AnalysisInput;
   spec: BatterySpec;
+  /** Realistische dispatch per venster-index; leeg tot hij nodig is. */
+  dispatches: Map<number, DispatchResult>;
+  /** Perfect-foresight dispatch per venster-index, voor de vergelijking. */
+  optimaal: Map<number, DispatchResult>;
 } | null = null;
+
+/** Onderscheidt configuraties die tot een andere dispatch leiden. */
+function configSleutel(config: Configuration): string {
+  return JSON.stringify(config);
+}
+
+/**
+ * Zorg dat er dispatches zijn die bij deze configuratie horen.
+ *
+ * Bij een treffer verandert er niets. Anders wordt de invoer opnieuw opgebouwd
+ * en de slijtagedrempel opnieuw bepaald, op dezelfde manier als in
+ * `runAnalysis` — anders zou de dagweergave een andere batterij tonen dan de
+ * cijfers erboven.
+ */
+async function zorgVoorInvoer(config: Configuration): Promise<NonNullable<typeof laatste>> {
+  const sleutel = configSleutel(config);
+  if (laatste && laatste.sleutel === sleutel) return laatste;
+
+  const invoer = await buildInput(config);
+  const zonderDrempel: BatterySpec = { ...invoer.battery, wearCostEurPerKwh: 0 };
+  const proef = invoer.windows.find((w) => w.isFullYear) ?? invoer.windows[0];
+  let verwachteCycli = 0;
+  const dispatches = new Map<number, DispatchResult>();
+  if (proef) {
+    const p = dispatchRolling(proef.window, zonderDrempel, invoer.tariff);
+    verwachteCycli = p.equivalentCycles;
+    // Is de drempel nul, dan ís deze run de realistische dispatch van dat jaar.
+    const idx = invoer.windows.indexOf(proef);
+    dispatches.set(idx, p);
+  }
+  const wear = marginalWearCostPerKwh(
+    invoer.investmentEur,
+    invoer.cycleLife,
+    invoer.battery,
+    verwachteCycli,
+    invoer.years,
+  );
+  if (wear > 0) dispatches.clear();
+
+  laatste = {
+    sleutel,
+    invoer,
+    spec: { ...invoer.battery, wearCostEurPerKwh: wear },
+    dispatches,
+    optimaal: new Map(),
+  };
+  return laatste;
+}
+
+/** Zoek de dag op, en reken het jaar waarin hij valt door als dat nog moet. */
+function haalDag(
+  staat: NonNullable<typeof laatste>,
+  isoDate: string,
+): SampleDay | null {
+  for (let i = 0; i < staat.invoer.windows.length; i++) {
+    const entry = staat.invoer.windows[i]!;
+    // De vensters weten hun eigen bereik; alleen het jaar dat de datum bevat
+    // hoeft gerekend te worden.
+    if (isoDate < entry.firstDay || isoDate > entry.lastDay) continue;
+
+    let real = staat.dispatches.get(i);
+    if (!real) {
+      real = dispatchRolling(entry.window, staat.spec, staat.invoer.tariff);
+      staat.dispatches.set(i, real);
+    }
+    let opt = staat.optimaal.get(i);
+    if (!opt) {
+      opt = dispatchOptimal(entry.window, staat.spec, staat.invoer.tariff);
+      staat.optimaal.set(i, opt);
+    }
+    const dag: SampleDay | null = findDay(
+      entry.window,
+      real,
+      staat.spec,
+      staat.invoer.tariff,
+      isoDate,
+      opt,
+    );
+    if (dag) return dag;
+  }
+  return null;
+}
 
 self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
   const msg = event.data;
@@ -289,18 +468,9 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       return;
     }
     if (msg.type === "day") {
-      if (!laatste) throw new Error("er is nog geen doorrekening om een dag uit te halen");
-      let dag = null;
-      for (let i = 0; i < laatste.windows.length; i++) {
-        dag = findDay(
-          laatste.windows[i]!.window,
-          laatste.dispatches[i]!,
-          laatste.spec,
-          msg.date,
-        );
-        if (dag) break;
-      }
-      post({ type: "day", id: msg.id, day: dag, date: msg.date });
+      if (!manifest) throw new Error("worker is nog niet geïnitialiseerd");
+      const staat = await zorgVoorInvoer(msg.config);
+      post({ type: "day", id: msg.id, day: haalDag(staat, msg.date), date: msg.date });
       return;
     }
     if (msg.type === "analyse") {
@@ -310,13 +480,17 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       // De dispatches komen uit dezelfde doorrekening; opnieuw rekenen zou een
       // paar seconden kosten voor iets dat er al is.
       const dispatches: DispatchResult[] = [];
-      const result = runAnalysis(invoer, { collectDispatches: dispatches });
+      const optimaal: DispatchResult[] = [];
+      const result = runAnalysis(invoer, {
+        collectDispatches: dispatches,
+        collectOptimal: optimaal,
+      });
 
       // De dagkiezer moet dezelfde drempel gebruiken als de doorrekening zelf.
       const laatsteCycli = result.stats.cyclesPerYear;
       laatste = {
-        windows: invoer.windows,
-        dispatches,
+        sleutel: configSleutel(msg.config),
+        invoer,
         spec: {
           ...invoer.battery,
           wearCostEurPerKwh: marginalWearCostPerKwh(
@@ -327,6 +501,8 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
             invoer.years,
           ),
         },
+        dispatches: new Map(dispatches.map((d, i) => [i, d])),
+        optimaal: new Map(optimaal.map((d, i) => [i, d])),
       };
 
       post({ type: "result", id: msg.id, result, elapsedMs: performance.now() - t0 });

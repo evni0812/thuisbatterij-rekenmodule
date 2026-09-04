@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { buildQuarterAxis } from "../lib/data/timeaxis";
+import { buildQuarterAxis, LocalTimeIndex } from "../lib/data/timeaxis";
 import {
   equivalentCycles,
   marginalWearCostPerKwh,
@@ -9,10 +9,12 @@ import {
   wearCostPerKwh,
 } from "../lib/model/battery";
 import { dispatchBaseline } from "../lib/model/dispatch-baseline";
-import { dispatchRolling } from "../lib/model/dispatch-rolling";
+import { DAY_AHEAD_PUBLICATION_HOUR, dispatchRolling, publicationMoments } from "../lib/model/dispatch-rolling";
 import { dispatchOptimal } from "../lib/model/dispatch-optimal";
 import { breakdown as breakdownVoorTest, energyLosses } from "../lib/model/analysis";
 import { buildPriceSeries } from "../lib/model/tariff";
+import { buildResidual, solveNettingScale, summarizeResidual } from "../lib/model/residual";
+import { emptyResult, executePath, planSocPath } from "../lib/model/solver";
 import { HOURS_PER_STEP, type BatterySpec, type DispatchResult, type TariffSpec, type Window } from "../lib/model/types";
 
 const TARIFF: TariffSpec = {
@@ -76,14 +78,19 @@ function saving(
 }
 
 describe("energiebalans", () => {
-  it("sluit per kwartier voor beide strategieën", () => {
+  it("sluit per kwartier voor beide strategieën, ook met standby", () => {
     const w = makeWindow(7);
-    for (const fn of [dispatchOptimal, dispatchRolling]) {
-      const r = fn(w, spec(), TARIFF);
-      for (let i = 0; i < w.residualKwh.length; i++) {
-        const links = w.residualKwh[i]! + r.chargeKwh[i]! - r.dischargeKwh[i]!;
-        const rechts = r.gridImportKwh[i]! - r.gridExportKwh[i]! - r.curtailedKwh[i]!;
-        expect(Math.abs(links - rechts)).toBeLessThan(1e-9);
+    // Alle presets hebben 7 tot 25 W standby; de balans moet dat meenemen.
+    for (const standbyWatt of [0, 15]) {
+      const s = spec({ standbyWatt });
+      const standby = (standbyWatt / 1000) * HOURS_PER_STEP;
+      for (const fn of [dispatchOptimal, dispatchRolling]) {
+        const r = fn(w, s, TARIFF);
+        for (let i = 0; i < w.residualKwh.length; i++) {
+          const links = w.residualKwh[i]! + standby + r.chargeKwh[i]! - r.dischargeKwh[i]!;
+          const rechts = r.gridImportKwh[i]! - r.gridExportKwh[i]! - r.curtailedKwh[i]!;
+          expect(Math.abs(links - rechts)).toBeLessThan(1e-9);
+        }
       }
     }
   });
@@ -460,6 +467,24 @@ describe("slijtage als schaduwprijs", () => {
     expect(nijpend).toBeGreaterThan(matig);
   });
 
+  it("loopt continu op vanaf de grens, zonder sprong", () => {
+    /**
+     * De verwachting van het aantal beurten komt uit een proefrun. Een sprong
+     * op de grens zou de dispatch bij een minieme wijziging in capaciteit of
+     * vermogen abrupt van gedrag laten wisselen. Eerder sprong de drempel hier
+     * van 0,00 naar 5,60 ct/kWh tussen 400 en 401 beurten per jaar.
+     */
+    const s = spec({ capacityKwh: 2.1, depthOfCharge: 0.9 });
+    const opDeGrens = marginalWearCostPerKwh(1199, 6000, s, 400, 15);
+    const netErover = marginalWearCostPerKwh(1199, 6000, s, 401, 15);
+    const vol = wearCostPerKwh(1199, 6000, s);
+    expect(opDeGrens).toBe(0);
+    expect(netErover).toBeGreaterThan(0);
+    expect(netErover).toBeLessThan(vol * 0.01);
+    // En bij twee keer zoveel beurten als er zijn, de volle prijs.
+    expect(marginalWearCostPerKwh(1199, 6000, s, 800, 15)).toBeCloseTo(vol, 9);
+  });
+
   it("laat een batterij die niets kostte vrij cyclen", () => {
     const s = spec();
     expect(marginalWearCostPerKwh(0, 6000, s, 5000, 15)).toBe(0);
@@ -617,5 +642,228 @@ describe("de verliesboekhouding sluit", () => {
     // die aan het eind van het venster nog in de cel staat.
     expect(v.roundtrip).toBeGreaterThan(s.efficiency ** 2 - 0.03);
     expect(v.roundtrip).toBeLessThanOrEqual(s.efficiency ** 2 + 1e-9);
+  });
+});
+
+describe("herplannen op het publicatie-uur", () => {
+  /**
+   * Een etmaal is niet altijd 96 kwartieren. Wie na het publicatie-uur vast
+   * 96 kwartieren optelt, komt op de dag dat de klok teruggaat op 12:00 uit,
+   * vóór de publicatie, en blijft daar: elk plan daarna ziet alleen nog de
+   * prijzen tot middernacht. Het moment moet dus elke dag opnieuw in lokale
+   * tijd worden opgezocht.
+   */
+  it("vindt op elke lokale dag precies één publicatiemoment, ook rond de zomertijd", () => {
+    // 20 oktober t/m 5 november 2025: de klok gaat terug op 26 oktober.
+    const startMs = buildQuarterAxis("2025-10-20", "2025-11-06");
+    const index = new LocalTimeIndex(startMs[0]!, startMs[startMs.length - 1]!);
+    const momenten = publicationMoments(startMs, index);
+    expect(momenten.length).toBe(17);
+    for (const i of momenten) {
+      expect(index.localHour(startMs[i]!)).toBe(DAY_AHEAD_PUBLICATION_HOUR);
+      // Het eerste kwartier van dat uur, niet een willekeurig kwartier erin.
+      expect(index.localHour(startMs[i - 1]!)).toBe(DAY_AHEAD_PUBLICATION_HOUR - 1);
+    }
+    // De afstand is 96 kwartieren, behalve over de 100-kwartierdag heen.
+    const afstanden = momenten.slice(1).map((m, k) => m - momenten[k]!);
+    expect(afstanden.filter((a) => a === 100).length).toBe(1);
+    expect(afstanden.every((a) => a === 96 || a === 100)).toBe(true);
+  });
+
+  it("levert na de najaarsovergang niet minder op dan met een vast interval", () => {
+    // Een venster dat in de zomertijd begint en over de overgang heen loopt.
+    const startMs = buildQuarterAxis("2025-10-13", "2025-11-10");
+    const n = startMs.length;
+    const residual = new Float64Array(n);
+    const market = new Float64Array(n);
+    const index = new LocalTimeIndex(startMs[0]!, startMs[n - 1]!);
+    for (let i = 0; i < n; i++) {
+      const uur = index.localHour(startMs[i]!);
+      // Avondpiek in prijs en verbruik; 's nachts goedkoop. Daar valt alleen
+      // iets te halen als het plan de prijzen van morgen kent.
+      residual[i] = uur >= 17 && uur < 21 ? 0.5 : 0.1;
+      market[i] = uur >= 17 && uur < 21 ? 0.25 : uur < 6 ? 0.03 : 0.10;
+    }
+    const w: Window = { startMs, residualKwh: residual, prices: buildPriceSeries(market, TARIFF) };
+    const s = spec({ capacityKwh: 5, maxChargeKw: 2.5, maxDischargeKw: 2.5 });
+    const base = dispatchBaseline(w, TARIFF).totalCostEur;
+    const uitgelijnd = base - dispatchRolling(w, s, TARIFF).totalCostEur;
+    const vast96 = base - dispatchRolling(w, s, TARIFF, { replanSteps: 96 }).totalCostEur;
+    expect(uitgelijnd).toBeGreaterThan(vast96 * 1.02);
+  });
+});
+
+describe("de uitvoerder laat bewuste verkoop door", () => {
+  /**
+   * De planner mag op dure uren naar het net ontladen, en het optimum doet dat
+   * ook. Toen de uitvoerder de ontlading op het werkelijke tekort afkapte, werd
+   * elke geplande verkoop stilzwijgend geblokkeerd: voor een 5 kWh-batterij op
+   * 2,5 kW scheelde dat 21 euro op 198 per jaar, en de capture rate vergeleek
+   * een beperkt beleid met een onbeperkt optimum.
+   */
+  it("ontlaadt naar het net als het plan dat bedoelde en de prijs het waard is", () => {
+    const startMs = buildQuarterAxis("2025-06-01", "2025-06-15");
+    const n = startMs.length;
+    const residual = new Float64Array(n);
+    const market = new Float64Array(n);
+    for (let i = 0; i < n; i++) {
+      const uur = (i % 96) / 4;
+      // Groot middagoverschot dat vrijwel niets opbrengt, een klein
+      // avondtekort, en een avondprijs die ver boven de afnameprijs ligt.
+      const zon = Math.max(0, Math.sin(((uur - 6) / 12) * Math.PI)) * 2.0;
+      residual[i] = 0.05 - zon;
+      market[i] = uur >= 18 && uur < 21 ? 0.40 : 0.01;
+    }
+    const w: Window = { startMs, residualKwh: residual, prices: buildPriceSeries(market, TARIFF) };
+    const s = spec({ capacityKwh: 5, maxChargeKw: 2.5, maxDischargeKw: 2.5 });
+    const r = dispatchRolling(w, s, TARIFF);
+
+    // Na de eerste dagen (historie voor de voorspelling) hoort er 's avonds
+    // meer uit de batterij te komen dan het tekort vraagt: het verschil gaat
+    // het net op.
+    let ontladen = 0;
+    let tekort = 0;
+    let export_ = 0;
+    for (let i = 96 * 3; i < n; i++) {
+      const uur = (i % 96) / 4;
+      if (uur >= 18 && uur < 21) {
+        ontladen += r.dischargeKwh[i]!;
+        tekort += Math.max(0, residual[i]!);
+        export_ += r.gridExportKwh[i]!;
+      }
+    }
+    expect(ontladen).toBeGreaterThan(tekort * 3);
+    expect(export_).toBeGreaterThan(0);
+  });
+
+  it("vult een tegenvallend tekort niet met extra netlevering op", () => {
+    // Plan gemaakt op perfecte kennis, maar uitgevoerd op een residual waarin
+    // het avondtekort de helft kleiner is. Zonder geplande export hoort de
+    // ontlading dan mee te krimpen, niet door te lopen naar het net.
+    const startMs = buildQuarterAxis("2025-01-01", "2025-01-08");
+    const n = startMs.length;
+    const verwacht = new Float64Array(n);
+    const market = new Float64Array(n);
+    for (let i = 0; i < n; i++) {
+      const uur = (i % 96) / 4;
+      verwacht[i] = uur >= 17 && uur < 21 ? 0.6 : 0.1;
+      market[i] = uur >= 17 && uur < 21 ? 0.15 : uur < 6 ? 0.03 : 0.10;
+    }
+    const prices = buildPriceSeries(market, TARIFF);
+    const s = spec({ capacityKwh: 5, maxChargeKw: 2.5, maxDischargeKw: 2.5 });
+    const planW: Window = { startMs, residualKwh: verwacht, prices };
+    const path = planSocPath(verwacht, prices.importPrice, prices.exportPrice, 0, n, s, TARIFF, 101, 0, false);
+
+    const werkelijk = verwacht.map((v) => (v > 0.3 ? v / 2 : v));
+    const out = emptyResult(n);
+    executePath({ ...planW, residualKwh: werkelijk }, path, 0, n, s, TARIFF, 0, out, true, verwacht);
+    let export_ = 0;
+    for (let i = 0; i < n; i++) {
+      const uur = (i % 96) / 4;
+      if (uur >= 17 && uur < 21) export_ += out.gridExportKwh[i]!;
+    }
+    // Een wattuur marge: de actietabel is float32, en die afronding laat een
+    // spoor van enkele tienden van een watt achter. Dat is geen netlevering.
+    expect(export_).toBeLessThan(1e-3);
+  });
+});
+
+describe("spreidingsfactor per lokale dag", () => {
+  it("houdt het dagvolume exact gelijk, ook op de dag met 100 kwartieren", () => {
+    const startMs = buildQuarterAxis("2025-10-24", "2025-10-29");
+    const n = startMs.length;
+    const imp = new Float32Array(n);
+    const exp = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      imp[i] = 0.0001 + 0.00005 * Math.sin(i / 7);
+      exp[i] = 0.00005 + 0.00004 * Math.cos(i / 5);
+    }
+    const hh = { annualGridImportKwh: 2500, annualGridExportKwh: 2000, spreadFactor: 1 };
+    const vlak = buildResidual(imp, exp, hh, startMs);
+    const scherp = buildResidual(imp, exp, { ...hh, spreadFactor: 1.8 }, startMs);
+    const index = new LocalTimeIndex(startMs[0]!, startMs[n - 1]!);
+    const perDag = new Map<number, [number, number]>();
+    for (let i = 0; i < n; i++) {
+      const d = index.localDayNumber(startMs[i]!);
+      const cur = perDag.get(d) ?? [0, 0];
+      cur[0] += vlak[i]!;
+      cur[1] += scherp[i]!;
+      perDag.set(d, cur);
+    }
+    expect(perDag.size).toBe(5);
+    for (const [, [a, b]] of perDag) expect(Math.abs(a - b)).toBeLessThan(1e-9);
+  });
+});
+
+describe("schaling van het netten", () => {
+  /**
+   * Twee overlappende profielen: een vlakke afname en een middagpiek in de
+   * teruglevering. Zonder schaling valt op de middaguren afname weg tegen
+   * teruglevering, en komen beide sommen onder de meterstanden uit.
+   */
+  function profielen(n = 96 * 30): { imp: Float32Array; exp: Float32Array } {
+    const imp = new Float32Array(n);
+    const exp = new Float32Array(n);
+    let si = 0;
+    let se = 0;
+    for (let i = 0; i < n; i++) {
+      const uur = (i % 96) / 4;
+      imp[i] = 1 + 0.5 * Math.exp(-((uur - 19) ** 2) / 6);
+      exp[i] = Math.max(0, Math.sin(((uur - 6) / 12) * Math.PI)) ** 2;
+      si += imp[i]!;
+      se += exp[i]!;
+    }
+    for (let i = 0; i < n; i++) {
+      imp[i] = imp[i]! / si;
+      exp[i] = exp[i]! / se;
+    }
+    return { imp, exp };
+  }
+  const hh = { annualGridImportKwh: 2500, annualGridExportKwh: 2000, spreadFactor: 1 };
+
+  it("komt zonder schaling onder de meterstanden uit", () => {
+    const { imp, exp } = profielen();
+    const s = summarizeResidual(buildResidual(imp, exp, hh), hh);
+    expect(s.gridImportKwh).toBeLessThan(2500);
+    expect(s.gridExportKwh).toBeLessThan(2000);
+  });
+
+  it("reproduceert met schaling de meterstanden", () => {
+    const { imp, exp } = profielen();
+    const scale = solveNettingScale(imp, exp, hh);
+    const s = summarizeResidual(buildResidual(imp, exp, hh, undefined, scale), hh);
+    // Een honderdste kWh marge: de fracties zijn float32, en die ruis telt op
+    // over een maand aan kwartieren.
+    expect(s.gridImportKwh).toBeCloseTo(2500, 1);
+    expect(s.gridExportKwh).toBeCloseTo(2000, 1);
+  });
+
+  it("is 1 als er niets te netten valt", () => {
+    const { imp, exp } = profielen();
+    expect(solveNettingScale(imp, exp, { ...hh, annualGridExportKwh: 0 })).toEqual({
+      importScale: 1,
+      exportScale: 1,
+    });
+    // Niet-overlappende profielen: dag en nacht strikt gescheiden.
+    const n = 96 * 7;
+    const dag = new Float32Array(n);
+    const nacht = new Float32Array(n);
+    for (let i = 0; i < n; i++) {
+      const uur = (i % 96) / 4;
+      if (uur >= 8 && uur < 16) dag[i] = 1 / (32 * 7);
+      else nacht[i] = 1 / (64 * 7);
+    }
+    const scale = solveNettingScale(nacht, dag, hh);
+    expect(scale.importScale).toBeCloseTo(1, 6);
+    expect(scale.exportScale).toBeCloseTo(1, 6);
+  });
+
+  it("laat het verschil afname min teruglevering ongemoeid", () => {
+    const { imp, exp } = profielen();
+    const scale = solveNettingScale(imp, exp, hh);
+    const r = buildResidual(imp, exp, hh, undefined, scale);
+    let som = 0;
+    for (let i = 0; i < r.length; i++) som += r[i]!;
+    expect(som).toBeCloseTo(500, 1);
   });
 });

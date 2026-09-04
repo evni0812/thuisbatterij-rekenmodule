@@ -72,8 +72,14 @@ export interface FinanceResult {
 /**
  * Lees de besparing af bij een willekeurige capaciteitsfractie.
  *
- * Lineair tussen de steunpunten; buiten het bereik wordt niet geëxtrapoleerd
- * maar afgekapt, want de curve is alleen gemeten binnen dat bereik.
+ * Lineair tussen de steunpunten. Boven het bereik wordt afgekapt: meer dan de
+ * nominale capaciteit bestaat niet. Onder het laagste steunpunt loopt de lijn
+ * door naar nul bij nul capaciteit — een batterij zonder capaciteit bespaart
+ * niets, en dat is het enige punt buiten het gemeten bereik dat we zeker weten.
+ *
+ * Eerder werd ook onderaan afgekapt. Dan bleef een batterij die na zijn
+ * cycluslevensduur doorsleet tot 40% capaciteit gewoon de besparing van 70%
+ * boeken, alsof de degradatie op het laagste steunpunt stopte.
  */
 export function interpolateCurve(
   curve: SavingCurvePoint[],
@@ -83,7 +89,14 @@ export function interpolateCurve(
   const first = curve[0]!;
   const last = curve[curve.length - 1]!;
   if (fraction <= first.capacityFraction) {
-    return { savingEur: first.savingEur, cyclesPerYear: first.cyclesPerYear };
+    const t =
+      first.capacityFraction > 0
+        ? Math.max(0, fraction) / first.capacityFraction
+        : 1;
+    return {
+      savingEur: first.savingEur * t,
+      cyclesPerYear: first.cyclesPerYear * t,
+    };
   }
   if (fraction >= last.capacityFraction) {
     return { savingEur: last.savingEur, cyclesPerYear: last.cyclesPerYear };

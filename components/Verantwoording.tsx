@@ -73,6 +73,17 @@ export function Verantwoording({
               toekomst. Hij haalt daarmee{" "}
               {procent(gemiddeldeCapture)} van wat met perfecte kennis mogelijk
               was geweest.
+              {result.gap ? (
+                <>
+                  {" "}
+                  Van het verschil komt{" "}
+                  <strong>{euroPrecies(result.gap.forecastCostEur)}</strong> doordat
+                  zon en verbruik van morgen een verwachting zijn, en{" "}
+                  <strong>{euroPrecies(result.gap.horizonCostEur)}</strong> doordat
+                  de prijzen van morgen pas rond 13:00 bekend worden. Het weer weegt
+                  hier dus veel zwaarder dan de prijshorizon.
+                </>
+              ) : null}
             </li>
             <li>
               Wat er in komende jaren gebeurt met prijzen en belastingen is

@@ -33,8 +33,10 @@ export interface OptimalOptions {
    * niet, en dan kan de rollende strategie — die elke dag herplant — er zelfs
    * bovenuit komen, wat de benchmark waardeloos maakt.
    *
-   * Het geheugen laat dit toe: de keuzetabel is n * levels * 2 bytes, dus 7 MB
-   * voor een heel jaar bij 101 niveaus.
+   * Het geheugen laat dit toe: de keuzetabel is n * levels * 4 bytes, dus 14 MB
+   * voor een heel jaar bij 101 niveaus en 56 MB bij de 401 niveaus die een
+   * grote batterij met klein vermogen krijgt. Dat is de grootste allocatie van
+   * de doorrekening; hij leeft alleen tijdens het plannen in de worker.
    */
   blockSteps?: number;
 }

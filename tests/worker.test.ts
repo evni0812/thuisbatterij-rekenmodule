@@ -164,6 +164,15 @@ describe("volledige keten", () => {
     // De pagina blijft ondertussen bruikbaar: het rekenwerk draait in een
     // worker en het vorige resultaat blijft gedimd staan tot het nieuwe er is.
     // Een enkel jaar is binnen een seconde klaar.
+    //
+    // In het budget zit één doorrekening die niet voor een getal op de pagina
+    // is maar voor de verklaring eronder: de strategie nog eens, met een
+    // perfecte verbruiksvoorspelling, om te scheiden hoeveel van het gat met
+    // het optimum door het weer komt en hoeveel door de prijshorizon. Dat kan
+    // niet op een grover rooster: dan wordt het afrondingsverlies van dat
+    // rooster als horizonverlies geboekt, en verschuift de verhouding van 6
+    // naar 14%. Het draait alleen op het referentiejaar, niet op alle jaren,
+    // en kost ongeveer een halve seconde van de ruim drie die dit geheel duurt.
     expect(ms).toBeLessThan(5000);
   }, 30_000);
 
@@ -216,7 +225,10 @@ describe("volledige keten", () => {
     expect(met.perYear[0]!.realisticSavingEur).toBeGreaterThan(
       zonder.perYear[0]!.realisticSavingEur,
     );
-  });
+    // Twee volledige doorrekeningen van een jaar, elk met beide strategieën en
+    // de ontleding van het gat: dat past niet in de standaardtijd van vijf
+    // seconden.
+  }, 30_000);
 });
 
 describe("voorbeelddag", () => {

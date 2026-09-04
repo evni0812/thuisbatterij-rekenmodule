@@ -20,6 +20,7 @@ import {
   STANDAARD_ANALYSEJAREN,
   STANDAARD_DISCONTOVOET,
   STANDAARD_KALENDERDEGRADATIE,
+  STANDAARD_PRESET_ID,
   STANDAARD_PRIJSSTIJGING,
   STANDAARD_TERUGLEVERING_KWH,
 } from "../lib/presets";
@@ -30,13 +31,14 @@ import type { Configuration } from "../lib/worker/protocol";
 const STANDAARD: Instellingen = {
   afnameKwh: STANDAARD_AFNAME_KWH,
   terugleveringKwh: STANDAARD_TERUGLEVERING_KWH,
-  presetId: PRESETS[1]!.id,
+  presetId: STANDAARD_PRESET_ID,
   domein: "871685900000056162",
   van: "",
   tot: "",
   spreiding: 1,
   terugleverkostenCt: 0,
   curtailment: true,
+  heffing: "toen",
   analysejaren: STANDAARD_ANALYSEJAREN,
   discontovoet: STANDAARD_DISCONTOVOET,
   prijsstijging: STANDAARD_PRIJSSTIJGING,
@@ -101,7 +103,7 @@ export default function Page() {
         calendarFadePerYear: inst.degradatie,
         residualValueEur: 0,
         annualProductionKwh: inst.opwekKwh ?? undefined,
-        useHistoricalLevy: true,
+        useHistoricalLevy: inst.heffing === "toen",
       };
     }, [geladen, inst, preset, capaciteit, vermogen, prijs]),
   );
@@ -114,6 +116,7 @@ export default function Page() {
     grid,
     startGrid,
     dag,
+    dagBezig,
     dagOntbreekt,
     vraagDag,
     wisDag,
@@ -194,7 +197,12 @@ export default function Page() {
 
       {result ? (
         <>
-          <Antwoord result={result} investeringEur={toonPrijs} bezig={busy} />
+          <Antwoord
+            result={result}
+            investeringEur={toonPrijs}
+            bezig={busy}
+            heffingVanNu={toon?.useHistoricalLevy === false}
+          />
 
           <Statistieken stats={result.stats} opwekBekend={toonOpwekBekend} />
 
@@ -226,6 +234,7 @@ export default function Page() {
             voorbeelden={result.sampleDays}
             losseDag={dag}
             ontbreekt={dagOntbreekt}
+            bezig={dagBezig}
             eersteDag={result.perYear[0]?.firstDay ?? ""}
             laatsteDag={result.perYear[result.perYear.length - 1]?.lastDay ?? ""}
             onVraagDag={vraagDag}

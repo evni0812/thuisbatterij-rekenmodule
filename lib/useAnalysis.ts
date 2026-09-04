@@ -57,6 +57,11 @@ export interface AnalysisState {
   startGrid: (capacities: number[], powers: number[]) => void;
   /** Een opgevraagde losse dag, of null zolang er geen is opgehaald. */
   dag: SampleDay | null;
+  /**
+   * Er wordt een dag opgehaald. Bij een resultaat uit de cache moet de worker
+   * dat jaar eerst doorrekenen, en dat duurt een halve seconde.
+   */
+  dagBezig: boolean;
   /** De datum waarvoor geen gegevens bleken te zijn. */
   dagOntbreekt: string | null;
   /** Vraag het batterijgedrag van één kalenderdag op. */
@@ -90,6 +95,7 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
     verouderd: false,
     grid: null,
     dag: null,
+    dagBezig: false,
     dagOntbreekt: null,
   });
   /** De configuratie waar het getoonde resultaat bij hoort. */
@@ -148,13 +154,14 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
         setState((s) => ({
           ...s,
           dag: msg.day,
+          dagBezig: false,
           dagOntbreekt: msg.day === null ? msg.date : null,
         }));
         return;
       }
       if (msg.type === "error") {
         if (msg.id !== null && msg.id !== pendingId.current) return;
-        setState((s) => ({ ...s, busy: false, error: msg.message }));
+        setState((s) => ({ ...s, busy: false, dagBezig: false, error: msg.message }));
       }
     };
 
@@ -214,23 +221,39 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
     [config],
   );
 
-  const vraagDag = useCallback((datum: string) => {
-    const worker = workerRef.current;
-    if (!worker) return;
-    const id = ++dagId.current;
-    worker.postMessage({ type: "day", id, date: datum } satisfies WorkerRequest);
-  }, []);
+  const vraagDag = useCallback(
+    (datum: string) => {
+      const worker = workerRef.current;
+      if (!worker || !config) return;
+      const id = ++dagId.current;
+      // De configuratie gaat mee: de worker kan de analyse niet zelf hebben
+      // gedraaid als het resultaat uit de cache kwam.
+      setState((s) => ({ ...s, dagBezig: true }));
+      worker.postMessage({
+        type: "day",
+        id,
+        date: datum,
+        config,
+      } satisfies WorkerRequest);
+    },
+    [config],
+  );
 
   const wisDag = useCallback(() => {
     dagId.current++;
-    setState((s) => ({ ...s, dag: null, dagOntbreekt: null }));
+    setState((s) => ({ ...s, dag: null, dagBezig: false, dagOntbreekt: null }));
   }, []);
 
   // Een wijziging in de invoer maakt een eerder raster en een opgehaalde dag
   // achterhaald: die hoorden bij de vorige doorrekening.
   useEffect(() => {
+    // Ook het volgnummer omhoog: een dag die nog onderweg is hoort bij de
+    // vorige configuratie en mag niet alsnog binnenvallen.
+    dagId.current++;
     setState((s) =>
-      s.grid || s.dag ? { ...s, grid: null, dag: null, dagOntbreekt: null } : s,
+      s.grid || s.dag || s.dagBezig
+        ? { ...s, grid: null, dag: null, dagBezig: false, dagOntbreekt: null }
+        : s,
     );
     const worker = workerRef.current;
     if (worker) worker.postMessage({ type: "cancel" } satisfies WorkerRequest);

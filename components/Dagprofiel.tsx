@@ -19,9 +19,10 @@
  * liepen ze dwars over de as-labels heen.
  */
 
-import { useEffect, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import type { SampleDay } from "../lib/model/analysis";
-import { centPerKwh, datum, getal } from "../lib/format";
+import { addDays } from "../lib/data/timeaxis";
+import { centPerKwh, datum, euroPrecies, getal, procent } from "../lib/format";
 import { Figure, kiesTicks } from "./chart-parts";
 
 const B = 860;
@@ -187,6 +188,7 @@ export function Dagprofiel({
   voorbeelden,
   losseDag,
   ontbreekt,
+  bezig = false,
   eersteDag,
   laatsteDag,
   onVraagDag,
@@ -195,6 +197,8 @@ export function Dagprofiel({
   voorbeelden: SampleDay[];
   losseDag: SampleDay | null;
   ontbreekt: string | null;
+  /** Er wordt een dag opgehaald; de knoppen blijven bruikbaar. */
+  bezig?: boolean;
   eersteDag: string;
   laatsteDag: string;
   onVraagDag: (datum: string) => void;
@@ -204,7 +208,26 @@ export function Dagprofiel({
   const [cursor, setCursor] = useState<number | null>(null);
 
   const dag = losseDag ?? voorbeelden[gekozen];
+  const huidigeDatum = dag?.date ?? "";
   useEffect(() => setCursor(null), [dag?.date]);
+
+  // Doorbladeren gaat altijd vanaf de dag die nu op het scherm staat, ook als
+  // dat een van de voorbeelddagen is. Zo kun je vanuit een doorsnee zomerdag
+  // naar de dag ernaast, wat precies is wat je wilt als je iets ziet dat je
+  // niet verwacht.
+  const stap = useCallback(
+    (richting: -1 | 1) => {
+      if (!huidigeDatum) return;
+      const doel = addDays(huidigeDatum, richting);
+      if (doel < eersteDag || doel > laatsteDag) return;
+      onVraagDag(doel);
+    },
+    [huidigeDatum, eersteDag, laatsteDag, onVraagDag],
+  );
+
+  const kanTerug = huidigeDatum > eersteDag;
+  const kanVooruit = huidigeDatum !== "" && huidigeDatum < laatsteDag;
+
   if (!dag) return null;
 
   const n = dag.startMs.length;
@@ -227,11 +250,18 @@ export function Dagprofiel({
   // of de batterij het overschot opvangt of dat er iets blijft liggen.
   const overschotKw = dag.residualKwh.map((v) => Math.max(0, -v) * KWH_NAAR_KW);
   const tekortKw = dag.residualKwh.map((v) => Math.max(0, v) * KWH_NAAR_KW);
+  // De zon die de meter haalde, los van wat het huis er op dat moment van
+  // opsnoepte. Op een zonnige dag ligt die lijn vlak boven het netto overschot;
+  // waar ze uiteenlopen, gebruikte het huis op dat moment zelf stroom.
+  const zonKw = dag.meterExportKwh.map((v) => v * KWH_NAAR_KW);
+  const heeftZonReeks = zonKw.length === dag.residualKwh.length;
+  const zonTotaal = dag.stats.meterExportKwh;
   const aMax = Math.max(
     ...acties.uitZon.map((v, k) => v + acties.uitNet[k]!),
     ...acties.naarHuis.map((v, k) => v + acties.naarNet[k]!),
     ...overschotKw,
     ...tekortKw,
+    ...(heeftZonReeks ? zonKw : []),
     0.2,
   );
   const yA = (v: number) => Y.actie + (1 - (v + aMax) / (2 * aMax)) * HOOGTE.actie;
@@ -317,18 +347,51 @@ export function Dagprofiel({
               ))}
             </div>
           ) : null}
-          <label className="dagkiezer-datum">
-            <span>of kies zelf een dag</span>
+          <div className="dagkiezer-datum">
+            <button
+              type="button"
+              className="dagstap"
+              aria-label="Vorige dag"
+              title="Vorige dag"
+              disabled={!kanTerug}
+              onClick={() => stap(-1)}
+            >
+              ‹
+            </button>
             <input
               type="date"
+              aria-label="Kies zelf een dag"
               min={eersteDag}
               max={laatsteDag}
-              value={losseDag?.date ?? ""}
+              value={huidigeDatum}
               onChange={(e) =>
                 e.target.value ? onVraagDag(e.target.value) : onWisDag()
               }
+              onKeyDown={(e) => {
+                // Met de pijltjes door de dagen: de datuminvoer zelf gebruikt
+                // omhoog en omlaag voor het veld onder de cursor, dus links en
+                // rechts zijn vrij en liggen het meest voor de hand.
+                if (e.key === "ArrowLeft") {
+                  e.preventDefault();
+                  stap(-1);
+                } else if (e.key === "ArrowRight") {
+                  e.preventDefault();
+                  stap(1);
+                }
+              }}
             />
-          </label>
+            <button
+              type="button"
+              className="dagstap"
+              aria-label="Volgende dag"
+              title="Volgende dag"
+              disabled={!kanVooruit}
+              onClick={() => stap(1)}
+            >
+              ›
+            </button>
+            {bezig ? <span className="dagkiezer-bezig" aria-live="polite">rekent…</span> : null}
+          </div>
         </div>
       }
     >
@@ -338,6 +401,8 @@ export function Dagprofiel({
           een dag tussen {datum(eersteDag)} en {datum(laatsteDag)}.
         </p>
       ) : null}
+
+      <DagCijfers dag={dag} />
 
       <div
         className="chart-wrap"
@@ -420,7 +485,13 @@ export function Dagprofiel({
           />
 
           {/* ══ Paneel 2: wat de batterij doet ══ */}
-          {paneelTitel(Y.actie, "Wat er te halen valt, en wat de batterij ermee doet")}
+          {paneelTitel(
+            Y.actie,
+            "Wat er te halen valt, en wat de batterij ermee doet",
+            heeftZonReeks && zonTotaal !== null && zonTotaal > 0.01
+              ? "zon = wat de meter passeerde, niet de bruto opwek"
+              : undefined,
+          )}
           <line x1={PLOT_LINKS} x2={PLOT_RECHTS} y1={yA(aMax / 2)} y2={yA(aMax / 2)} stroke="var(--grid)" />
           <line x1={PLOT_LINKS} x2={PLOT_RECHTS} y1={yA(-aMax / 2)} y2={yA(-aMax / 2)} stroke="var(--grid)" />
 
@@ -452,6 +523,19 @@ export function Dagprofiel({
             strokeWidth={1}
             strokeDasharray="3 3"
           />
+          {/* De zon die de meter haalde. Staat boven de grijze context zodat je
+              kunt zien hoeveel van het dak kwam en hoeveel daarvan het huis
+              meteen zelf gebruikte: het verschil tussen deze lijn en de
+              gestippelde is precies dat. */}
+          {heeftZonReeks && zonTotaal !== null && zonTotaal > 0.01 ? (
+            <path
+              d={lijn(zonKw.map((v, k) => [x(k), yA(v)]))}
+              fill="none"
+              stroke="var(--series-5)"
+              strokeWidth={1.5}
+              strokeLinejoin="round"
+            />
+          ) : null}
           {dag.startMs.map((_, k) => {
             const zon = acties.uitZon[k]!;
             const net = acties.uitNet[k]!;
@@ -500,9 +584,15 @@ export function Dagprofiel({
               hoeveel er die dag in totaal is opgeslagen en waar het heen ging. */}
           <g className="actie-legende">
             {[
-              { kleur: "var(--text-muted)", naam: "zon over", waarde: totaalOverschot, y: Y.actie + 16, vaag: true },
-              { kleur: "var(--series-3)", naam: "opgeslagen", waarde: totaalZon, y: Y.actie + 50 },
-              { kleur: "var(--series-1)", naam: "ingekocht", waarde: totaalNet, y: Y.actie + 84 },
+              {
+                kleur: "var(--series-5)",
+                naam: "zon naar de meter",
+                waarde: heeftZonReeks && zonTotaal !== null ? zonTotaal : 0,
+                y: Y.actie - 4,
+              },
+              { kleur: "var(--text-muted)", naam: "netto over", waarde: totaalOverschot, y: Y.actie + 30, vaag: true },
+              { kleur: "var(--series-3)", naam: "opgeslagen", waarde: totaalZon, y: Y.actie + 64 },
+              { kleur: "var(--series-1)", naam: "ingekocht", waarde: totaalNet, y: Y.actie + 98 },
               { kleur: "var(--series-3)", naam: "zelf gebruikt", waarde: totaalHuis, y: Y.actie + HOOGTE.actie - 50 },
               { kleur: "var(--series-2)", naam: "verkocht", waarde: totaalVerkocht, y: Y.actie + HOOGTE.actie - 16 },
             ].map((r) =>
@@ -657,6 +747,143 @@ export function Dagprofiel({
 
       <Uitlezing dag={dag} i={i} />
     </Figure>
+  );
+}
+
+/**
+ * De kerngetallen van de dag, boven de grafieken.
+ *
+ * ── Waarom dit er staat ─────────────────────────────────────────────────────
+ * De grafieken laten zien wát er gebeurt, maar niet wat het opleverde. Een
+ * jaarbedrag van tweehonderd euro wordt pas begrijpelijk als je ziet dat het
+ * uit driehonderdvijfenzestig dagen van rond de vijftig cent bestaat, met
+ * uitschieters op de dagen dat het prijsverschil groot was.
+ *
+ * Het laatste cijfer is de vergelijking met perfecte kennis. Dat is precies de
+ * plek waar zichtbaar wordt waar het verschil tussen de twee strategieën
+ * vandaan komt: op een vlakke dag zijn ze gelijk, op een dag met een misgelopen
+ * piek loopt het uiteen.
+ */
+function DagCijfers({ dag }: { dag: SampleDay }) {
+  const s = dag.stats;
+  const minderAfname = s.gridImportBaselineKwh - s.gridImportBatteryKwh;
+  const minderTeruglevering = s.gridExportBaselineKwh - s.gridExportBatteryKwh;
+  const gemist =
+    s.optimalSavingEur !== null ? s.optimalSavingEur - s.savingEur : null;
+
+  // Wat er over de dagrand heen gaat. Een tiende kWh is meetruis; daarboven is
+  // het de verklaring van het dagbedrag en hoort het erbij te staan.
+  const overDeRand = s.socEndKwh - s.socStartKwh;
+  const randTelt = Math.abs(overDeRand) > 0.1;
+
+  return (
+    <div className="dagcijfers">
+      <div className="dagcijfer dagcijfer--hoofd">
+        <span className="dagcijfer-waarde">{euroPrecies(s.savingEur)}</span>
+        <span className="dagcijfer-label">
+          {s.savingEur < 0 ? "kostte deze dag" : "bespaard op deze dag"}
+        </span>
+        <span className="dagcijfer-noot">
+          {euroPrecies(s.baselineCostEur)} zonder batterij,{" "}
+          {euroPrecies(s.batteryCostEur)} met
+        </span>
+      </div>
+
+      {/*
+       * De dagrand krijgt een eigen tegel zodra er lading over de middernacht
+       * heen gaat. Dat is de reden dat een dagbedrag negatief kan zijn: de
+       * inkoop valt op deze dag, het gebruik op de volgende.
+       */}
+      {randTelt ? (
+        <div className="dagcijfer">
+          <span className="dagcijfer-waarde">
+            {overDeRand > 0 ? "+" : ""}
+            {getal(overDeRand, 1)} kWh
+          </span>
+          <span className="dagcijfer-label">
+            {overDeRand > 0 ? "gaat mee naar morgen" : "kwam van gisteren"}
+          </span>
+          <span className="dagcijfer-noot">
+            {getal(s.socStartKwh, 1)} kWh om 00:00, {getal(s.socEndKwh, 1)} kWh om
+            24:00.{" "}
+            {overDeRand > 0
+              ? "Wat je hier inkocht, gebruik je morgen; die opbrengst staat op de volgende dag."
+              : "Wat je hier gebruikte, kocht je gisteren; die kosten staan op de vorige dag."}
+          </span>
+        </div>
+      ) : null}
+
+      <div className="dagcijfer">
+        <span className="dagcijfer-waarde">{getal(s.deliveredKwh, 1)} kWh</span>
+        <span className="dagcijfer-label">uit de batterij gehaald</span>
+        <span className="dagcijfer-noot">
+          {getal(s.chargedKwh, 1)} kWh erin, waarvan{" "}
+          {getal(s.chargedFromGridKwh, 1)} ingekocht
+        </span>
+      </div>
+
+      {s.meterExportKwh !== null ? (
+        <div className="dagcijfer">
+          <span className="dagcijfer-waarde">
+            {getal(s.meterExportKwh, 1)} kWh
+          </span>
+          <span className="dagcijfer-label">zon naar de meter</span>
+          <span className="dagcijfer-noot">
+            wat je panelen die dag over hadden. Wat je direct zelf gebruikte komt
+            niet langs de meter en zit hier niet in.
+          </span>
+        </div>
+      ) : null}
+
+      <div className="dagcijfer">
+        <span className="dagcijfer-waarde">{getal(s.cycles, 2)}</span>
+        <span className="dagcijfer-label">laadbeurten</span>
+        <span className="dagcijfer-noot">
+          hoogste stand {getal(s.socMaxKwh, 1)} van {getal(dag.usableCapacityKwh, 1)} kWh
+        </span>
+      </div>
+
+      <div className="dagcijfer">
+        <span className="dagcijfer-waarde">{getal(minderAfname, 1)} kWh</span>
+        <span className="dagcijfer-label">minder van het net</span>
+        <span className="dagcijfer-noot">
+          {getal(s.gridImportBaselineKwh, 1)} → {getal(s.gridImportBatteryKwh, 1)} kWh,
+          en {getal(minderTeruglevering, 1)} kWh minder teruggeleverd
+        </span>
+      </div>
+
+      <div className="dagcijfer">
+        <span className="dagcijfer-waarde">
+          {centPerKwh(s.priceMaxEurPerKwh - s.priceMinEurPerKwh)}
+        </span>
+        <span className="dagcijfer-label">prijsverschil op deze dag</span>
+        <span className="dagcijfer-noot">
+          laagste {centPerKwh(s.priceMinEurPerKwh)}, hoogste{" "}
+          {centPerKwh(s.priceMaxEurPerKwh)}
+        </span>
+      </div>
+
+      {gemist !== null ? (
+        <div className="dagcijfer">
+          <span className="dagcijfer-waarde">
+            {/* Bij een besparing van bijna nul zegt een percentage niets, en bij
+                een negatieve besparing zou het een absurd getal worden. Dan
+                noemen we het bedrag zelf. */}
+            {s.optimalSavingEur! > 0.02 && s.savingEur >= 0
+              ? procent(Math.min(1, s.savingEur / s.optimalSavingEur!))
+              : euroPrecies(s.savingEur)}
+          </span>
+          <span className="dagcijfer-label">van wat er in zat</span>
+          <span className="dagcijfer-noot">
+            {Math.abs(gemist) < 0.01
+              ? "gelijk aan wat met perfecte kennis van prijzen én weer mogelijk was; dit dagbedrag komt dus niet door een verkeerde inschatting"
+              : `met perfecte kennis van prijzen én weer was het ${euroPrecies(
+                  s.optimalSavingEur!,
+                )} geweest, dus ${euroPrecies(gemist)} meer`}
+          </span>
+        </div>
+      ) : null}
+    </div>
   );
 }
 

@@ -32,6 +32,12 @@
   --series-2: #eb6834; /* teruglevering */
   --series-3: #1baf7a; /* batterij / besparing */
   --series-4: #eda100; /* vierde post */
+  /*
+   * Vijfde reeks: de zon die de meter haalde, in het dagprofiel. Paars, omdat
+   * de vier hierboven blauw, oranje, groen en geel bezetten en een vijfde geel
+   * niet van --series-4 te onderscheiden zou zijn.
+   */
+  --series-5: #8f5bd6;
 
   /* Sequentieel: één hue, licht naar donker, voor magnitude. */
   --seq-100: #cde2fb;
@@ -73,6 +79,7 @@
     --series-2: #d95926;
     --series-3: #199e70;
     --series-4: #c98500;
+    --series-5: #a37ae0;
 
     --seq-100: #0d366b;
     --seq-200: #184f95;
@@ -106,6 +113,7 @@
   --series-2: #d95926;
   --series-3: #199e70;
   --series-4: #c98500;
+  --series-5: #a37ae0;
 
   --seq-100: #0d366b;
   --seq-200: #184f95;
@@ -812,6 +820,96 @@ input[type="date"] {
   width: auto;
   padding: 7px 9px;
   font-size: 0.85rem;
+}
+
+/*
+ * Pijltjes om door de dagen te lopen. Ze staan direct tegen de datum aan, want
+ * ze horen bij dat veld; met de pijltjestoetsen in het veld doen ze hetzelfde.
+ */
+.dagstap {
+  width: 30px;
+  height: 30px;
+  flex: none;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  font-size: 1.15rem;
+  line-height: 1;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-1);
+  color: var(--text-primary);
+  cursor: pointer;
+}
+
+.dagstap:hover:not(:disabled) {
+  background: var(--surface-2);
+  border-color: var(--text-muted);
+}
+
+.dagstap:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.dagkiezer-bezig {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * De kerncijfers van de dag, boven de grafieken.
+ *
+ * Auto-fit in plaats van een vast aantal kolommen: er zijn vijf of zes tegels,
+ * afhankelijk van of het optimum is meegerekend, en die moeten op elke breedte
+ * netjes uitvullen zonder een gat achter te laten.
+ */
+.dagcijfers {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
+  gap: 1px;
+  margin: 0 0 18px;
+  background: var(--border);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.dagcijfer {
+  background: var(--surface-1);
+  padding: 12px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dagcijfer--hoofd {
+  background: var(--surface-2);
+}
+
+.dagcijfer-waarde {
+  font-size: 1.15rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  font-variant-numeric: tabular-nums;
+}
+
+.dagcijfer--hoofd .dagcijfer-waarde {
+  font-size: 1.4rem;
+}
+
+.dagcijfer-label {
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+.dagcijfer-noot {
+  font-size: 0.74rem;
+  line-height: 1.35;
+  color: var(--text-muted);
+  margin-top: 2px;
 }
 
 .dag-melding {

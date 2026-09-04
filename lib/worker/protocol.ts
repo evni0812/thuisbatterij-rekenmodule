@@ -54,10 +54,18 @@ export type WorkerRequest =
       powers: number[];
     }
   | {
-      /** Haal het batterijgedrag van één kalenderdag op uit de laatste analyse. */
+      /**
+       * Haal het batterijgedrag van één kalenderdag op.
+       *
+       * De configuratie gaat mee omdat de worker niet mag aannemen dat hij die
+       * analyse zelf heeft gedraaid: een resultaat kan ook uit de browsercache
+       * komen. Zonder de configuratie kon de worker dan geen enkele dag
+       * leveren.
+       */
       type: "day";
       id: number;
       date: string;
+      config: Configuration;
     }
   | { type: "cancel" };
 
