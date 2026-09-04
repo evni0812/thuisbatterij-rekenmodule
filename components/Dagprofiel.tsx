@@ -19,7 +19,7 @@
  * liepen ze dwars over de as-labels heen.
  */
 
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useState, type ReactNode } from "react";
 import type { SampleDay } from "../lib/model/analysis";
 import { addDays } from "../lib/data/timeaxis";
 import { centPerKwh, datum, euroPrecies, getal, procent } from "../lib/format";
@@ -41,7 +41,15 @@ const PLOT_BREEDTE = PLOT_RECHTS - PLOT_LINKS;
  * vorige paneel en leek alles op elkaar gedrukt.
  */
 const TITEL_RUIMTE = 42;
-const HOOGTE = { prijs: 128, actie: 156, lading: 84, net: 128 };
+/**
+ * De panelen waren te laag voor wat erin staat. Het actiepaneel draagt zes
+ * reeksen en een legenda van acht regels, en de lading kreeg 84 eenheden voor
+ * een lijn die het hele verhaal van de dag vertelt: dan is een volle batterij
+ * nauwelijks te onderscheiden van een halfvolle. Een dagprofiel dat je moet
+ * ontcijferen doet zijn werk niet, en verticale ruimte is het goedkoopste wat
+ * we hebben — de figuur scrollt toch.
+ */
+const HOOGTE = { prijs: 150, actie: 215, lading: 125, net: 165 };
 const TIJDAS_HOOGTE = 34;
 
 /**
@@ -73,8 +81,17 @@ const H_TOTAAL = Y.net + HOOGTE.net + TIJDAS_HOOGTE;
 /** Kwartier-kWh naar vermogen in kW: 0,25 kWh in een kwartier is 1 kW. */
 const KWH_NAAR_KW = 4;
 
-/** Minimale verticale afstand tussen twee lijnlabels, in SVG-eenheden. */
-const LABEL_MIN_AFSTAND = 15;
+/**
+ * Minimale verticale afstand tussen twee lijnlabels, in SVG-eenheden.
+ *
+ * Een label is twee regels: de naam op y−1 en de waarde op y+11, met het
+ * kleurblokje op y−5. Van boven- tot onderkant is dat ruim twintig eenheden.
+ * Deze marge stond op 15, en dan schoof de waarde van het ene label over de
+ * naam van het volgende — zichtbaar zodra twee lijnen op dezelfde hoogte
+ * eindigen, zoals "zónder batterij" en "mét batterij" op een dag waarop de
+ * batterij 's avonds leeg is.
+ */
+const LABEL_MIN_AFSTAND = 28;
 
 function lijn(punten: [number, number][]): string {
   return punten.map(([x, y], i) => `${i === 0 ? "M" : "L"}${x} ${y}`).join(" ");
@@ -596,46 +613,103 @@ export function Dagprofiel({
           */}
           <g className="actie-legende">
             {(() => {
-              const regels = [
+              /*
+                De legenda stond als één lijst van zes, en twee regels waren
+                allebei groen: "opgeslagen" en "zelf gebruikt". In de grafiek is
+                dat te volgen omdat de richting het onderscheid draagt — omhoog
+                is erin, omlaag is eruit — maar in de legenda staan twee
+                identieke blokjes onder elkaar met verschillende namen, en dan
+                lijkt het een fout.
+
+                Groen betekent hier consequent "je eigen stroom", blauw "van het
+                net" en oranje "naar het net". Dat klopt in beide richtingen, dus
+                de kleuren blijven; de legenda groepeert nu op richting en zegt
+                per regel waar de stroom vandaan komt of heen gaat.
+              */
+              const groepen: {
+                kop?: string;
+                regels: { kleur: string; naam: string; waarde: number; vaag?: boolean }[];
+              }[] = [
                 {
-                  kleur: "var(--series-5)",
-                  naam: "zon naar de meter",
-                  waarde: heeftZonReeks && zonTotaal !== null ? zonTotaal : 0,
+                  regels: [
+                    {
+                      kleur: "var(--series-5)",
+                      naam: "zon naar de meter",
+                      waarde: heeftZonReeks && zonTotaal !== null ? zonTotaal : 0,
+                    },
+                    {
+                      kleur: "var(--text-muted)",
+                      naam: "netto over",
+                      waarde: totaalOverschot,
+                      vaag: true,
+                    },
+                  ],
                 },
-                { kleur: "var(--text-muted)", naam: "netto over", waarde: totaalOverschot, vaag: true },
-                { kleur: "var(--series-3)", naam: "opgeslagen", waarde: totaalZon },
-                { kleur: "var(--series-1)", naam: "ingekocht", waarde: totaalNet },
-                { kleur: "var(--series-3)", naam: "zelf gebruikt", waarde: totaalHuis },
-                { kleur: "var(--series-2)", naam: "verkocht", waarde: totaalVerkocht },
-              ].filter((r) => r.waarde > 0.01);
+                {
+                  kop: "laden",
+                  regels: [
+                    { kleur: "var(--series-3)", naam: "uit eigen zon", waarde: totaalZon },
+                    { kleur: "var(--series-1)", naam: "uit het net", waarde: totaalNet },
+                  ],
+                },
+                {
+                  kop: "ontladen",
+                  regels: [
+                    { kleur: "var(--series-3)", naam: "naar je huis", waarde: totaalHuis },
+                    { kleur: "var(--series-2)", naam: "naar het net", waarde: totaalVerkocht },
+                  ],
+                },
+              ];
 
-              // Een regel is een blokje plus twee tekstregels: ruim 20px hoog.
-              const RUIMTE = HOOGTE.actie - 8;
-              const stap =
-                regels.length > 1 ? Math.min(34, RUIMTE / (regels.length - 1)) : 0;
+              // Alles onder een tiende van een wattuur is ruis en zou de lijst
+              // alleen langer maken; een groep zonder regels valt weg.
+              const zichtbaar = groepen
+                .map((g) => ({ ...g, regels: g.regels.filter((r) => r.waarde > 0.01) }))
+                .filter((g) => g.regels.length > 0);
 
-              return regels.map((r, i) => {
-                const y = Y.actie - 4 + i * stap;
-                return (
-                  <g key={r.naam}>
-                    <rect
+              const REGEL = 28;
+              const KOP = 16;
+              const uit: ReactNode[] = [];
+              let y = Y.actie - 4;
+
+              for (const groep of zichtbaar) {
+                if (groep.kop) {
+                  uit.push(
+                    <text
+                      key={`kop-${groep.kop}`}
                       x={PLOT_RECHTS + 8}
-                      y={y - 8}
-                      width={9}
-                      height={9}
-                      rx={2}
-                      fill={r.kleur}
-                      opacity={r.vaag ? 0.4 : 1}
-                    />
-                    <text x={PLOT_RECHTS + 22} y={y} className="lijn-label">
-                      {r.naam}
-                    </text>
-                    <text x={PLOT_RECHTS + 22} y={y + 12} className="lijn-waarde">
-                      {getal(r.waarde, 2)} kWh
-                    </text>
-                  </g>
-                );
-              });
+                      y={y}
+                      className="legende-kop"
+                    >
+                      {groep.kop}
+                    </text>,
+                  );
+                  y += KOP;
+                }
+                for (const r of groep.regels) {
+                  uit.push(
+                    <g key={r.naam}>
+                      <rect
+                        x={PLOT_RECHTS + 8}
+                        y={y - 8}
+                        width={9}
+                        height={9}
+                        rx={2}
+                        fill={r.kleur}
+                        opacity={r.vaag ? 0.4 : 1}
+                      />
+                      <text x={PLOT_RECHTS + 22} y={y} className="lijn-label">
+                        {r.naam}
+                      </text>
+                      <text x={PLOT_RECHTS + 22} y={y + 12} className="lijn-waarde">
+                        {getal(r.waarde, 2)} kWh
+                      </text>
+                    </g>,
+                  );
+                  y += REGEL;
+                }
+              }
+              return uit;
             })()}
           </g>
 

@@ -807,6 +807,15 @@ input[type="date"] {
   font-size: 11px;
 }
 
+/* Groepskopje in de legenda van het actiepaneel: "laden", "ontladen". */
+.legende-kop {
+  fill: var(--text-muted);
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+}
+
 .lijn-waarde {
   fill: var(--text-primary);
   font-size: 11.5px;

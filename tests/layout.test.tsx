@@ -194,9 +194,16 @@ describe("kolomindeling van het dagprofiel", () => {
     // "netto over" heette eerder "zon over". Dat was verwarrend zodra er ook
     // een lijn bij kwam voor de zon die de meter passeerde: die twee schelen
     // precies wat het huis op dat moment zelf verbruikte.
+    //
+    // "opgeslagen" en "zelf gebruikt" heten nu "uit eigen zon" en "naar je
+    // huis". Ze delen dezelfde groene kleur, want groen betekent hier steeds
+    // "je eigen stroom", en in de grafiek draagt de richting het onderscheid.
+    // In de legenda deed hij dat niet: daar stonden twee identieke blokjes met
+    // verschillende namen onder elkaar. De namen zeggen nu zelf waar de stroom
+    // vandaan komt en heen gaat, gegroepeerd onder "laden" en "ontladen".
     expect(namen).toContain("netto over");
-    expect(namen).toContain("opgeslagen");
-    expect(namen).toContain("zelf gebruikt");
+    expect(namen).toContain("uit eigen zon");
+    expect(namen).toContain("naar je huis");
   });
 
   it("gebruikt geen legenda meer — elk paneel benoemt zijn eigen lijnen", () => {

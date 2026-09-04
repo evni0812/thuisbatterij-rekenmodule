@@ -24,7 +24,7 @@ import { controleerInvoer } from "../components/Invoer";
 import { expandPricesToQuarters, loadManifest, loadPriceYear, loadProfileYear } from "../lib/data/loader";
 import type { Manifest } from "../lib/data/manifest";
 import { addDays, localMidnightUtcMs } from "../lib/data/timeaxis";
-import { runAnalysis, type AnalysisResult } from "../lib/model/analysis";
+import { runAnalysis, type AnalysisResult, type SampleDay } from "../lib/model/analysis";
 import { buildResidual } from "../lib/model/residual";
 import { buildPriceSeries } from "../lib/model/tariff";
 import { PRESETS } from "../lib/presets";
@@ -448,5 +448,116 @@ describe("de verliezensectie", () => {
     const leeg = { ...result.losses, chargedKwh: 0 };
     const { container } = render(<Verliezen losses={leeg} afnameKwh={2500} besparingEur={100} />);
     expect(container.textContent).toBe("");
+  });
+});
+
+describe("labels in het dagprofiel botsen niet", () => {
+  /**
+   * Elk label in de rechterkolom is twee regels: een naam en een waarde, twaalf
+   * eenheden uit elkaar. Staan twee labels dichter dan een regelhoogte bij
+   * elkaar, dan schuift de waarde van het ene over de naam van het andere.
+   *
+   * Dat gebeurde op twee plekken tegelijk. De lijnlabels werden uit elkaar
+   * geduwd met een marge van 15, te weinig voor een label van ruim twintig hoog:
+   * zichtbaar zodra "zónder batterij" en "mét batterij" op dezelfde hoogte
+   * eindigen, wat elke dag gebeurt waarop de batterij 's avonds leeg is. En de
+   * legenda van het actiepaneel zette vier regels vanaf de bovenkant en twee
+   * vanaf de onderkant, die bij zes zichtbare reeksen acht eenheden uit elkaar
+   * kwamen te staan.
+   *
+   * Deze test kijkt niet naar die twee oorzaken maar naar het gevolg: geen twee
+   * teksten in de labelkolom mogen binnen een regelhoogte van elkaar liggen.
+   */
+  function maakDag(): SampleDay {
+    const n = 96;
+    const start = Date.UTC(2025, 5, 21, 22, 0, 0);
+    const leeg = () => new Array<number>(n).fill(0);
+    const dag: SampleDay = {
+      label: "Testdag",
+      date: "2025-06-22",
+      startMs: Array.from({ length: n }, (_, i) => start + i * 900_000),
+      residualKwh: leeg(),
+      netKwh: leeg(),
+      curtailedKwh: leeg(),
+      socKwh: leeg(),
+      chargeKwh: leeg(),
+      dischargeKwh: leeg(),
+      importPrice: leeg(),
+      exportPrice: leeg(),
+      meterExportKwh: leeg(),
+      meterImportKwh: leeg(),
+      usableCapacityKwh: 5,
+      stats: {
+        baselineCostEur: 1.2, batteryCostEur: 0.6, savingEur: 0.6,
+        optimalSavingEur: 0.7, gridImportBaselineKwh: 4, gridImportBatteryKwh: 2,
+        gridExportBaselineKwh: 6, gridExportBatteryKwh: 3, chargedKwh: 3,
+        deliveredKwh: 2.6, chargedFromSolarKwh: 2.5, chargedFromGridKwh: 0.5,
+        cycles: 0.6, socMaxKwh: 4.2, socStartKwh: 0, socEndKwh: 0.4,
+        curtailedKwh: 0, priceMinEurPerKwh: 0.12, priceMaxEurPerKwh: 0.34,
+        meterImportKwh: 4, meterExportKwh: 6,
+      },
+    };
+
+    for (let i = 0; i < n; i++) {
+      const uur = i / 4;
+      const zon = uur > 8 && uur < 17;
+      dag.importPrice[i] = zon ? 0.14 : 0.3;
+      dag.exportPrice[i] = zon ? 0.02 : 0.14;
+      dag.residualKwh[i] = zon ? -0.6 : 0.15;
+      dag.meterExportKwh[i] = zon ? 0.6 : 0;
+      dag.meterImportKwh[i] = zon ? 0 : 0.15;
+      // Laden uit eigen zon overdag, ontladen naar het huis 's avonds.
+      if (zon) dag.chargeKwh[i] = 0.2;
+      if (uur >= 18 && uur < 22) dag.dischargeKwh[i] = 0.15;
+      dag.socKwh[i] = Math.min(4.2, Math.max(0, (uur - 8) * 0.35));
+    }
+    // Eén kwartier laden terwijl er een tekort is: dat komt uit het net.
+    dag.chargeKwh[16] = 0.2;
+    // Eén kwartier ontladen zonder tekort: dat gaat het net op.
+    dag.dischargeKwh[50] = 0.1;
+    for (let i = 0; i < n; i++) {
+      dag.netKwh[i] = dag.residualKwh[i]! + dag.chargeKwh[i]! - dag.dischargeKwh[i]!;
+    }
+    return dag;
+  }
+
+  it("houdt elke tekst in de labelkolom een regelhoogte uit elkaar", () => {
+    const { container } = render(
+      <Dagprofiel
+        voorbeelden={[maakDag()]}
+        losseDag={null}
+        ontbreekt={null}
+        eersteDag="2025-01-01"
+        laatsteDag="2025-12-31"
+        onVraagDag={() => {}}
+        onWisDag={() => {}}
+      />,
+    );
+
+    // Alle zes reeksen moeten in beeld zijn, anders toetst dit niets.
+    const tekst = container.textContent ?? "";
+    for (const naam of [
+      "zon naar de meter", "netto over", "uit eigen zon",
+      "uit het net", "naar je huis", "naar het net",
+    ]) {
+      expect(tekst, `reeks "${naam}" ontbreekt in de legenda`).toContain(naam);
+    }
+
+    const labels = [
+      ...container.querySelectorAll("text.lijn-label, text.lijn-waarde, text.legende-kop"),
+    ]
+      .map((el) => ({ y: Number(el.getAttribute("y")), t: el.textContent ?? "" }))
+      .filter((l) => Number.isFinite(l.y))
+      .sort((a, b) => a.y - b.y);
+
+    // De tekst is 10 tot 11,5px; baselines dichter dan tien eenheden overlappen.
+    for (let i = 1; i < labels.length; i++) {
+      const vorige = labels[i - 1]!;
+      const huidige = labels[i]!;
+      expect(
+        huidige.y - vorige.y,
+        `"${vorige.t}" (y=${vorige.y}) en "${huidige.t}" (y=${huidige.y}) overlappen`,
+      ).toBeGreaterThanOrEqual(10);
+    }
   });
 });
