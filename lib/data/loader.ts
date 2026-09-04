@@ -83,16 +83,29 @@ export interface PriceYear {
   levyEurPerKwh: number;
 }
 
-async function fetchBuffer(url: string): Promise<ArrayBuffer> {
-  const res = await fetch(url);
+/**
+ * Hoe een asset wordt opgehaald.
+ *
+ * In de browser is dat `fetch`. Tijdens de build bestaat `/data/...` nog niet
+ * als URL — dan leest een variant de bestanden rechtstreeks van schijf. Door
+ * hem als parameter door te geven blijft dat een keuze van de aanroeper in
+ * plaats van een globale die je per ongeluk laat staan.
+ */
+export type Ophaler = (url: string) => Promise<Response>;
+
+async function fetchBuffer(url: string, haal: Ophaler): Promise<ArrayBuffer> {
+  const res = await haal(url);
   if (!res.ok) {
     throw new Error(`kon ${url} niet laden: HTTP ${res.status}`);
   }
   return res.arrayBuffer();
 }
 
-export async function loadManifest(base = "/data"): Promise<Manifest> {
-  const res = await fetch(`${base}/manifest.json`);
+export async function loadManifest(
+  base = "/data",
+  haal: Ophaler = fetch,
+): Promise<Manifest> {
+  const res = await haal(`${base}/manifest.json`);
   if (!res.ok) throw new Error(`manifest niet gevonden: HTTP ${res.status}`);
   return (await res.json()) as Manifest;
 }
@@ -102,13 +115,14 @@ export async function loadProfileYear(
   domain: string,
   year: number,
   base = "/data",
+  haal: Ophaler = fetch,
 ): Promise<ProfileYear> {
   const info = manifest.profielen[domain]?.[String(year)];
   if (!info) {
     throw new Error(`geen profiel voor netgebied ${domain} in ${year}`);
   }
   const { length, series } = decodeBinary(
-    await fetchBuffer(`${base}/profile-${domain}-${year}.bin`),
+    await fetchBuffer(`${base}/profile-${domain}-${year}.bin`, haal),
   );
   const startMs = buildQuarterAxis(info.eerste_dag, addDays(info.laatste_dag, 1));
   if (startMs.length !== length) {
@@ -134,11 +148,12 @@ export async function loadPriceYear(
   manifest: Manifest,
   year: number,
   base = "/data",
+  haal: Ophaler = fetch,
 ): Promise<PriceYear> {
   const info = manifest.prijzen[String(year)];
   if (!info) throw new Error(`geen prijzen voor ${year}`);
   const { series } = decodeBinary(
-    await fetchBuffer(`${base}/prices-${year}.bin`),
+    await fetchBuffer(`${base}/prices-${year}.bin`, haal),
   );
   return {
     year,

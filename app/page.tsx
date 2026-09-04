@@ -14,40 +14,16 @@ import { Uitsplitsing } from "../components/Uitsplitsing";
 import { Verantwoording } from "../components/Verantwoording";
 import { Verliezen } from "../components/Verliezen";
 import { periode } from "../lib/format";
+import { PRESETS } from "../lib/presets";
 import {
-  PRESETS,
-  STANDAARD_AFNAME_KWH,
-  STANDAARD_ANALYSEJAREN,
-  STANDAARD_DISCONTOVOET,
-  STANDAARD_KALENDERDEGRADATIE,
-  STANDAARD_PRESET_ID,
-  STANDAARD_PRIJSSTIJGING,
-  STANDAARD_TERUGLEVERING_KWH,
-} from "../lib/presets";
+  STANDAARD,
+  kiesPreset,
+  maakConfiguratie,
+} from "../lib/configuratie";
 import { useAnalysis } from "../lib/useAnalysis";
 import { leesUrl, schrijfUrl, type Instellingen } from "../lib/url-state";
 import type { Configuration } from "../lib/worker/protocol";
 
-const STANDAARD: Instellingen = {
-  afnameKwh: STANDAARD_AFNAME_KWH,
-  terugleveringKwh: STANDAARD_TERUGLEVERING_KWH,
-  presetId: STANDAARD_PRESET_ID,
-  domein: "871685900000056162",
-  van: "",
-  tot: "",
-  spreiding: 1,
-  terugleverkostenCt: 0,
-  curtailment: true,
-  heffing: "toen",
-  analysejaren: STANDAARD_ANALYSEJAREN,
-  discontovoet: STANDAARD_DISCONTOVOET,
-  prijsstijging: STANDAARD_PRIJSSTIJGING,
-  degradatie: STANDAARD_KALENDERDEGRADATIE,
-  prijsEur: null,
-  capaciteitKwh: null,
-  vermogenKw: null,
-  opwekKwh: null,
-};
 
 export default function Page() {
   const [inst, setInst] = useState<Instellingen>(STANDAARD);
@@ -65,47 +41,16 @@ export default function Page() {
     if (geladen) schrijfUrl(inst, STANDAARD);
   }, [inst, geladen]);
 
-  const preset = PRESETS.find((p) => p.id === inst.presetId) ?? PRESETS[0]!;
+  const preset = kiesPreset(inst.presetId);
   const capaciteit = inst.capaciteitKwh ?? preset.capaciteitKwh;
   const vermogen = inst.vermogenKw ?? preset.vermogenKw;
   const prijs = inst.prijsEur ?? preset.prijsEur;
 
   const state = useAnalysis(
-    useMemo<Configuration | null>(() => {
-      if (!geladen) return null;
-      return {
-        domain: inst.domein,
-        from: inst.van || "2023-04-01",
-        to: inst.tot || "2026-12-31",
-        household: {
-          annualGridImportKwh: inst.afnameKwh,
-          annualGridExportKwh: inst.terugleveringKwh,
-          spreadFactor: inst.spreiding,
-        },
-        battery: {
-          ...preset.spec,
-          capacityKwh: capaciteit,
-          maxChargeKw: vermogen,
-          maxDischargeKw: vermogen,
-          wearCostEurPerKwh: 0,
-        },
-        tariff: {
-          purchaseSurchargeEurPerKwh: 0,
-          energyTaxEurPerKwh: 0,
-          feedInCostEurPerKwh: inst.terugleverkostenCt / 100,
-          allowCurtailment: inst.curtailment,
-        },
-        investmentEur: prijs,
-        cycleLife: preset.cycleLife,
-        analysisYears: inst.analysejaren,
-        priceEscalation: inst.prijsstijging,
-        discountRate: inst.discontovoet,
-        calendarFadePerYear: inst.degradatie,
-        residualValueEur: 0,
-        annualProductionKwh: inst.opwekKwh ?? undefined,
-        useHistoricalLevy: inst.heffing === "toen",
-      };
-    }, [geladen, inst, preset, capaciteit, vermogen, prijs]),
+    useMemo<Configuration | null>(
+      () => (geladen ? maakConfiguratie(inst) : null),
+      [geladen, inst],
+    ),
   );
 
   const {

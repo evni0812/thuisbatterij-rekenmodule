@@ -10,7 +10,7 @@
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { leesCache, schrijfCache } from "./cache";
+import { configSleutel, leesCache, schrijfCache } from "./cache";
 import type { AnalysisResult } from "./model/analysis";
 import type { Manifest } from "./data/manifest";
 import type { SampleDay } from "./model/analysis";
@@ -76,6 +76,37 @@ export interface AnalysisState {
  * instellingen wachten op een expliciete opdracht.
  */
 const DEBOUNCE_MS = 180;
+
+/**
+ * Het standaardantwoord dat bij de build is uitgerekend.
+ *
+ * Wie de tool opent zonder iets in te stellen, zag eerst vier seconden een leeg
+ * scherm terwijl de worker vier profieljaren doorrekende. Dat antwoord is voor
+ * iedereen hetzelfde, dus het staat nu als bestand klaar: 12 kB over de lijn in
+ * plaats van vier seconden rekenen.
+ *
+ * De sleutel bepaalt of het bruikbaar is. Hij bevat zowel het modelversienummer
+ * als een hash van de configuratie, dus een bezoeker met een afwijkende invoer
+ * of een oud bestand valt vanzelf terug op zelf rekenen.
+ */
+interface Vooruitgerekend {
+  versie: number;
+  sleutel: string;
+  gemaakt: string;
+  result: AnalysisResult;
+}
+
+let voorbeeldBelofte: Promise<Vooruitgerekend | null> | null = null;
+
+function haalVoorbeeld(): Promise<Vooruitgerekend | null> {
+  if (voorbeeldBelofte) return voorbeeldBelofte;
+  voorbeeldBelofte = fetch("/voorbeeld.json")
+    .then((r) => (r.ok ? (r.json() as Promise<Vooruitgerekend>) : null))
+    // Ontbreekt het bestand of is het stuk, dan rekent de tool gewoon zelf.
+    // Een preload die faalt mag nooit meer kosten dan de tijd die hij bespaart.
+    .catch(() => null);
+  return voorbeeldBelofte;
+}
 
 export function useAnalysis(config: Configuration | null): AnalysisState {
   const workerRef = useRef<Worker | null>(null);
@@ -175,6 +206,11 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
 
     const init: WorkerRequest = { type: "init", baseUrl: "/data" };
     worker.postMessage(init);
+
+    // Meteen naast de worker starten. Het bestand is klein en de kans is groot
+    // dat we het nodig hebben; zo staat het klaar tegen de tijd dat de
+    // configuratie bekend is, in plaats van er dan pas op te wachten.
+    void haalVoorbeeld();
 
     return () => {
       worker.terminate();
@@ -287,8 +323,35 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
     // Nog niet eerder uitgerekend: de eerste keer doen we het meteen, daarna
     // markeren we het resultaat als verouderd en wacht de tool op een opdracht.
     if (state.result === null) {
-      const timer = setTimeout(() => send(config), DEBOUNCE_MS);
-      return () => clearTimeout(timer);
+      let levend = true;
+      const timer = setTimeout(async () => {
+        // Eerst het antwoord dat bij de build is uitgerekend. Past het bij deze
+        // configuratie, dan is er niets te rekenen en staat het er meteen.
+        const vooruit = await haalVoorbeeld();
+        if (!levend) return;
+        if (vooruit && vooruit.sleutel === configSleutel(config)) {
+          getoondVoor.current = sleutel;
+          laatsteConfig.current = config;
+          // Ook bewaren, zodat een volgend bezoek het bestand niet meer hoeft
+          // op te halen en een gewijzigde invoer er weer op terug kan vallen.
+          schrijfCache(config, vooruit.result);
+          setState((s) => ({
+            ...s,
+            result: vooruit.result,
+            busy: false,
+            error: null,
+            getoondeConfig: config,
+            uitCache: true,
+            verouderd: false,
+          }));
+          return;
+        }
+        send(config);
+      }, DEBOUNCE_MS);
+      return () => {
+        levend = false;
+        clearTimeout(timer);
+      };
     }
     setState((s) => ({ ...s, verouderd: true }));
     return;

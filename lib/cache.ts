@@ -27,7 +27,7 @@ import type { Configuration } from "./worker/protocol";
  * heffing per uur in plaats van een jaarconstante, en de uitvoerder die bewuste
  * verkoop aan het net doorlaat. Alle drie veranderen de bedragen.
  */
-const MODEL_VERSIE = 7;
+export const MODEL_VERSIE = 7;
 
 const SLEUTEL_PREFIX = "tbat:v" + MODEL_VERSIE + ":";
 /** Hoeveel doorrekeningen we bewaren voordat de oudste eruit gaat. */

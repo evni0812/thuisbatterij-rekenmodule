@@ -165,7 +165,15 @@ export const PRESETS: BatteryPreset[] = [
  * moment en zit qua maat in het midden van de lijst, dus wie niets kiest ziet
  * een uitkomst die voor de meeste huishoudens herkenbaar is.
  */
-export const STANDAARD_PRESET_ID = "marstek-venus-e3";
+/**
+ * De batterij die je ziet als je niets kiest.
+ *
+ * De Zendure 800 Pro 2 is de goedkoopste stekkerbatterij in de lijst en
+ * daarmee het eerlijkste startpunt: wie hier al ziet dat het niet uit kan,
+ * weet genoeg. Een groter systeem laat een mooier bedrag zien, maar begint met
+ * een investering die de meeste bezoekers niet overwegen.
+ */
+export const STANDAARD_PRESET_ID = "zendure-800pro2";
 
 /** Peildatum van de prijzen hierboven, voor wie ze wil narekenen. */
 export const PRIJSPEILDATUM = "september 2026";

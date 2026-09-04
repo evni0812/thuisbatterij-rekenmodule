@@ -33,6 +33,26 @@ te maken, is de webpack-compile gesmoord door geheugendruk — kijk naar
 `vm.swapusage`. `npx next build --turbopack` doet hetzelfde werk in een fractie
 van het geheugen en levert dezelfde export op.
 
+## Het standaardantwoord staat klaar
+
+Wie de tool opent zonder iets in te stellen, zag eerst vier seconden een leeg
+scherm terwijl de worker vier profieljaren doorrekende. Dat antwoord is voor
+iedereen hetzelfde — er zit geen willekeur in het model — dus het wordt bij de
+build één keer uitgerekend en als `/voorbeeld.json` meegeleverd: 40 kB, 12 kB
+over de lijn.
+
+De route-handler in `app/voorbeeld.json/route.ts` draait tijdens de build en
+leest de assets van schijf in plaats van via `fetch`. Daarom neemt
+`lib/data/loader.ts` een `Ophaler` als parameter, en bouwt `lib/data/invoer.ts`
+de modelinvoer voor zowel de worker als de build. Dezelfde code, één antwoord.
+
+Bruikbaar is het bestand alleen als de sleutel klopt: die bevat het
+modelversienummer uit `lib/cache.ts` én een hash van de configuratie. Een
+bezoeker met afwijkende invoer, of een bestand van vóór een modelwijziging,
+valt vanzelf terug op zelf rekenen. `tests/voorbeeld.test.ts` bewaakt die
+afspraak, want als de twee kanten uit elkaar lopen blijft de tool werken en is
+hij alleen weer traag — een regressie die niemand opmerkt.
+
 ## Publiceren
 
 De app staat op Vercel en bouwt bij elke push naar `main`. `vercel.json`

@@ -6,15 +6,7 @@
  * laten bevriezen tijdens het slepen van een schuifregelaar.
  */
 
-import {
-  expandPricesToQuarters,
-  loadManifest,
-  loadPriceYear,
-  loadProfileYear,
-  type PriceYear,
-  type ProfileYear,
-} from "../data/loader";
-import { addDays, localMidnightUtcMs } from "../data/timeaxis";
+import { Invoerbron } from "../data/invoer";
 import type { Manifest } from "../data/manifest";
 import { marginalWearCostPerKwh } from "../model/battery";
 import { dispatchBaseline } from "../model/dispatch-baseline";
@@ -26,13 +18,6 @@ import {
   type AnalysisInput,
   type SampleDay,
 } from "../model/analysis";
-import {
-  buildResidualParts,
-  GEEN_SCHALING,
-  solveNettingScale,
-  type NettingScale,
-} from "../model/residual";
-import { buildPriceSeries } from "../model/tariff";
 import type { BatterySpec, DispatchResult } from "../model/types";
 import type {
   Configuration,
@@ -41,218 +26,15 @@ import type {
   WorkerResponse,
 } from "./protocol";
 
+/**
+ * De invoerbron leeft zolang de worker leeft, zodat geladen profielen, prijzen
+ * en schaalfactoren tussen aanvragen bewaard blijven.
+ */
+let bron = new Invoerbron();
 let manifest: Manifest | null = null;
-let baseUrl = "/data";
-
-const profileCache = new Map<string, ProfileYear>();
-const priceCache = new Map<number, PriceYear>();
-
-async function getProfile(domain: string, year: number): Promise<ProfileYear> {
-  const key = `${domain}:${year}`;
-  const hit = profileCache.get(key);
-  if (hit) return hit;
-  const loaded = await loadProfileYear(manifest!, domain, year, baseUrl);
-  profileCache.set(key, loaded);
-  return loaded;
-}
-
-async function getPrice(year: number): Promise<PriceYear> {
-  const hit = priceCache.get(year);
-  if (hit) return hit;
-  const loaded = await loadPriceYear(manifest!, year, baseUrl);
-  priceCache.set(year, loaded);
-  return loaded;
-}
-
-/** Welke kalenderjaren raakt het gekozen venster, en waar liggen de grenzen? */
-function yearsInRange(
-  m: Manifest,
-  domain: string,
-  from: string,
-  to: string,
-): number[] {
-  const beschikbaar = Object.keys(m.profielen[domain] ?? {}).map(Number);
-  return beschikbaar
-    .filter((y) => {
-      const info = m.profielen[domain]![String(y)]!;
-      // Overlap tussen [eerste_dag, laatste_dag] en [from, to].
-      return info.eerste_dag <= to && info.laatste_dag >= from;
-    })
-    .sort((a, b) => a - b);
-}
-
-/**
- * Knip een profieljaar bij tot het gekozen venster.
- *
- * De fracties worden NIET geherschaald: ze zijn genormaliseerd op het hele
- * kalenderjaar, en juist daardoor levert een deelvenster automatisch het juiste
- * deelvolume op. Renormaliseren zou volume verzinnen — drie wintermaanden horen
- * meer dan een kwart van het jaarvolume te bevatten.
- *
- * De grenzen worden in lokale tijd bepaald: "1 juli" begint op 30 juni 22:00
- * UTC in de zomer en op 23:00 UTC in de winter.
- */
-function sliceRange(
-  prof: ProfileYear,
-  from: string,
-  to: string,
-): { start: number; end: number; firstDay: string; lastDay: string } {
-  const firstDay = prof.firstDay > from ? prof.firstDay : from;
-  const lastDay = prof.lastDay < to ? prof.lastDay : to;
-  if (firstDay > lastDay) {
-    return { start: 0, end: 0, firstDay, lastDay };
-  }
-
-  const vanaf = localMidnightUtcMs(firstDay);
-  const totEnMet = localMidnightUtcMs(addDays(lastDay, 1));
-
-  return {
-    start: lowerBound(prof.startMs, vanaf),
-    end: lowerBound(prof.startMs, totEnMet),
-    firstDay,
-    lastDay,
-  };
-}
-
-/** Eerste index waarvan de waarde niet kleiner is dan `target`. */
-function lowerBound(axis: Float64Array, target: number): number {
-  let lo = 0;
-  let hi = axis.length;
-  while (lo < hi) {
-    const mid = (lo + hi) >>> 1;
-    if (axis[mid]! < target) lo = mid + 1;
-    else hi = mid;
-  }
-  return lo;
-}
-
-/** Het meest recente jaar waarvoor er prijzen zijn. */
-function laatstePrijsjaar(m: Manifest): string {
-  return Object.keys(m.prijzen).sort().at(-1)!;
-}
-
-/**
- * Schaalfactoren voor het netten, per netgebied en per stel jaarvolumes.
- *
- * Gebufferd, want de oplossing kost een tiental passes over een jaar en het
- * antwoord verandert alleen als het netgebied of de meterstanden veranderen —
- * niet als de gebruiker aan de batterij schuift.
- */
-const scaleCache = new Map<string, NettingScale>();
-
-async function nettingScaleFor(
-  m: Manifest,
-  config: Configuration,
-): Promise<NettingScale> {
-  const hh = config.household;
-  const key = `${config.domain}:${hh.annualGridImportKwh}:${hh.annualGridExportKwh}`;
-  const hit = scaleCache.get(key);
-  if (hit) return hit;
-
-  const jaren = Object.entries(m.profielen[config.domain] ?? {})
-    .filter(([, info]) => info.volledig_jaar)
-    .map(([y]) => Number(y))
-    .sort((a, b) => b - a);
-  // Zonder vol jaar valt er niets betrouwbaars op te lossen; dan blijft de
-  // reeks ongeschaald en komen de volumes onder de meterstanden uit.
-  if (jaren.length === 0) return GEEN_SCHALING;
-
-  const prof = await getProfile(config.domain, jaren[0]!);
-  const scale = solveNettingScale(prof.importFraction, prof.exportFraction, hh);
-  scaleCache.set(key, scale);
-  return scale;
-}
 
 async function buildInput(config: Configuration): Promise<AnalysisInput> {
-  const m = manifest!;
-  const jaren = yearsInRange(m, config.domain, config.from, config.to);
-  if (jaren.length === 0) {
-    throw new Error(
-      `geen profieldata voor netgebied ${config.domain} tussen ${config.from} en ${config.to}`,
-    );
-  }
-
-  // De schaalfactoren die de genette reeks op de meterstanden laten uitkomen
-  // worden op één VOL kalenderjaar bepaald en voor alle jaren gebruikt, ook de
-  // deeljaren. Een deeljaar zou anders de jaartotalen in een deel van het jaar
-  // proppen. Het meest recente volle jaar is het representatiefst.
-  const schaling = await nettingScaleFor(m, config);
-
-  // Zonder historische heffing rekenen we met de heffing van nu: die van het
-  // meest recente prijsjaar in de data, tenzij de gebruiker er zelf een opgaf.
-  const actueleHeffing =
-    config.tariff.energyTaxEurPerKwh > 0
-      ? config.tariff.energyTaxEurPerKwh
-      : m.prijzen[laatstePrijsjaar(m)]!.jaarconstante_eur_per_kwh;
-
-  const windows: AnalysisInput["windows"] = [];
-  for (const year of jaren) {
-    const prof = await getProfile(config.domain, year);
-    const price = await getPrice(year);
-    const { start, end, firstDay, lastDay } = sliceRange(prof, config.from, config.to);
-    if (end <= start) continue;
-
-    const startMs = prof.startMs.slice(start, end);
-    const market = expandPricesToQuarters(startMs, price, "market");
-
-    // Standaard rekenen we met de heffing zoals die op elk uur werkelijk gold:
-    // allInPrijs minus marktprijs, per uur, want binnen een jaar verschuift hij
-    // (2025: 17,13 ct tot september, daarna 14,29 ct). Dat maakt de uitkomst
-    // een tegenfeitelijke doorrekening van wat er echt gebeurd is.
-    //
-    // Met de heffing van nu wordt dezelfde vraag naar het heden getrokken: wat
-    // had deze batterij opgeleverd op de prijzen van toen, maar met de
-    // belasting en opslag van vandaag. Dat is wat een koper wil weten.
-    let heffing: Float64Array;
-    if (config.useHistoricalLevy) {
-      const allIn = expandPricesToQuarters(startMs, price, "allIn");
-      heffing = new Float64Array(market.length);
-      for (let i = 0; i < heffing.length; i++) heffing[i] = allIn[i]! - market[i]!;
-    } else {
-      heffing = new Float64Array(market.length).fill(actueleHeffing);
-    }
-
-    const delen = buildResidualParts(
-      prof.importFraction.slice(start, end),
-      prof.exportFraction.slice(start, end),
-      config.household,
-      startMs,
-      schaling,
-    );
-
-    windows.push({
-      year,
-      firstDay,
-      lastDay,
-      isFullYear:
-        firstDay === `${year}-01-01` &&
-        lastDay === `${year}-12-31` &&
-        prof.isFullYear,
-      window: {
-        startMs,
-        residualKwh: delen.residualKwh,
-        parts: {
-          gridImportKwh: delen.gridImportKwh,
-          gridExportKwh: delen.gridExportKwh,
-        },
-        prices: buildPriceSeries(market, config.tariff, heffing),
-      },
-    });
-  }
-
-  return {
-    windows,
-    battery: config.battery,
-    tariff: config.tariff,
-    investmentEur: config.investmentEur,
-    cycleLife: config.cycleLife,
-    years: config.analysisYears,
-    priceEscalation: config.priceEscalation,
-    discountRate: config.discountRate,
-    calendarFadePerYear: config.calendarFadePerYear,
-    residualValueEur: config.residualValueEur,
-    annualProductionKwh: config.annualProductionKwh,
-  };
+  return bron.bouwInvoer(config);
 }
 
 function post(msg: WorkerResponse): void {
@@ -452,8 +234,8 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
   const msg = event.data;
   try {
     if (msg.type === "init") {
-      baseUrl = msg.baseUrl;
-      manifest = await loadManifest(baseUrl);
+      bron = new Invoerbron(msg.baseUrl);
+      manifest = await bron.init();
       post({ type: "ready", manifest });
       return;
     }
