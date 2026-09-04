@@ -102,6 +102,29 @@ informatie kost. Op de echte data haalt de realistische strategie ruwweg 85 tot
 90% van het optimum, afhankelijk van de batterij; de app toont het werkelijke
 percentage bij de verantwoording.
 
+**Dat gat is de weersvoorspelling, niet de prijshorizon.** Gemeten over 2025,
+netgebied Liander, 2.500/2.000 kWh:
+
+| | 1,92 kWh / 0,8 kW | 10 kWh / 3,6 kW |
+|---|---|---|
+| Realistisch, herplannen 1× per dag | € 101,48 | € 298,07 |
+| Herplannen elke 6 uur | € 101,53 | € 298,16 |
+| Met perfecte verbruiksvoorspelling | € 109,75 | € 350,11 |
+| Volledig optimum | € 110,18 | € 356,28 |
+
+Vaker herplannen levert vijf cent op een jaar op. Zou de strategie daarentegen
+weten wat het morgen doet, dan haalt ze 99,6% respectievelijk 98,3% van het
+optimum. Wat de batterij beperkt is dus niet dat ze de prijzen van overmorgen
+niet kent, maar dat ze de zon van morgen niet kent. De voorspelling hier is het
+gemiddelde van hetzelfde kwartier over de voorgaande week; een echte batterij
+gebruikt een weersverwachting en doet het dus beter. Deze tool rekent daarmee
+aan de voorzichtige kant.
+
+**Standby is geen detail.** Bij de Zendure van 1,92 kWh kost 12 W continu
+€ 22,47 per jaar, tegenover een besparing van € 101. Dat is ook de verklaring
+voor dagen met een negatieve besparing: op een dag zonder prijsverschil verdient
+de batterij niets en blijft het eigen verbruik staan.
+
 **Waar dat gat vandaan komt.** Twee dingen weet een echte batterij niet: de
 prijzen van morgen vóór de publicatie om 13:00, en hoeveel zon en verbruik
 morgen brengt. Die twee zijn te scheiden door de strategie nog eens te laten

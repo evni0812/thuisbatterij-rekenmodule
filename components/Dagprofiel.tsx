@@ -582,40 +582,61 @@ export function Dagprofiel({
 
           {/* De dagtotalen dragen dit paneel: niet elk staafje telt, maar wel
               hoeveel er die dag in totaal is opgeslagen en waar het heen ging. */}
+          {/*
+            De posities stonden hier vast, met de eerste vier vanaf de bovenkant
+            en de laatste twee vanaf de onderkant. Zodra alle zes zichtbaar waren
+            — een zonnige dag waarop de batterij zowel inkoopt als verkoopt —
+            stonden "ingekocht" en "zelf gebruikt" acht pixels uit elkaar terwijl
+            elk blokje er ruim twintig nodig heeft, en liepen de teksten door
+            elkaar heen.
+
+            Nu worden de zichtbare regels over de paneelhoogte verdeeld. Bij vier
+            of minder is de stap dezelfde 34 als voorheen; pas als het er meer
+            zijn krimpt hij, precies genoeg om te passen.
+          */}
           <g className="actie-legende">
-            {[
-              {
-                kleur: "var(--series-5)",
-                naam: "zon naar de meter",
-                waarde: heeftZonReeks && zonTotaal !== null ? zonTotaal : 0,
-                y: Y.actie - 4,
-              },
-              { kleur: "var(--text-muted)", naam: "netto over", waarde: totaalOverschot, y: Y.actie + 30, vaag: true },
-              { kleur: "var(--series-3)", naam: "opgeslagen", waarde: totaalZon, y: Y.actie + 64 },
-              { kleur: "var(--series-1)", naam: "ingekocht", waarde: totaalNet, y: Y.actie + 98 },
-              { kleur: "var(--series-3)", naam: "zelf gebruikt", waarde: totaalHuis, y: Y.actie + HOOGTE.actie - 50 },
-              { kleur: "var(--series-2)", naam: "verkocht", waarde: totaalVerkocht, y: Y.actie + HOOGTE.actie - 16 },
-            ].map((r) =>
-              r.waarde > 0.01 ? (
-                <g key={r.naam}>
-                  <rect
-                    x={PLOT_RECHTS + 8}
-                    y={r.y - 8}
-                    width={9}
-                    height={9}
-                    rx={2}
-                    fill={r.kleur}
-                    opacity={r.vaag ? 0.4 : 1}
-                  />
-                  <text x={PLOT_RECHTS + 22} y={r.y} className="lijn-label">
-                    {r.naam}
-                  </text>
-                  <text x={PLOT_RECHTS + 22} y={r.y + 12} className="lijn-waarde">
-                    {getal(r.waarde, 2)} kWh
-                  </text>
-                </g>
-              ) : null,
-            )}
+            {(() => {
+              const regels = [
+                {
+                  kleur: "var(--series-5)",
+                  naam: "zon naar de meter",
+                  waarde: heeftZonReeks && zonTotaal !== null ? zonTotaal : 0,
+                },
+                { kleur: "var(--text-muted)", naam: "netto over", waarde: totaalOverschot, vaag: true },
+                { kleur: "var(--series-3)", naam: "opgeslagen", waarde: totaalZon },
+                { kleur: "var(--series-1)", naam: "ingekocht", waarde: totaalNet },
+                { kleur: "var(--series-3)", naam: "zelf gebruikt", waarde: totaalHuis },
+                { kleur: "var(--series-2)", naam: "verkocht", waarde: totaalVerkocht },
+              ].filter((r) => r.waarde > 0.01);
+
+              // Een regel is een blokje plus twee tekstregels: ruim 20px hoog.
+              const RUIMTE = HOOGTE.actie - 8;
+              const stap =
+                regels.length > 1 ? Math.min(34, RUIMTE / (regels.length - 1)) : 0;
+
+              return regels.map((r, i) => {
+                const y = Y.actie - 4 + i * stap;
+                return (
+                  <g key={r.naam}>
+                    <rect
+                      x={PLOT_RECHTS + 8}
+                      y={y - 8}
+                      width={9}
+                      height={9}
+                      rx={2}
+                      fill={r.kleur}
+                      opacity={r.vaag ? 0.4 : 1}
+                    />
+                    <text x={PLOT_RECHTS + 22} y={y} className="lijn-label">
+                      {r.naam}
+                    </text>
+                    <text x={PLOT_RECHTS + 22} y={y + 12} className="lijn-waarde">
+                      {getal(r.waarde, 2)} kWh
+                    </text>
+                  </g>
+                );
+              });
+            })()}
           </g>
 
           {/* ══ Paneel 3: lading ══ */}

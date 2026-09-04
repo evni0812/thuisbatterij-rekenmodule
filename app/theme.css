@@ -220,6 +220,32 @@ select {
   gap: 6px;
 }
 
+/*
+ * De drie vragen zijn niet even lang. "Hoeveel stroom neem je per jaar van het
+ * net af?" loopt over twee regels, "Welke batterij?" over één, en daardoor
+ * zakten de invoervelden en de hints eronder ten opzichte van elkaar weg.
+ *
+ * Subgrid geeft alle drie de velden dezelfde rijen: één voor het label, één
+ * voor de invoer, één voor de hint. Elke rij is zo hoog als zijn langste
+ * inhoud, dus de invoervelden staan op één lijn ongeacht hoe de vraag afbreekt.
+ *
+ * Zonder subgrid blijft de flex-kolom hierboven staan: dan is het weer los van
+ * elkaar, maar wel leesbaar.
+ */
+@supports (grid-template-rows: subgrid) {
+  .invoer-velden {
+    grid-template-rows: auto auto auto;
+    align-items: start;
+  }
+
+  .veld {
+    display: grid;
+    grid-row: span 3;
+    grid-template-rows: subgrid;
+    gap: 6px;
+  }
+}
+
 .veld-label {
   font-weight: 560;
   font-size: 0.95rem;
@@ -1409,6 +1435,19 @@ input[type="date"] {
 .heat-hoek {
   text-align: left;
   font-size: 0.7rem !important;
+}
+
+/*
+ * De rij- en kolomkoppen zijn kale getallen. Welke eenheid daarbij hoort stond
+ * alleen in de lopende tekst eronder, en dat werd raden zodra het vakje niet
+ * meer een bedrag per jaar toont maar een bedrag per kilowattuur.
+ */
+.heat-caption {
+  caption-side: top;
+  text-align: left;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  padding-bottom: 6px;
 }
 
 .heat td {

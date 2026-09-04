@@ -305,10 +305,24 @@ describe("de pagina toont het antwoord", () => {
         onKies={() => {}}
       />,
     );
-    // Kleur mag nooit de enige drager zijn: elk vakje toont zijn bedrag.
+    // Kleur mag nooit de enige drager zijn: elk vakje toont zijn getal.
+    // Standaard is dat de opbrengst per kWh capaciteit, want daarop is de
+    // afnemende meeropbrengst zichtbaar: 40/2 = 20, 95/5 = 19.
     const tabel = screen.getByRole("table");
-    for (const bedrag of ["40", "45", "70", "95"]) {
-      expect(within(tabel).getByText(bedrag)).toBeDefined();
+    for (const perKwh of ["20", "22,5", "14", "19"]) {
+      expect(within(tabel).getByText(perKwh)).toBeDefined();
+    }
+
+    // Omschakelen naar het totaal geeft de kale jaarbesparing.
+    fireEvent.click(screen.getByRole("button", { name: "Totaal" }));
+    for (const totaal of ["40", "45", "70", "95"]) {
+      expect(within(tabel).getByText(totaal)).toBeDefined();
+    }
+
+    // En per kW deelt door het vermogen: 40/0,8 = 50, 95/2,5 = 38.
+    fireEvent.click(screen.getByRole("button", { name: "Per kW" }));
+    for (const perKw of ["50", "18", "87,5", "38"]) {
+      expect(within(tabel).getByText(perKw)).toBeDefined();
     }
   });
 });
