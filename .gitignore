@@ -33,3 +33,5 @@ next-env.d.ts
 
 # Ruwe energiedata (build-time opgehaald, niet in git)
 data/raw/
+.vercel
+.env*

@@ -1,0 +1,12 @@
+# Vercel bouwt uit de GitHub-repo; dit geldt alleen voor een handmatige
+# `vercel deploy` vanaf deze machine.
+#
+# data/raw is de ruwe MFFBAS- en ANWB-download van 281 MB. De app gebruikt hem
+# niet: scripts/build_assets.py heeft er public/data uit gemaakt, en dat is wat
+# er meegaat. Zonder deze regel duwt een CLI-deploy de hele download naar boven.
+data/raw/
+
+# Lokale rommel die niets met de build te maken heeft.
+venv/
+legacy/
+.next-build/
