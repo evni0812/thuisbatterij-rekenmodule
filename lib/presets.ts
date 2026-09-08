@@ -45,6 +45,15 @@ export interface BatteryPreset {
   prijsNoot: string;
   spec: Omit<BatterySpec, "wearCostEurPerKwh">;
   cycleLife: number;
+  /**
+   * Hoe lang de batterij meegaat op leeftijd, los van hoeveel je hem gebruikt.
+   *
+   * Hoort bij de batterij, niet bij de analyse. Eerder werd hiervoor de
+   * analyseperiode gebruikt, en dan ging de accu anders handelen zodra je die
+   * schuif verzette. Vijftien jaar is de gangbare garantietermijn-plus-marge
+   * voor LFP; geen fabrikant in deze lijst belooft er meer.
+   */
+  kalenderLevensduurJaren: number;
 }
 
 function spec(
@@ -76,6 +85,7 @@ export const PRESETS: BatteryPreset[] = [
     prijsNoot: "789 euro plus de P1-meter van 30",
     spec: spec(1.92, 0.8, 0.88, 0.9, 12),
     cycleLife: 6000,
+    kalenderLevensduurJaren: 15,
   },
   {
     id: "homewizard-plugin",
@@ -88,6 +98,7 @@ export const PRESETS: BatteryPreset[] = [
     // 85% is het midden van wat gebruikers meten; het datasheet claimt 92%.
     spec: spec(2.7, 0.8, 0.85, 0.9, 10),
     cycleLife: 6000,
+    kalenderLevensduurJaren: 15,
   },
   {
     id: "anker-solarbank3",
@@ -101,6 +112,7 @@ export const PRESETS: BatteryPreset[] = [
     // laagste van de twee, want die bepaalt hoeveel er 's avonds uit kan.
     spec: spec(2.69, 0.8, 0.8, 0.9, 12),
     cycleLife: 6000,
+    kalenderLevensduurJaren: 15,
   },
   {
     id: "zendure-2400ac",
@@ -112,6 +124,7 @@ export const PRESETS: BatteryPreset[] = [
     prijsNoot: "849 euro plus de P1-meter van 30",
     spec: spec(2.4, 2.4, 0.88, 0.9, 15),
     cycleLife: 6000,
+    kalenderLevensduurJaren: 15,
   },
   {
     id: "marstek-venus-e3",
@@ -124,6 +137,7 @@ export const PRESETS: BatteryPreset[] = [
     // 7 W standby is gemeten met een slimme stekker; laag voor deze klasse.
     spec: spec(5.12, 2.5, 0.83, 0.9, 7),
     cycleLife: 6000,
+    kalenderLevensduurJaren: 15,
   },
   {
     id: "anker-solarbank-max",
@@ -135,6 +149,7 @@ export const PRESETS: BatteryPreset[] = [
     prijsNoot: "2.099 euro plus de P1-meter van 35",
     spec: spec(7, 3.5, 0.85, 0.9, 20),
     cycleLife: 6000,
+    kalenderLevensduurJaren: 15,
   },
   {
     id: "thuisaccu-5kwh",
@@ -146,6 +161,7 @@ export const PRESETS: BatteryPreset[] = [
     prijsNoot: "inclusief omvormer en installatie",
     spec: spec(5, 2.5, 0.9, 0.95, 20),
     cycleLife: 6000,
+    kalenderLevensduurJaren: 15,
   },
   {
     id: "thuisaccu-10kwh",
@@ -157,6 +173,7 @@ export const PRESETS: BatteryPreset[] = [
     prijsNoot: "inclusief omvormer en installatie",
     spec: spec(10, 3.6, 0.9, 0.95, 25),
     cycleLife: 6000,
+    kalenderLevensduurJaren: 15,
   },
 ];
 

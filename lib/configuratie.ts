@@ -91,6 +91,7 @@ export function maakConfiguratie(inst: Instellingen): Configuration {
     },
     investmentEur: inst.prijsEur ?? preset.prijsEur,
     cycleLife: preset.cycleLife,
+    calendarLifeYears: preset.kalenderLevensduurJaren,
     analysisYears: inst.analysejaren,
     priceEscalation: inst.prijsstijging,
     discountRate: inst.discontovoet,

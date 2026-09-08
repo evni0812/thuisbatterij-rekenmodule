@@ -3,6 +3,7 @@ import { buildQuarterAxis, LocalTimeIndex } from "../lib/data/timeaxis";
 import {
   equivalentCycles,
   marginalWearCostPerKwh,
+  WEAR_ONDERGRENS_DEEL,
   remainingCapacityFraction,
   roundTripEfficiency,
   usableCapacityKwh,
@@ -11,7 +12,7 @@ import {
 import { dispatchBaseline } from "../lib/model/dispatch-baseline";
 import { DAY_AHEAD_PUBLICATION_HOUR, dispatchRolling, publicationMoments } from "../lib/model/dispatch-rolling";
 import { dispatchOptimal } from "../lib/model/dispatch-optimal";
-import { breakdown as breakdownVoorTest, energyLosses } from "../lib/model/analysis";
+import { breakdown as breakdownVoorTest, energyLosses, runAnalysis } from "../lib/model/analysis";
 import { buildPriceSeries } from "../lib/model/tariff";
 import { buildResidual, solveNettingScale, summarizeResidual } from "../lib/model/residual";
 import { emptyResult, executePath, planSocPath } from "../lib/model/solver";
@@ -445,10 +446,42 @@ describe("slijtage als schaduwprijs", () => {
    * na vijftien jaar stierf met 40% van zijn 6.000 beurten ongebruikt. Dat kostte
    * 12 euro per jaar aan besparing die er gewoon lag.
    */
-  it("rekent niets aan als de laadbeurten toch niet opraken", () => {
+  it("rekent de ondergrens aan als de laadbeurten niet opraken", () => {
+    /**
+     * Eerder was dit nul: raakt de batterij zijn beurten niet op, dan kost een
+     * extra beurt niets. Dat botste met de rest van het model, want
+     * remainingCapacityFraction rekent 20% capaciteitsverlies over de
+     * cycluslevensduur, ongeacht schaarste. De businesscase boekte een beurt
+     * dus wél en de dispatch niet.
+     */
     const s = spec({ capacityKwh: 2.1, depthOfCharge: 0.9 });
     // 250 beurten per jaar, 15 jaar: 3.750 van de 6.000. Niet schaars.
-    expect(marginalWearCostPerKwh(1199, 6000, s, 250, 15)).toBe(0);
+    const vol = wearCostPerKwh(1199, 6000, s);
+    expect(marginalWearCostPerKwh(1199, 6000, s, 250, 15)).toBeCloseTo(
+      vol * WEAR_ONDERGRENS_DEEL,
+      12,
+    );
+  });
+
+  it("laat de analyseperiode het gedrag van de batterij niet sturen", () => {
+    /**
+     * De kalenderlevensduur hoort bij de accu, de analyseperiode bij de
+     * gebruiker. Eerder werd hier `analysisYears` ingevuld: zette je de
+     * doorrekening op tien jaar, dan zakte de drempel naar nul en ging de
+     * batterij vrijer handelen — een financiële schuif die het fysieke gedrag
+     * veranderde, en daarmee de getoonde besparing.
+     *
+     * Deze test bewaakt alleen de vorm: dezelfde batterij met dezelfde
+     * kalenderlevensduur geeft dezelfde drempel. Dat de aanroepers die
+     * levensduur uit de preset halen en niet uit de instellingen, is te zien
+     * aan het ontbreken van `analysisYears` bij elke aanroep.
+     */
+    const s = spec({ capacityKwh: 2.1, depthOfCharge: 0.9 });
+    const a = marginalWearCostPerKwh(1199, 6000, s, 500, 15);
+    const b = marginalWearCostPerKwh(1199, 6000, s, 500, 15);
+    expect(a).toBe(b);
+    // Een kortere kalenderlevensduur maakt beurten mínder schaars, dus goedkoper.
+    expect(marginalWearCostPerKwh(1199, 6000, s, 500, 10)).toBeLessThan(a);
   });
 
   it("rekent wél af zodra de beurten schaars worden", () => {
@@ -478,9 +511,11 @@ describe("slijtage als schaduwprijs", () => {
     const opDeGrens = marginalWearCostPerKwh(1199, 6000, s, 400, 15);
     const netErover = marginalWearCostPerKwh(1199, 6000, s, 401, 15);
     const vol = wearCostPerKwh(1199, 6000, s);
-    expect(opDeGrens).toBe(0);
-    expect(netErover).toBeGreaterThan(0);
-    expect(netErover).toBeLessThan(vol * 0.01);
+    // Beide op de ondergrens: de schaarste is daar nog kleiner dan die 20%.
+    expect(opDeGrens).toBeCloseTo(vol * WEAR_ONDERGRENS_DEEL, 12);
+    expect(netErover).toBeCloseTo(vol * WEAR_ONDERGRENS_DEEL, 12);
+    // En de aanloop is nog steeds continu: bij echte schaarste loopt hij op.
+    expect(marginalWearCostPerKwh(1199, 6000, s, 500, 15)).toBeGreaterThan(opDeGrens);
     // En bij twee keer zoveel beurten als er zijn, de volle prijs.
     expect(marginalWearCostPerKwh(1199, 6000, s, 800, 15)).toBeCloseTo(vol, 9);
   });
@@ -865,5 +900,70 @@ describe("schaling van het netten", () => {
     let som = 0;
     for (let i = 0; i < r.length; i++) som += r[i]!;
     expect(som).toBeCloseTo(500, 1);
+  });
+});
+
+describe("financiële instellingen raken de natuurkunde niet", () => {
+  /**
+   * De discontovoet, de prijsstijging en de looptijd zijn keuzes over hoe je
+   * naar de investering kijkt. Ze horen de dispatch niet aan te raken: wat de
+   * batterij fysiek doet hangt af van prijzen, verbruik en zijn eigen grenzen.
+   *
+   * Deze test staat er omdat de vraag gesteld werd of de jaaropbrengst
+   * meeverandert met de rente. Op het model doet hij dat niet, en dat blijft zo.
+   * De kalenderlevensduur is bewust géén onderdeel van deze lijst: die hoort bij
+   * de accu en stuurt de slijtagedrempel wél — dat is precies waarom hij uit de
+   * preset komt en niet uit de instellingen.
+   */
+  function invoer(over: Record<string, unknown> = {}) {
+    const w = makeWindow(30, 9);
+    return {
+      windows: [
+        { year: 2025, firstDay: "2025-01-01", lastDay: "2025-01-30", isFullYear: true, window: w },
+      ],
+      battery: spec({ capacityKwh: 5, maxChargeKw: 2.5, maxDischargeKw: 2.5 }),
+      tariff: TARIFF,
+      investmentEur: 2500,
+      cycleLife: 6000,
+      calendarLifeYears: 15,
+      years: 15,
+      priceEscalation: 0.02,
+      discountRate: 0.03,
+      calendarFadePerYear: 0.015,
+      residualValueEur: 0,
+      ...over,
+    };
+  }
+
+  it("laat de jaaropbrengst ongemoeid bij een andere discontovoet", () => {
+    const drie = runAnalysis(invoer({ discountRate: 0.03 }));
+    const nul = runAnalysis(invoer({ discountRate: 0 }));
+    expect(nul.averageSavingEur).toBe(drie.averageSavingEur);
+    expect(nul.stats.cyclesPerYear).toBe(drie.stats.cyclesPerYear);
+    // De contante waarde verandert natuurlijk wél: zonder rente telt later geld
+    // net zo zwaar als geld van nu.
+    expect(nul.finance.npvEur).toBeGreaterThan(drie.finance.npvEur);
+  });
+
+  it("laat de jaaropbrengst ongemoeid bij een andere looptijd", () => {
+    const vijftien = runAnalysis(invoer({ years: 15 }));
+    const tien = runAnalysis(invoer({ years: 10 }));
+    expect(tien.averageSavingEur).toBe(vijftien.averageSavingEur);
+    expect(tien.stats.cyclesPerYear).toBe(vijftien.stats.cyclesPerYear);
+  });
+
+  it("laat een kortere kalenderlevensduur de batterij wél anders sturen", () => {
+    // De tegenhanger: dit ís een eigenschap van de accu en mag doorwerken.
+    //
+    // Met een korte cycluslevensduur worden de beurten in dit venster echt
+    // schaars, en dan telt de kalenderlevensduur mee. Bij de 6.000 beurten van
+    // een echte preset raakt dit venster van dertig dagen die grens niet en
+    // blijven beide op de ondergrens staan — ook een correcte uitkomst, maar
+    // dan toetst deze test niets.
+    // Een goedkope accu met weinig beurten: dan is de drempel klein genoeg dat
+    // er nog gehandeld wordt, en groot genoeg dat schaarste verschil maakt.
+    const lang = runAnalysis(invoer({ investmentEur: 60, cycleLife: 200, calendarLifeYears: 15 }));
+    const kort = runAnalysis(invoer({ investmentEur: 60, cycleLife: 200, calendarLifeYears: 5 }));
+    expect(kort.averageSavingEur).not.toBe(lang.averageSavingEur);
   });
 });

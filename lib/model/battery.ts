@@ -41,6 +41,15 @@ export function standbyKwhPerStep(spec: BatterySpec, hours = HOURS_PER_STEP): nu
 }
 
 /**
+ * Het deel van de volle slijtageprijs dat een laadbeurt altijd kost.
+ *
+ * remainingCapacityFraction() rekent 20% capaciteitsverlies over de
+ * cycluslevensduur. Die 20% is er ook als de beurten niet schaars zijn, dus de
+ * dispatch hoort hem net zo goed te betalen als de businesscase.
+ */
+export const WEAR_ONDERGRENS_DEEL = 0.2;
+
+/**
  * De MARGINALE slijtagekost per geleverde kWh.
  *
  * Dit is de schaduwprijs die de dispatch stuurt: is deze laadbeurt de moeite
@@ -58,8 +67,30 @@ export function standbyKwhPerStep(spec: BatterySpec, hours = HOURS_PER_STEP): nu
  * naar 251 per jaar — hij sterft dan aan ouderdom met 40% van zijn beurten
  * ongebruikt, en dat kost 12 euro per jaar aan gemiste besparing.
  *
+ * ── Waarom er een ondergrens onder zit ──────────────────────────────────────
+ * Bovenstaande redenering klopt alleen als een laadbeurt écht niets kost zolang
+ * de beurten niet opraken. Dat is niet wat de rest van het model doet:
+ * remainingCapacityFraction() hieronder rekent lineair 20% capaciteitsverlies
+ * over cycleLife beurten, ongeacht schaarste. De businesscase boekt een beurt
+ * dus wél als kostenpost, terwijl de dispatch hem gratis noemde.
+ *
+ * Dat gat was zichtbaar op de echte data. Op 18 december 2025 kocht de Zendure
+ * 's nachts 1,8 kWh in, leverde er 1,6 van terug aan het huis, en kwam op een
+ * dagbesparing van nul: de marge dekte precies het omzettingsverlies en het
+ * eigen verbruik. Een hele laadbeurt weg, niets verdiend. De drempel stond daar
+ * op 0,23 ct/kWh, want de batterij zat maar 2,75% over zijn beurtenbudget.
+ *
+ * De ondergrens sluit aan op de degradatie die het financieringsmodel al
+ * rekent: 20% capaciteitsverlies over de levensduur, dus minstens 20% van de
+ * volle slijtageprijs. Voor de Zendure is dat 1,7 ct/kWh — genoeg om een
+ * nuldag te stoppen, ruim onder de marge van een echte arbitragedag.
+ *
  * @param expectedCyclesPerYear  verwacht aantal beurten per jaar zonder drempel
- * @param calendarYears          hoe lang de batterij meegaat op leeftijd
+ * @param calendarYears          kalenderlevensduur van de BATTERIJ, in jaren.
+ *   Niet de analyseperiode: die is een keuze van de gebruiker over hoe ver hij
+ *   vooruit wil kijken, en mag het fysieke gedrag van de accu niet sturen. Met
+ *   de analyseperiode erin ging de batterij vrijer handelen zodra je de looptijd
+ *   op tien jaar zette, en steeg de getoonde besparing daardoor.
  */
 export function marginalWearCostPerKwh(
   investmentEur: number,
@@ -72,7 +103,7 @@ export function marginalWearCostPerKwh(
   if (vol <= 0) return 0;
 
   const verwachtTotaal = expectedCyclesPerYear * calendarYears;
-  if (verwachtTotaal <= cycleLife) return 0;
+  if (verwachtTotaal <= cycleLife) return vol * WEAR_ONDERGRENS_DEEL;
 
   // De beurten zijn schaars: laat de prijs lineair oplopen met de mate van
   // schaarste, vanaf nul op de grens tot de volle prijs bij twee keer zoveel
@@ -85,7 +116,10 @@ export function marginalWearCostPerKwh(
   // komt, wisselde de dispatch abrupt van gedrag bij een kleine wijziging in
   // capaciteit of vermogen — een sprong die in het raster van batterijmaten als
   // een dip zichtbaar werd.
-  return vol * Math.min(1, (verwachtTotaal - cycleLife) / cycleLife);
+  return (
+    vol *
+    Math.min(1, Math.max(WEAR_ONDERGRENS_DEEL, (verwachtTotaal - cycleLife) / cycleLife))
+  );
 }
 
 /**

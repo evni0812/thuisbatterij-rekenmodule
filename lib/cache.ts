@@ -23,11 +23,15 @@ import type { Configuration } from "./worker/protocol";
  * "Cannot read properties of undefined". Een nieuw veld is dus net zo goed een
  * reden om deze teller te verhogen als een nieuw getal.
  *
+ * Versie 8: de slijtagedrempel kent een ondergrens en de kalenderlevensduur komt
+ * uit de batterij in plaats van uit de analyseperiode. Beide veranderen hoeveel
+ * de batterij handelt en dus de bedragen.
+ *
  * Versie 7 bevat verder: de schaling die de meterstanden reproduceert, de
  * heffing per uur in plaats van een jaarconstante, en de uitvoerder die bewuste
  * verkoop aan het net doorlaat. Alle drie veranderen de bedragen.
  */
-export const MODEL_VERSIE = 7;
+export const MODEL_VERSIE = 8;
 
 const SLEUTEL_PREFIX = "tbat:v" + MODEL_VERSIE + ":";
 /** Hoeveel doorrekeningen we bewaren voordat de oudste eruit gaat. */

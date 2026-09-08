@@ -100,6 +100,7 @@ beforeAll(async () => {
     tariff,
     investmentEur: preset.prijsEur,
     cycleLife: preset.cycleLife,
+    calendarLifeYears: preset.kalenderLevensduurJaren,
     years: 15,
     priceEscalation: 0.02,
     discountRate: 0.03,

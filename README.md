@@ -16,7 +16,7 @@ gebruik, alles vanaf de CDN.
 ```bash
 npm install
 npm run dev          # http://localhost:3000
-npm test             # 133 tests, waaronder de modelinvarianten
+npm test             # 143 tests, waaronder de modelinvarianten
 npm run build        # statische export naar out/
 npm run clean        # bij een vastgelopen build-cache
 ```
@@ -168,6 +168,43 @@ Round-trip is dus η². Symmetrisch in beide richtingen.
 
 **Cycli** worden alleen over de ontlading geteld: één volledige laad-ontlaadgang
 is precies één cyclus.
+
+**Wat een laadbeurt kost.** De dispatch rekent met een schaduwprijs per kWh
+doorzet: is deze beurt de marge waard? Die prijs loopt op met de schaarste van de
+laadbeurten, maar zakt nooit onder **20% van de volle slijtageprijs**. Die
+ondergrens sluit aan op wat het financieringsmodel al doet — `remainingCapacityFraction`
+rekent 20% capaciteitsverlies over de cycluslevensduur, ongeacht schaarste — en
+zonder die grens noemde de dispatch een beurt gratis terwijl de businesscase hem
+wél boekte.
+
+De kalenderlevensduur komt uit de **batterij**, niet uit de analyseperiode. Eerder
+stond daar `analysisYears`: zette je de doorrekening op tien jaar, dan zakte de
+drempel naar nul en ging de accu vrijer handelen. Een financiële schuif stuurde zo
+het fysieke gedrag.
+
+Gemeten over 2025, netgebied Liander, 2.500/2.000 kWh:
+
+| | Zendure 1,92 kWh | Thuisaccu 10 kWh |
+|---|---|---|
+| Drempel voor → na | 0,49 → 1,68 ct/kWh | 0,00 → 2,37 ct/kWh |
+| Besparing | € 101,48 → € 100,32 | € 298,07 → € 289,85 |
+| Laadbeurten per jaar | 406 → 362 | 266 → 230 |
+
+Elf procent minder beurten voor ruim één procent minder besparing. De Zendure blijft
+daarmee onder zijn 6.000 beurten in vijftien jaar, waar hij er eerst overheen ging.
+
+**Waarom de batterij handelt op een dag die niets oplevert.** Op 18 december 2025
+koopt de Zendure 's nachts 1,8 kWh in, levert er 1,6 aan het huis, en komt uit op een
+dagbesparing van nul. Dat lijkt slijtage voor niets. Het is het tegenovergestelde:
+zonder te handelen kost die dag **€ 0,066**, want het eigen verbruik van de omvormer
+loopt door of hij nu werkt of niet. De handel verdient precies dat terug. Standby
+kost de Zendure € 22 per jaar op een besparing van € 100; op een dag met weinig
+prijsverschil is dat het hele resultaat.
+
+**Financiële instellingen raken de natuurkunde niet.** Discontovoet, prijsstijging en
+looptijd veranderen de contante waarde, niet de jaaropbrengst en niet het aantal
+laadbeurten. Bij 3% en bij 0% rente komt dezelfde € 94,71 per jaar uit het model.
+`tests/model.test.ts` bewaakt dat.
 
 **Slijtage telt één keer.** De slijtagekosten sturen de dispatch — ze bepalen of
 een extra cyclus de moeite waard is — maar ze worden niet van de gerapporteerde

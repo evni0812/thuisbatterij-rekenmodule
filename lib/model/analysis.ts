@@ -12,6 +12,8 @@ import {
   marginalWearCostPerKwh,
   standbyKwhPerStep,
   usableCapacityKwh,
+  wearCostPerKwh,
+  WEAR_ONDERGRENS_DEEL,
 } from "./battery";
 import { dispatchBaseline } from "./dispatch-baseline";
 import { dispatchOptimal } from "./dispatch-optimal";
@@ -158,6 +160,8 @@ export interface AnalysisInput {
   tariff: TariffSpec;
   investmentEur: number;
   cycleLife: number;
+  /** Kalenderlevensduur van de batterij; stuurt de slijtagedrempel. */
+  calendarLifeYears: number;
   years: number;
   priceEscalation: number;
   discountRate: number;
@@ -1000,42 +1004,46 @@ export function runAnalysis(
   input: AnalysisInput,
   options: AnalysisOptions = {},
 ): AnalysisResult {
-  // Eerst uitvinden of laadbeurten schaars zijn. Dat kan alleen door te kijken
-  // hoeveel de batterij er zonder drempel zou maken: pas als hij ze binnen zijn
-  // kalenderlevensduur opmaakt, kost een extra beurt iets. Eén proefjaar is
-  // genoeg voor die schatting.
+  // Eerst uitvinden of laadbeurten schaars zijn: pas als de batterij ze binnen
+  // zijn kalenderlevensduur opmaakt, kost een extra beurt méér dan de
+  // ondergrens. Eén proefjaar is genoeg voor die schatting.
   //
-  // De proefrun draait op volle resolutie, niet op een grof rooster. Dat lijkt
-  // duurder, maar in de regel is de drempel nul — bij vrijwel elke preset —
-  // en dan is de proefrun exact de realistische dispatch van dat jaar en wordt
-  // hij hergebruikt. Netto scheelt dat een halve run. Alleen als de beurten wél
-  // schaars blijken, wordt het proefjaar opnieuw gerekend mét drempel.
-  const zonderDrempel: BatterySpec = { ...input.battery, wearCostEurPerKwh: 0 };
+  // De proefrun draait mét de ondergrens, niet zonder drempel. Dat is niet
+  // alleen realistischer — een beurt kost altijd iets — het houdt ook de
+  // hergebruiktruc in stand: blijkt de drempel op de ondergrens te blijven, dan
+  // ÍS deze run de realistische dispatch van dat jaar en hoeft hij niet
+  // opnieuw. Zonder die keuze zou elke doorrekening een volledige extra
+  // jaarsimulatie kosten, want de drempel is sinds de ondergrens nooit meer nul.
+  const ondergrens =
+    wearCostPerKwh(input.investmentEur, input.cycleLife, input.battery) *
+    WEAR_ONDERGRENS_DEEL;
+  const metOndergrens: BatterySpec = {
+    ...input.battery,
+    wearCostEurPerKwh: ondergrens,
+  };
   const proef = input.windows.find((w) => w.isFullYear) ?? input.windows[0];
   let verwachteCycli = 0;
   let proefRun: DispatchResult | undefined;
   if (proef) {
-    proefRun = dispatchRolling(proef.window, zonderDrempel, input.tariff);
+    proefRun = dispatchRolling(proef.window, metOndergrens, input.tariff);
     verwachteCycli = proefRun.equivalentCycles;
   }
 
-  const spec: BatterySpec = {
-    ...input.battery,
-    wearCostEurPerKwh: marginalWearCostPerKwh(
-      input.investmentEur,
-      input.cycleLife,
-      input.battery,
-      verwachteCycli,
-      input.years,
-    ),
-  };
+  const drempel = marginalWearCostPerKwh(
+    input.investmentEur,
+    input.cycleLife,
+    input.battery,
+    verwachteCycli,
+    input.calendarLifeYears,
+  );
+  const spec: BatterySpec = { ...input.battery, wearCostEurPerKwh: drempel };
 
   const uitkomsten = input.windows.map((w) =>
     analyseWindow(
       w,
       spec,
       input.tariff,
-      w === proef && spec.wearCostEurPerKwh === 0 ? proefRun : undefined,
+      w === proef && Math.abs(drempel - ondergrens) < 1e-12 ? proefRun : undefined,
     ),
   );
   const perYear = uitkomsten.map((u) => u.analysis);

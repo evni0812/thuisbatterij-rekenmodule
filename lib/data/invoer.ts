@@ -270,6 +270,7 @@ export class Invoerbron {
       tariff: config.tariff,
       investmentEur: config.investmentEur,
       cycleLife: config.cycleLife,
+      calendarLifeYears: config.calendarLifeYears,
       years: config.analysisYears,
       priceEscalation: config.priceEscalation,
       discountRate: config.discountRate,

@@ -8,7 +8,11 @@
 
 import { Invoerbron } from "../data/invoer";
 import type { Manifest } from "../data/manifest";
-import { marginalWearCostPerKwh } from "../model/battery";
+import {
+  marginalWearCostPerKwh,
+  wearCostPerKwh,
+  WEAR_ONDERGRENS_DEEL,
+} from "../model/battery";
 import { dispatchBaseline } from "../model/dispatch-baseline";
 import { dispatchOptimal } from "../model/dispatch-optimal";
 import { dispatchRolling } from "../model/dispatch-rolling";
@@ -80,29 +84,36 @@ async function runGrid(
         : 0;
 
     for (const kw of powers) {
-      const zonderDrempel: BatterySpec = {
+      const maat: BatterySpec = {
         ...invoer.battery,
         capacityKwh: cap,
         maxChargeKw: kw,
         maxDischargeKw: kw,
         wearCostEurPerKwh: 0,
       };
-      // Eerst zonder drempel: dat vertelt of de beurten voor deze maat schaars
-      // zijn. Zijn ze dat niet, dan is de drempel nul en ís deze run al het
-      // antwoord. Alleen bij schaarste volgt een tweede run mét drempel. Zo
-      // kost het raster in de regel één doorrekening per punt in plaats van
-      // twee — en bij de presets zijn de beurten bijna nooit schaars.
-      const vrij = dispatchRolling(entry.window, zonderDrempel, invoer.tariff);
+      // Eerst met de ondergrens: dat vertelt of de beurten voor deze maat
+      // schaars zijn. Zijn ze dat niet, dan blijft de drempel op die ondergrens
+      // staan en ís deze run al het antwoord. Alleen bij schaarste volgt een
+      // tweede run met een hogere drempel. Zo kost het raster in de regel één
+      // doorrekening per punt in plaats van twee.
+      const ondergrens =
+        wearCostPerKwh(prijsPerKwh * cap, config.cycleLife, maat) *
+        WEAR_ONDERGRENS_DEEL;
+      const vrij = dispatchRolling(
+        entry.window,
+        { ...maat, wearCostEurPerKwh: ondergrens },
+        invoer.tariff,
+      );
       const wear = marginalWearCostPerKwh(
         prijsPerKwh * cap,
         config.cycleLife,
-        zonderDrempel,
+        maat,
         vrij.equivalentCycles,
-        config.analysisYears,
+        config.calendarLifeYears,
       );
       const res =
-        wear > 0
-          ? dispatchRolling(entry.window, { ...zonderDrempel, wearCostEurPerKwh: wear }, invoer.tariff)
+        wear > ondergrens + 1e-12
+          ? dispatchRolling(entry.window, { ...maat, wearCostEurPerKwh: wear }, invoer.tariff)
           : vrij;
       points.push({
         capacityKwh: cap,
@@ -166,14 +177,21 @@ async function zorgVoorInvoer(config: Configuration): Promise<NonNullable<typeof
   if (laatste && laatste.sleutel === sleutel) return laatste;
 
   const invoer = await buildInput(config);
-  const zonderDrempel: BatterySpec = { ...invoer.battery, wearCostEurPerKwh: 0 };
+  const ondergrens =
+    wearCostPerKwh(invoer.investmentEur, invoer.cycleLife, invoer.battery) *
+    WEAR_ONDERGRENS_DEEL;
+  const metOndergrens: BatterySpec = {
+    ...invoer.battery,
+    wearCostEurPerKwh: ondergrens,
+  };
   const proef = invoer.windows.find((w) => w.isFullYear) ?? invoer.windows[0];
   let verwachteCycli = 0;
   const dispatches = new Map<number, DispatchResult>();
   if (proef) {
-    const p = dispatchRolling(proef.window, zonderDrempel, invoer.tariff);
+    const p = dispatchRolling(proef.window, metOndergrens, invoer.tariff);
     verwachteCycli = p.equivalentCycles;
-    // Is de drempel nul, dan ís deze run de realistische dispatch van dat jaar.
+    // Blijft de drempel op de ondergrens, dan ís deze run de realistische
+    // dispatch van dat jaar en hoeft hij niet opnieuw.
     const idx = invoer.windows.indexOf(proef);
     dispatches.set(idx, p);
   }
@@ -182,9 +200,9 @@ async function zorgVoorInvoer(config: Configuration): Promise<NonNullable<typeof
     invoer.cycleLife,
     invoer.battery,
     verwachteCycli,
-    invoer.years,
+    invoer.calendarLifeYears,
   );
-  if (wear > 0) dispatches.clear();
+  if (wear > ondergrens + 1e-12) dispatches.clear();
 
   laatste = {
     sleutel,

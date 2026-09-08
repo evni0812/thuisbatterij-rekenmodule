@@ -15,6 +15,12 @@ export interface Configuration {
   tariff: TariffSpec;
   investmentEur: number;
   cycleLife: number;
+  /**
+   * Kalenderlevensduur van de batterij in jaren; bepaalt samen met cycleLife of
+   * laadbeurten schaars zijn. Los van analysisYears, want dat is een keuze van
+   * de gebruiker over de doorrekening en geen eigenschap van de accu.
+   */
+  calendarLifeYears: number;
   analysisYears: number;
   priceEscalation: number;
   discountRate: number;

@@ -77,6 +77,7 @@ function config(over: Partial<Configuration> = {}): Configuration {
     },
     investmentEur: preset.prijsEur,
     cycleLife: preset.cycleLife,
+    calendarLifeYears: preset.kalenderLevensduurJaren,
     analysisYears: 15,
     priceEscalation: 0.02,
     discountRate: 0.03,
