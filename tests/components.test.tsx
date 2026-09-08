@@ -15,6 +15,7 @@ import { BesparingPerJaar } from "../components/BesparingPerJaar";
 import { Cashflow } from "../components/Cashflow";
 import { Dagprofiel } from "../components/Dagprofiel";
 import { Geavanceerd } from "../components/Geavanceerd";
+import { MaandVerloop } from "../components/MaandVerloop";
 import { Prijskloof } from "../components/Prijskloof";
 import { Statistieken } from "../components/Statistieken";
 import { Uitsplitsing } from "../components/Uitsplitsing";
@@ -682,5 +683,33 @@ describe("het geldpaneel sluit aan op de dagcijfers", () => {
         if (dag.residualKwh[i]! > 0) expect(stap).toBeGreaterThanOrEqual(-1e-9);
       }
     }
+  });
+});
+
+describe("het maandverloop", () => {
+  it("toont elke maand met zijn bedrag, en scheidt zomer van winter", () => {
+    render(<MaandVerloop maanden={result.perMonth} />);
+    const tekst = document.body.textContent ?? "";
+    for (const m of ["jan", "apr", "jul", "okt", "dec"]) {
+      expect(tekst).toContain(m);
+    }
+    expect(tekst).toMatch(/Zomer, april tot oktober/);
+    expect(tekst).toMatch(/Winter, oktober tot april/);
+    expect(tekst).toMatch(/Beste maand/);
+  });
+
+  it("telt op tot de jaarbesparing", () => {
+    /**
+     * Het maandverloop is een tweede weg naar hetzelfde getal. Loopt de som van
+     * de maanden uit de pas met de jaarbesparing, dan rekent een van de twee
+     * verkeerd — en dat is aan geen van beide te zien.
+     */
+    const som = result.perMonth.reduce((a, m) => a + m.savingEur, 0);
+    expect(som).toBeCloseTo(result.averageSavingEur, 6);
+  });
+
+  it("dekt twaalf maanden bij een volledig jaar", () => {
+    expect(result.perMonth.length).toBe(12);
+    expect(result.perMonth.map((m) => m.month)).toEqual([1,2,3,4,5,6,7,8,9,10,11,12]);
   });
 });

@@ -8,6 +8,7 @@ import { Cashflow } from "../components/Cashflow";
 import { Dagprofiel } from "../components/Dagprofiel";
 import { Geavanceerd } from "../components/Geavanceerd";
 import { Invoer } from "../components/Invoer";
+import { MaandVerloop } from "../components/MaandVerloop";
 import { Prijskloof } from "../components/Prijskloof";
 import { Statistieken } from "../components/Statistieken";
 import { Uitsplitsing } from "../components/Uitsplitsing";
@@ -185,6 +186,8 @@ export default function Page() {
             onVraagDag={vraagDag}
             onWisDag={wisDag}
           />
+
+          <MaandVerloop maanden={result.perMonth} />
 
           <BesparingPerJaar jaren={result.perYear} />
 

@@ -87,6 +87,32 @@ export interface EnergyLosses {
   roundtrip: number;
 }
 
+/**
+ * Wat de batterij in één kalendermaand deed.
+ *
+ * De jaarbesparing is één getal, en dat verbergt dat een thuisbatterij in juni
+ * iets heel anders doet dan in december: in de zomer vangt hij zonoverschot af,
+ * in de winter leeft hij van het prijsverschil tussen nacht en avondpiek. Wie
+ * wil weten of een accu bij hém past, moet dat verloop kunnen zien.
+ *
+ * De maandgrenzen liggen in lokale tijd, net als de daggrenzen: een maand begint
+ * om middernacht in Amsterdam, niet in UTC.
+ */
+export interface MonthTotals {
+  /** 1 tot en met 12. */
+  month: number;
+  savingEur: number;
+  /** Door de batterij geleverde energie, AC-zijdig, kWh. */
+  throughputKwh: number;
+  cycles: number;
+  gridImportBaselineKwh: number;
+  gridImportBatteryKwh: number;
+  gridExportBaselineKwh: number;
+  gridExportBatteryKwh: number;
+  /** Gemiddeld verschil tussen de hoogste en laagste afnameprijs per dag. */
+  priceSpreadEurPerKwh: number;
+}
+
 /** Uitkomsten voor één profieljaar. */
 export interface YearAnalysis {
   year: number;
@@ -113,6 +139,8 @@ export interface YearAnalysis {
   throughputKwh: number;
   /** Wat er onderweg verloren ging. */
   losses: EnergyLosses;
+  /** Per kalendermaand; maanden buiten het venster ontbreken. */
+  months: MonthTotals[];
 }
 
 /**
@@ -354,6 +382,14 @@ export interface StrategyGap {
 
 export interface AnalysisResult {
   perYear: YearAnalysis[];
+  /**
+   * Gemiddeld per kalendermaand over de volledige profieljaren.
+   *
+   * Zelfde middeling als `stats` en `losses`: een deeljaar zou een maand die er
+   * maar één keer in zit even zwaar laten wegen als een maand die er twee keer
+   * in zit.
+   */
+  perMonth: MonthTotals[];
   /** Gemiddelde jaarbesparing over de volledige profieljaren, EUR. */
   averageSavingEur: number;
   minSavingEur: number;
@@ -549,6 +585,85 @@ export function energyLosses(
   };
 }
 
+/**
+ * Tel per kalendermaand op wat de batterij deed.
+ *
+ * Eén pass over de dispatch die er al is. De dagelijkse prijsspreiding wordt per
+ * dag bepaald en daarna over de maand gemiddeld: het maandmaximum minus het
+ * maandminimum zou de spreiding fors overdrijven, want dat vergelijkt een
+ * goedkope nacht met een dure avond drie weken later — en daar kan geen batterij
+ * tussen laden.
+ */
+export function maandTotalen(
+  window: Window,
+  base: DispatchResult,
+  bat: DispatchResult,
+  spec: BatterySpec,
+): MonthTotals[] {
+  const { starts, index } = dayBoundaries(window.startMs);
+  const per = new Map<number, MonthTotals & { dagen: number; spreidingSom: number }>();
+
+  for (let d = 0; d + 1 < starts.length; d++) {
+    const a = starts[d]!;
+    const b = starts[d + 1]!;
+    const maand = Number(index.localDate(window.startMs[a]!).slice(5, 7));
+    let m = per.get(maand);
+    if (!m) {
+      m = {
+        month: maand,
+        savingEur: 0,
+        throughputKwh: 0,
+        cycles: 0,
+        gridImportBaselineKwh: 0,
+        gridImportBatteryKwh: 0,
+        gridExportBaselineKwh: 0,
+        gridExportBatteryKwh: 0,
+        priceSpreadEurPerKwh: 0,
+        dagen: 0,
+        spreidingSom: 0,
+      };
+      per.set(maand, m);
+    }
+
+    let hoog = -Infinity;
+    let laag = Infinity;
+    let ontladen = 0;
+    for (let i = a; i < b; i++) {
+      const ip = window.prices.importPrice[i]!;
+      const ep = window.prices.exportPrice[i]!;
+      const curtail = false;
+      void curtail;
+      m.savingEur +=
+        (base.gridImportKwh[i]! - bat.gridImportKwh[i]!) * ip -
+        (base.gridExportKwh[i]! - bat.gridExportKwh[i]!) * ep;
+      m.gridImportBaselineKwh += base.gridImportKwh[i]!;
+      m.gridImportBatteryKwh += bat.gridImportKwh[i]!;
+      m.gridExportBaselineKwh += base.gridExportKwh[i]!;
+      m.gridExportBatteryKwh += bat.gridExportKwh[i]!;
+      ontladen += bat.dischargeKwh[i]!;
+      if (ip > hoog) hoog = ip;
+      if (ip < laag) laag = ip;
+    }
+    m.throughputKwh += ontladen;
+    m.dagen += 1;
+    if (Number.isFinite(hoog) && Number.isFinite(laag)) m.spreidingSom += hoog - laag;
+  }
+
+  return [...per.values()]
+    .map((m) => ({
+      month: m.month,
+      savingEur: m.savingEur,
+      throughputKwh: m.throughputKwh,
+      cycles: equivalentCycles(m.throughputKwh, spec),
+      gridImportBaselineKwh: m.gridImportBaselineKwh,
+      gridImportBatteryKwh: m.gridImportBatteryKwh,
+      gridExportBaselineKwh: m.gridExportBaselineKwh,
+      gridExportBatteryKwh: m.gridExportBatteryKwh,
+      priceSpreadEurPerKwh: m.dagen > 0 ? m.spreidingSom / m.dagen : 0,
+    }))
+    .sort((a, b) => a.month - b.month);
+}
+
 /** Alleen de besparing, zonder baseline en optimum: voor de besparingscurve. */
 function quickSaving(
   entry: AnalysisInput["windows"][number],
@@ -624,6 +739,7 @@ function analyseWindow(
     gridExportWithBatteryKwh: exportWithBattery,
     throughputKwh: dischargeTotal,
     losses: energyLosses(window, real, spec),
+    months: maandTotalen(window, base, real, spec),
   };
   void totaalBehoefte;
   return {
@@ -1097,6 +1213,42 @@ export function runAnalysis(
   // een deelperiode is per definitie lager en zou de uitkomst vertekenen.
   const volledig = perYear.filter((y) => y.isFullYear);
   const basis = volledig.length > 0 ? volledig : perYear;
+  // Maandgemiddelde over dezelfde volledige jaren. Een maand telt alleen mee in
+  // de jaren waarin hij ook echt voorkomt; anders zou een venster dat halverwege
+  // begint de eerste maanden verwateren.
+  const maandBuckets = new Map<number, { som: MonthTotals; jaren: number }>();
+  for (const jaar of basis) {
+    for (const m of jaar.months) {
+      const hit = maandBuckets.get(m.month);
+      if (!hit) {
+        maandBuckets.set(m.month, { som: { ...m }, jaren: 1 });
+        continue;
+      }
+      hit.jaren += 1;
+      hit.som.savingEur += m.savingEur;
+      hit.som.throughputKwh += m.throughputKwh;
+      hit.som.cycles += m.cycles;
+      hit.som.gridImportBaselineKwh += m.gridImportBaselineKwh;
+      hit.som.gridImportBatteryKwh += m.gridImportBatteryKwh;
+      hit.som.gridExportBaselineKwh += m.gridExportBaselineKwh;
+      hit.som.gridExportBatteryKwh += m.gridExportBatteryKwh;
+      hit.som.priceSpreadEurPerKwh += m.priceSpreadEurPerKwh;
+    }
+  }
+  const perMonth: MonthTotals[] = [...maandBuckets.values()]
+    .map(({ som, jaren }) => ({
+      month: som.month,
+      savingEur: som.savingEur / jaren,
+      throughputKwh: som.throughputKwh / jaren,
+      cycles: som.cycles / jaren,
+      gridImportBaselineKwh: som.gridImportBaselineKwh / jaren,
+      gridImportBatteryKwh: som.gridImportBatteryKwh / jaren,
+      gridExportBaselineKwh: som.gridExportBaselineKwh / jaren,
+      gridExportBatteryKwh: som.gridExportBatteryKwh / jaren,
+      priceSpreadEurPerKwh: som.priceSpreadEurPerKwh / jaren,
+    }))
+    .sort((a, b) => a.month - b.month);
+
   const besparingen = basis.map((y) => y.realisticSavingEur);
   const gemiddeld =
     besparingen.reduce((a, b) => a + b, 0) / Math.max(1, besparingen.length);
@@ -1215,6 +1367,7 @@ export function runAnalysis(
 
   return {
     perYear,
+    perMonth,
     stats,
     losses,
     averageSavingEur: gemiddeld,

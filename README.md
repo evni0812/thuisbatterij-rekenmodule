@@ -16,7 +16,7 @@ gebruik, alles vanaf de CDN.
 ```bash
 npm install
 npm run dev          # http://localhost:3000
-npm test             # 149 tests, waaronder de modelinvarianten
+npm test             # 152 tests, waaronder de modelinvarianten
 npm run build        # statische export naar out/
 npm run clean        # bij een vastgelopen build-cache
 ```
@@ -199,6 +199,20 @@ verving de netuitwisseling, die af te leiden was uit het actiepaneel en bestond
 uit twee lijnen die grotendeels samenvielen. Wat ontbrak was het geld: aan
 kilowatturen is niet te zien of een dag iets oplevert. `tests/components.test.tsx`
 bewaakt dat het einde van die lijnen exact de dagkosten uit de kerncijfers is.
+
+**Het jaar is niet één getal.** `runAnalysis` levert naast `perYear` ook
+`perMonth`, gemiddeld over de volledige profieljaren. Gemeten voor de Zendure op
+Liander 2024–2025:
+
+| | jan | feb | mrt | apr | mei | jun | jul | aug | sep | okt | nov | dec |
+|---|---|---|---|---|---|---|---|---|---|---|---|---|
+| Besparing | 0,96 | 2,00 | 10,33 | 10,67 | 12,49 | 12,40 | 12,35 | 13,08 | 11,51 | 6,40 | 1,85 | 0,67 |
+
+Ruim tachtig procent valt tussen maart en oktober. In januari en december doet de
+accu vrijwel niets: het prijsverschil is dan 10 à 11 cent per dag en dat is te
+weinig om het omzettingsverlies en het eigen verbruik te dekken. Dat is precies
+de reden om naar het tijdsafhankelijke nettarief te kijken, want dat legt zijn
+piek juist in de winteravond.
 
 **Waarom de batterij handelt op een dag die niets oplevert.** Op 18 december 2025
 koopt de Zendure 's nachts 1,8 kWh in, levert er 1,6 aan het huis, en komt uit op een
