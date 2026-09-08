@@ -16,7 +16,7 @@ gebruik, alles vanaf de CDN.
 ```bash
 npm install
 npm run dev          # http://localhost:3000
-npm test             # 147 tests, waaronder de modelinvarianten
+npm test             # 149 tests, waaronder de modelinvarianten
 npm run build        # statische export naar out/
 npm run clean        # bij een vastgelopen build-cache
 ```
@@ -192,6 +192,13 @@ Gemeten over 2025, netgebied Liander, 2.500/2.000 kWh:
 
 Elf procent minder beurten voor ruim één procent minder besparing. De Zendure blijft
 daarmee onder zijn 6.000 beurten in vijftien jaar, waar hij er eerst overheen ging.
+
+**De dagweergave toont vier panelen**: de prijs, wat de batterij deed, hoe vol
+hij werd, en wat het opgeteld kostte met en zonder batterij. Dat laatste paneel
+verving de netuitwisseling, die af te leiden was uit het actiepaneel en bestond
+uit twee lijnen die grotendeels samenvielen. Wat ontbrak was het geld: aan
+kilowatturen is niet te zien of een dag iets oplevert. `tests/components.test.tsx`
+bewaakt dat het einde van die lijnen exact de dagkosten uit de kerncijfers is.
 
 **Waarom de batterij handelt op een dag die niets oplevert.** Op 18 december 2025
 koopt de Zendure 's nachts 1,8 kWh in, levert er 1,6 aan het huis, en komt uit op een

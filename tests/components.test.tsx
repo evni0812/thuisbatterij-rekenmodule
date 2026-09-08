@@ -488,6 +488,8 @@ describe("labels in het dagprofiel botsen niet", () => {
       exportPrice: leeg(),
       meterExportKwh: leeg(),
       meterImportKwh: leeg(),
+      cumulatiefBasisEur: leeg(),
+      cumulatiefBatterijEur: leeg(),
       usableCapacityKwh: 5,
       stats: {
         baselineCostEur: 1.2, batteryCostEur: 0.6, savingEur: 0.6,
@@ -517,8 +519,16 @@ describe("labels in het dagprofiel botsen niet", () => {
     dag.chargeKwh[16] = 0.2;
     // Eén kwartier ontladen zonder tekort: dat gaat het net op.
     dag.dischargeKwh[50] = 0.1;
+    let cb = 0;
+    let cm = 0;
     for (let i = 0; i < n; i++) {
       dag.netKwh[i] = dag.residualKwh[i]! + dag.chargeKwh[i]! - dag.dischargeKwh[i]!;
+      const r = dag.residualKwh[i]!;
+      const m = dag.netKwh[i]!;
+      cb += r > 0 ? r * dag.importPrice[i]! : r * dag.exportPrice[i]!;
+      cm += m > 0 ? m * dag.importPrice[i]! : m * dag.exportPrice[i]!;
+      dag.cumulatiefBasisEur[i] = cb;
+      dag.cumulatiefBatterijEur[i] = cm;
     }
     return dag;
   }
@@ -636,5 +646,41 @@ describe("de instellingen zijn geordend op wat ze veranderen", () => {
     cleanup();
     toon({ presetId: STANDAARD.presetId, discontovoet: 0.05, spreiding: 1.4 });
     expect(screen.getByRole("button", { name: /2 gewijzigd/ })).toBeDefined();
+  });
+});
+
+describe("het geldpaneel sluit aan op de dagcijfers", () => {
+  /**
+   * De cumulatieve lijnen zijn een tweede weg naar dezelfde getallen: het einde
+   * van de lijn moet exact de dagkosten zijn die in de tegels staan. Lopen ze
+   * uiteen, dan rekent de grafiek anders dan de cijfers erboven en klopt een van
+   * de twee niet — precies het soort verschil dat niemand opmerkt omdat beide op
+   * zichzelf plausibel ogen.
+   */
+  it("eindigt op precies de dagkosten uit de kerncijfers", () => {
+    for (const dag of result.sampleDays) {
+      const n = dag.startMs.length;
+      expect(dag.cumulatiefBasisEur.length).toBe(n);
+      expect(dag.cumulatiefBatterijEur.length).toBe(n);
+      expect(dag.cumulatiefBasisEur[n - 1]).toBeCloseTo(dag.stats.baselineCostEur, 9);
+      expect(dag.cumulatiefBatterijEur[n - 1]).toBeCloseTo(dag.stats.batteryCostEur, 9);
+      // En het gat aan het eind is de dagbesparing.
+      expect(
+        dag.cumulatiefBasisEur[n - 1]! - dag.cumulatiefBatterijEur[n - 1]!,
+      ).toBeCloseTo(dag.stats.savingEur, 9);
+    }
+  });
+
+  it("begint bij nul en loopt monotoon op zolang er alleen afname is", () => {
+    // De reeks is cumulatief, dus hij mag alleen dalen op momenten dat er geld
+    // binnenkomt: teruglevering tegen een positieve prijs.
+    for (const dag of result.sampleDays) {
+      const eerste = dag.cumulatiefBasisEur[0]!;
+      expect(Math.abs(eerste)).toBeLessThan(1);
+      for (let i = 1; i < dag.startMs.length; i++) {
+        const stap = dag.cumulatiefBasisEur[i]! - dag.cumulatiefBasisEur[i - 1]!;
+        if (dag.residualKwh[i]! > 0) expect(stap).toBeGreaterThanOrEqual(-1e-9);
+      }
+    }
   });
 });

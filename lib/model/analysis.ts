@@ -19,6 +19,7 @@ import { dispatchBaseline } from "./dispatch-baseline";
 import { dispatchOptimal } from "./dispatch-optimal";
 import { dispatchRolling } from "./dispatch-rolling";
 import { computeFinance, type FinanceResult, type SavingCurvePoint } from "./finance";
+import { stepCost } from "./tariff";
 import type {
   BatterySpec,
   DispatchResult,
@@ -208,6 +209,22 @@ export interface SampleDay {
   meterExportKwh: number[];
   /** Afname van het net per kwartier zonder batterij, kWh. Leeg zonder componenten. */
   meterImportKwh: number[];
+  /**
+   * Wat de dag tot dan toe gekost heeft, zonder en met batterij, in euro.
+   *
+   * Loopt op van nul om 00:00 tot de dagkosten om 24:00. Het verschil tussen de
+   * twee lijnen op enig moment is wat de batterij op dat moment had opgeleverd;
+   * het gat aan het eind is de dagbesparing.
+   *
+   * ── Waarom dit erbij hoort ────────────────────────────────────────────────
+   * De andere panelen laten kilowatturen zien. Dat vertelt wát de batterij doet,
+   * niet of het iets oplevert. Op een dag als 18 december 2025 koopt hij 's
+   * nachts in en levert 's avonds, en komt het dagbedrag op nul uit — dat is aan
+   * de kilowatturen niet te zien, maar aan twee lijnen die uit elkaar lopen en
+   * weer bij elkaar komen wel.
+   */
+  cumulatiefBasisEur: number[];
+  cumulatiefBatterijEur: number[];
   /** De kerngetallen van deze dag, los van de grafieken. */
   stats: SampleDayStats;
 }
@@ -836,8 +853,26 @@ export function extractDay(
     return uit;
   };
   const net: number[] = [];
+  // Cumulatieve kosten met dezelfde stepCost als de dispatch zelf gebruikt, dus
+  // inclusief het afregelen bij een negatieve prijs. Een tweede kostenformule
+  // naast de eerste zou onvermijdelijk uit elkaar lopen.
+  const cumBasis: number[] = [];
+  const cumBat: number[] = [];
+  let lopendBasis = 0;
+  let lopendBat = 0;
   for (let i = start; i < end; i++) {
     net.push(dispatch.gridImportKwh[i]! - dispatch.gridExportKwh[i]!);
+    const ip = window.prices.importPrice[i]!;
+    const ep = window.prices.exportPrice[i]!;
+    lopendBasis += stepCost(window.residualKwh[i]!, ip, ep, tariff.allowCurtailment);
+    lopendBat += stepCost(
+      dispatch.gridImportKwh[i]! - dispatch.gridExportKwh[i]!,
+      ip,
+      ep,
+      tariff.allowCurtailment,
+    );
+    cumBasis.push(lopendBasis);
+    cumBat.push(lopendBat);
   }
   return {
     label,
@@ -854,6 +889,8 @@ export function extractDay(
     usableCapacityKwh: usableCapacityKwh(spec),
     meterExportKwh: window.parts ? plak(window.parts.gridExportKwh) : [],
     meterImportKwh: window.parts ? plak(window.parts.gridImportKwh) : [],
+    cumulatiefBasisEur: cumBasis,
+    cumulatiefBatterijEur: cumBat,
     stats: dayStats(window, dispatch, spec, tariff, start, end, optimal),
   };
 }

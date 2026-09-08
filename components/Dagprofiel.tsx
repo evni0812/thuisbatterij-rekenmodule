@@ -4,15 +4,26 @@
  * Een dag in detail: wat doet de batterij nu eigenlijk?
  *
  * ── Waarom deze vorm ────────────────────────────────────────────────────────
- * Drie panelen boven elkaar met één gedeelde tijdas. Ze delen de x-as maar niet
- * de y-as, want prijs, lading en vermogen zijn drie verschillende grootheden.
- * Ze in één plot proppen zou een dubbele y-as vragen, en die verzint een verband
- * dat er niet is.
+ * Vier panelen boven elkaar met één gedeelde tijdas, in de volgorde van het
+ * verhaal:
+ *
+ *   1. de prijs        waarom er iets te doen viel
+ *   2. de acties       wat de batterij ermee deed
+ *   3. de lading       wat daarvan het gevolg was
+ *   4. het geld        wat het opleverde, opgeteld over de dag
+ *
+ * Ze delen de x-as maar niet de y-as: prijs, vermogen, lading en euro's zijn
+ * vier verschillende grootheden. In één plot zou dat een dubbele y-as vragen,
+ * en die verzint een verband dat er niet is.
+ *
+ * Paneel 4 verving de netuitwisseling met en zonder batterij. Dat was af te
+ * leiden uit paneel 2 — netto is de residual plus laden min ontladen — en het
+ * was het minst leesbare van de vier, met twee lijnen die grotendeels
+ * samenvielen. Wat ontbrak was het geld: de andere panelen laten kilowatturen
+ * zien, en daaruit is niet af te lezen of een dag iets oplevert.
  *
  * Elk paneel draagt zijn eigen labels aan de rechterkant van de lijnen, zodat je
- * nergens kleuren hoeft te matchen met een legenda. Dat scheelt ook de legenda
- * zelf: het middelste paneel heeft één lijn en de andere twee, allemaal ter
- * plekke benoemd.
+ * nergens kleuren hoeft te matchen met een legenda.
  *
  * De ruimte is strikt verdeeld in drie kolommen — as-labels, plot, lijnlabels —
  * en niets mag daarbuiten treden. Eerder stonden de paneeltitels op x=0 en
@@ -298,11 +309,18 @@ export function Dagprofiel({
   const socMax = Math.max(...dag.socKwh);
 
   // ── Paneel 3: netuitwisseling ──
-  const netKw = dag.netKwh.map((v) => v * KWH_NAAR_KW);
-  const zonderKw = dag.residualKwh.map((v) => v * KWH_NAAR_KW);
-  const nMax = Math.max(...netKw.map(Math.abs), ...zonderKw.map(Math.abs), 0.5);
-  const nTicks = kiesTicks(-nMax, nMax, 4).filter((t) => Math.abs(t) > 1e-9);
-  const yN = (v: number) => Y.net + (1 - (v + nMax) / (2 * nMax)) * HOOGTE.net;
+  // Paneel 4 toont geld, geen vermogen: wat de dag tot dan toe gekost heeft,
+  // zonder en met batterij. De schaal loopt van de laagste naar de hoogste
+  // waarde die een van beide lijnen aanneemt, met nul er altijd in — anders
+  // zweeft een dag die alleen maar geld kost boven een onzichtbare nullijn.
+  const cumBasis = dag.cumulatiefBasisEur;
+  const cumBat = dag.cumulatiefBatterijEur;
+  const heeftGeldreeks = cumBasis.length === n && cumBat.length === n;
+  const gLaag = heeftGeldreeks ? Math.min(0, ...cumBasis, ...cumBat) : 0;
+  const gHoog = heeftGeldreeks ? Math.max(0, ...cumBasis, ...cumBat) : 1;
+  const gSpan = Math.max(gHoog - gLaag, 0.05);
+  const nTicks = kiesTicks(gLaag, gHoog, 4);
+  const yN = (v: number) => Y.net + (1 - (v - gLaag) / gSpan) * HOOGTE.net;
 
   // Lijnlabels ontvlechten per paneel.
   const [yAfname, yTerug] = ontvlecht([
@@ -310,8 +328,8 @@ export function Dagprofiel({
     yP(dag.exportPrice[laatste]!),
   ]) as [number, number];
   const [yMet, yZonder] = ontvlecht([
-    yN(netKw[laatste]!),
-    yN(zonderKw[laatste]!),
+    yN(heeftGeldreeks ? cumBat[laatste]! : 0),
+    yN(heeftGeldreeks ? cumBasis[laatste]! : 0),
   ]) as [number, number];
 
   const i = cursor;
@@ -754,60 +772,97 @@ export function Dagprofiel({
             </g>
           ) : null}
 
-          {/* ══ Paneel 3: netuitwisseling ══ */}
-          {paneelTitel(Y.net, "Uitwisseling met het net")}
-          {nTicks.map((t) => (
-            <line
-              key={`n${t}`}
-              x1={PLOT_LINKS}
-              x2={PLOT_RECHTS}
-              y1={yN(t)}
-              y2={yN(t)}
-              stroke="var(--grid)"
-            />
-          ))}
-          <line x1={PLOT_LINKS} x2={PLOT_RECHTS} y1={yN(0)} y2={yN(0)} stroke="var(--axis)" strokeWidth={1.5} />
-          {/* De as zegt in woorden welke kant wat is: een getal alleen laat de
-              lezer raden of positief nu afnemen of teruggeven betekent. */}
-          <text x={PLOT_LINKS - 10} y={Y.net + 10} textAnchor="end" className="as-kop">
-            afnemen
-          </text>
-          <text x={PLOT_LINKS - 10} y={yN(0)} textAnchor="end" dominantBaseline="middle" className="as-label">
-            0 kW
-          </text>
-          <text x={PLOT_LINKS - 10} y={Y.net + HOOGTE.net - 2} textAnchor="end" className="as-kop">
-            terugleveren
-          </text>
+          {/* ══ Paneel 4: wat het kostte ══ */}
+          {/*
+            Het vorige paneel hier toonde de netuitwisseling met en zonder
+            batterij. Dat is af te leiden uit het actiepaneel — netto is de
+            residual plus laden min ontladen — en het was het minst leesbare van
+            de vier, met twee lijnen die grotendeels samenvallen.
 
-          <path
-            d={lijn(zonderKw.map((v, k) => [x(k), yN(v)]))}
-            fill="none"
-            stroke="var(--text-muted)"
-            strokeWidth={1.5}
-            strokeDasharray="4 3"
-          />
-          <path
-            d={lijn(netKw.map((v, k) => [x(k), yN(v)]))}
-            fill="none"
-            stroke="var(--series-4)"
-            strokeWidth={2}
-            strokeLinejoin="round"
-          />
-          <LijnLabel
-            y={yMet}
-            yLijn={yN(netKw[laatste]!)}
-            kleur="var(--series-4)"
-            naam="mét batterij"
-            waarde={`${getal(Math.abs(netKw[laatste]!), 1)} kW`}
-          />
-          <LijnLabel
-            y={yZonder}
-            yLijn={yN(zonderKw[laatste]!)}
-            kleur="var(--text-muted)"
-            naam="zónder batterij"
-            waarde={`${getal(Math.abs(zonderKw[laatste]!), 1)} kW`}
-            gestippeld
-          />
+            Wat ontbrak was het geld. De andere panelen laten kilowatturen zien:
+            wát de batterij doet, niet of het iets oplevert. Hier lopen de kosten
+            met en zonder batterij uit elkaar en weer naar elkaar toe, en het gat
+            aan het eind ís de dagbesparing.
+          */}
+          {paneelTitel(Y.net, "Wat het je kostte, opgeteld over de dag")}
+          {heeftGeldreeks ? (
+            <>
+              {nTicks.map((t) => (
+                <line
+                  key={`n${t}`}
+                  x1={PLOT_LINKS}
+                  x2={PLOT_RECHTS}
+                  y1={yN(t)}
+                  y2={yN(t)}
+                  stroke="var(--grid)"
+                />
+              ))}
+              {nTicks.map((t) => (
+                <text
+                  key={`nt${t}`}
+                  x={PLOT_LINKS - 10}
+                  y={yN(t)}
+                  textAnchor="end"
+                  dominantBaseline="middle"
+                  className="as-label"
+                >
+                  {euroPrecies(t)}
+                </text>
+              ))}
+              <line
+                x1={PLOT_LINKS}
+                x2={PLOT_RECHTS}
+                y1={yN(0)}
+                y2={yN(0)}
+                stroke="var(--axis)"
+                strokeWidth={1.5}
+              />
+
+              {/* Het vlak tussen de twee lijnen is de besparing die zich
+                  opbouwt. Groen als de batterij voorloopt, rood als hij die dag
+                  achterloopt — dat laatste gebeurt 's nachts, wanneer hij
+                  inkoopt voor later. */}
+              <path
+                d={`${lijn(cumBasis.map((v, k) => [x(k), yN(v)]))} L${x(laatste)} ${yN(
+                  cumBat[laatste]!,
+                )} ${cumBat
+                  .map((v, k) => [x(laatste - k), yN(cumBat[laatste - k]!)] as [number, number])
+                  .map(([px, py]) => `L${px} ${py}`)
+                  .join(" ")} Z`}
+                fill="var(--series-3)"
+                opacity={0.14}
+              />
+              <path
+                d={lijn(cumBasis.map((v, k) => [x(k), yN(v)]))}
+                fill="none"
+                stroke="var(--text-muted)"
+                strokeWidth={1.5}
+                strokeDasharray="4 3"
+              />
+              <path
+                d={lijn(cumBat.map((v, k) => [x(k), yN(v)]))}
+                fill="none"
+                stroke="var(--series-4)"
+                strokeWidth={2}
+                strokeLinejoin="round"
+              />
+              <LijnLabel
+                y={yMet}
+                yLijn={yN(cumBat[laatste]!)}
+                kleur="var(--series-4)"
+                naam="mét batterij"
+                waarde={euroPrecies(cumBat[laatste]!)}
+              />
+              <LijnLabel
+                y={yZonder}
+                yLijn={yN(cumBasis[laatste]!)}
+                kleur="var(--text-muted)"
+                naam="zónder batterij"
+                waarde={euroPrecies(cumBasis[laatste]!)}
+                gestippeld
+              />
+            </>
+          ) : null}
 
           {/* ══ Tijdas ══ */}
           {[0, 3, 6, 9, 12, 15, 18, 21].map((u) => {
@@ -834,7 +889,9 @@ export function Dagprofiel({
               <circle cx={x(i)} cy={yP(dag.importPrice[i]!)} r={4} fill="var(--series-1)" stroke="var(--surface-1)" strokeWidth={2} />
               <circle cx={x(i)} cy={yP(dag.exportPrice[i]!)} r={4} fill="var(--series-2)" stroke="var(--surface-1)" strokeWidth={2} />
               <circle cx={x(i)} cy={yS(dag.socKwh[i]!)} r={4} fill="var(--series-3)" stroke="var(--surface-1)" strokeWidth={2} />
-              <circle cx={x(i)} cy={yN(netKw[i]!)} r={4} fill="var(--series-4)" stroke="var(--surface-1)" strokeWidth={2} />
+              {heeftGeldreeks ? (
+                <circle cx={x(i)} cy={yN(cumBat[i]!)} r={4} fill="var(--series-4)" stroke="var(--surface-1)" strokeWidth={2} />
+              ) : null}
             </g>
           ) : null}
         </svg>
