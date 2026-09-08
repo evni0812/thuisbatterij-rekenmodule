@@ -15,6 +15,35 @@ import {
 } from "../lib/nettarief";
 import { buildQuarterAxis, LocalTimeIndex } from "../lib/data/timeaxis";
 
+/**
+ * Figuur 4 letterlijk overgetypt uit het CE Delft-rapport, 00:00 tot 23:00.
+ *
+ * Dit is de test die ontbrak. De eerste versie van de tabel toetste alleen de
+ * structuur — waar de piek ligt, dat de middag gratis is — en dat ging goed
+ * terwijl er drie cellen fout stonden: 16:00 en 18:00 waren te duur en 23:00 te
+ * goedkoop. Zulke fouten schuiven de uitkomst zonder dat een structuurtest iets
+ * merkt. Een cel-voor-celvergelijking met de bron merkt het wel.
+ */
+const BRON_WINTER = [
+  0.13, 0.10, 0.10, 0.10, 0.10, 0.10, 0.10, 0.13, 0.13, 0.13, 0.10, 0.10,
+  0.10, 0.10, 0.10, 0.10, 0.19, 0.19, 0.19, 0.19, 0.19, 0.19, 0.19, 0.13,
+];
+const BRON_ZOMER = [
+  0.10, 0.10, 0.10, 0.06, 0.06, 0.06, 0.06, 0.06, 0.06, 0.06, 0.00, 0.00,
+  0.00, 0.00, 0.00, 0.00, 0.00, 0.06, 0.06, 0.13, 0.13, 0.13, 0.13, 0.13,
+];
+
+describe("de tabel komt overeen met Figuur 4", () => {
+  it("geeft per maand exact de rij uit het rapport", () => {
+    for (const m of [1, 2, 3, 10, 11, 12]) {
+      expect([...profielVoorMaand(m)], `maand ${m}`).toEqual(BRON_WINTER);
+    }
+    for (const m of [4, 5, 6, 7, 8, 9]) {
+      expect([...profielVoorMaand(m)], `maand ${m}`).toEqual(BRON_ZOMER);
+    }
+  });
+});
+
 describe("de tariefstructuur", () => {
   it("heeft voor elke maand vierentwintig uren", () => {
     for (let m = 1; m <= 12; m++) {
@@ -47,14 +76,19 @@ describe("de tariefstructuur", () => {
     expect(Math.max(...winter.filter((_, u) => u < 16 || u > 22))).toBe(0.13);
   });
 
-  it("maakt de zomermiddag gratis, van 10 tot en met 15 uur", () => {
+  it("maakt de zomermiddag gratis, van 10 tot en met 16 uur", () => {
     const zomer = profielVoorMaand(7);
-    for (let u = 10; u <= 15; u++) expect(zomer[u], `uur ${u}`).toBe(0);
+    // Zeven gratis uren, niet zes: het blok loopt door tot en met 16:00.
+    for (let u = 10; u <= 16; u++) expect(zomer[u], `uur ${u}`).toBe(0);
     expect(zomer[9]).toBe(0.06);
-    expect(zomer[16]).toBe(0.06);
-    // De zomeravond is duurder dan de middag, maar goedkoper dan de winteravond.
+    expect(zomer[17]).toBe(0.06);
+    // De zomerpiek begint pas om 19:00 en is lager dan de winterpiek.
+    expect(zomer[18]).toBe(0.06);
     expect(zomer[19]).toBe(0.13);
     expect(zomer[19]!).toBeLessThan(profielVoorMaand(1)[19]!);
+    // En loopt door tot en met 23:00, waar de winter dan al is gezakt.
+    expect(zomer[23]).toBe(0.13);
+    expect(profielVoorMaand(1)[23]).toBe(0.13);
   });
 
   it("komt gemiddeld op een plausibel niveau uit", () => {

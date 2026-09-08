@@ -16,7 +16,7 @@ gebruik, alles vanaf de CDN.
 ```bash
 npm install
 npm run dev          # http://localhost:3000
-npm test             # 160 tests, waaronder de modelinvarianten
+npm test             # 161 tests, waaronder de modelinvarianten
 npm run build        # statische export naar out/
 npm run clean        # bij een vastgelopen build-cache
 ```
@@ -294,10 +294,15 @@ niveaus. `lib/nettarief.ts` bevat daarom een prognose: CE Delft, geprognosticeer
 nettarieven 2030, op basis van Netbeheer Nederland (2026b, 2026c). Vijf niveaus,
 per uur en per maand:
 
-| Uur | 0 | 1–6 | 7–9 | 10–15 | 16–17 | 18–22 | 23 |
+| Uur | 0 | 1–6 | 7–9 | 10–16 | 17–18 | 19–22 | 23 |
 |---|---|---|---|---|---|---|---|
-| **okt–mrt** | 0,13 | 0,10 | 0,13 | 0,10 | 0,19 | 0,19 | 0,13 |
-| **apr–sep** | 0,10 | 0,10 / 0,06 | 0,06 | 0,00 | 0,06 | 0,13 | 0,10 |
+| **okt–mrt** | 0,13 | 0,10 | 0,13 | 0,10 (10–15), 0,19 (16) | 0,19 | 0,19 | 0,13 |
+| **apr–sep** | 0,10 | 0,10 (1–2), 0,06 (3–6) | 0,06 | 0,00 | 0,06 | 0,13 | 0,13 |
+
+De winterpiek loopt van 16:00 tot en met 22:00; in de zomer begint de piek pas om
+19:00 en loopt hij door tot en met 23:00, terwijl de middag van 10:00 tot en met
+16:00 gratis is. `tests/nettarief.test.ts` vergelijkt beide rijen cel voor cel met
+Figuur 4.
 
 Dat verandert de businesscase ingrijpend, want de piek valt op de uren waarop een
 batterij levert en het nultarief op de uren waarop hij laadt. Gemeten op Liander
@@ -306,8 +311,14 @@ batterij levert en het nultarief op de uren waarop hij laadt. Gemeten op Liander
 | | Zendure 1,92 kWh | Thuisaccu 10 kWh |
 |---|---|---|
 | Nu | € 94,71, terugverdiend in 8,5 jaar | € 269,72, verdient zich niet terug |
-| Met nettarief | € 157,52, in 5,2 jaar | € 404,12, in 13,3 jaar |
+| Met nettarief | € 158,42, in 5,1 jaar | € 407,25, in 13,2 jaar |
 | Waarvan winter | € 22 → € 51 | € 65 → € 134 |
+
+De prognose is geijkt op een huishouden van 3.000 kWh per jaar: € 335 aan
+volume- en tijdsafhankelijk transporttarief, wat volgens de ACM-rekenmethodiek
+uitkomt op ongeveer € 0,19/kWh als bovenste trede. Het vaste deel — € 167
+vastrecht plus € 135 periodieke aansluitvergoeding — blijft buiten de
+berekening, want dat is met en zonder batterij gelijk.
 
 De winst zit vooral in de winter, precies het seizoen waarin de accu nu bijna
 stilstaat. Of teruglevering ook wordt beprijsd staat niet in het voorstel; dat is

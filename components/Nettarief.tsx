@@ -114,7 +114,8 @@ export function Nettarief({
       </div>
       <p className="tariefblad-legenda">
         Van links naar rechts 00:00 tot 23:00. Lichter is goedkoper: 0 ct in de
-        zomermiddag, 19 ct in de winteravond. Winter is oktober tot en met maart.
+        zomermiddag van 10:00 tot en met 16:00, 19 ct in de winteravond van 16:00
+        tot en met 22:00. Winter is oktober tot en met maart.
       </p>
 
       {scenario ? (
@@ -186,9 +187,10 @@ export function Nettarief({
         seizoenen komt uit het codewijzigingsvoorstel dat de netbeheerders op
         4 mei 2026 bij de ACM indienden; de ACM besluit naar verwachting voor
         eind 2026. De bedragen zijn nog niet gepubliceerd — het voorstel toont
-        alleen relatieve niveaus. Wat hier staat is {NETTARIEF_BRON}. Circa een
-        derde van de netkosten blijft vast en valt daarmee buiten deze
-        berekening, net als nu: dat deel is met en zonder batterij gelijk.
+        alleen relatieve niveaus. Wat hier staat is {NETTARIEF_BRON}, geijkt op
+        een huishouden van 3.000 kWh per jaar. Het vaste deel — vastrecht en
+        aansluitvergoeding, samen ruim € 300 per jaar — valt buiten deze
+        berekening, net als nu: dat is met en zonder batterij gelijk.
       </p>
     </Figure>
   );

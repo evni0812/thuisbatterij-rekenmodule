@@ -19,6 +19,14 @@
  * er vier noemt: dit is een doorrekening naar 2030, geen overname van het
  * voorstel.
  *
+ * De prognose is geijkt op een huishouden van 3.000 kWh per jaar, met een
+ * volume- en tijdsafhankelijk transporttarief van EUR 335 inclusief btw. Dat
+ * komt volgens de door de ACM gepubliceerde rekenmethodiek uit op ongeveer
+ * EUR 0,19/kWh als bovenste trede — het getal dat je in de winteravond terugziet.
+ * Daarnaast staan er nog EUR 167 vastrecht (een derde van de transportkosten) en
+ * EUR 135 periodieke aansluitvergoeding, en die blijven buiten deze tabel omdat
+ * ze niet van je gedrag afhangen.
+ *
  * ── Waarom dit de businesscase omgooit ──────────────────────────────────────
  * Het winterpiektarief van 19 ct/kWh komt bovenop de energieprijs, terwijl het
  * hele prijsverschil op een winterdag nu rond de 10 ct ligt. Tegelijk gaat de
@@ -56,13 +64,17 @@ const WINTER: readonly number[] = [
 /**
  * Zomertarief per uur, in EUR/kWh. Geldt van april tot en met september.
  *
- * De middag 10 tot en met 15 is gratis: dan staat het net vol zonnestroom en
- * wil de netbeheerder dat je juist afneemt. De avondpiek 18 tot en met 22 is
- * 0,13, een stuk lager dan in de winter.
+ * De middag 10 tot en met 16 is gratis: dan staat het net vol zonnestroom en
+ * wil de netbeheerder dat je juist afneemt. Zeven uur lang, niet zes — het
+ * gratis blok loopt door tot en met 16:00.
+ *
+ * De avondpiek begint pas om 19:00 en loopt door tot en met 23:00. Dat is later
+ * en langer dan in de winter, waar de piek al om 16:00 begint en om 23:00 al
+ * weer is gezakt.
  */
 const ZOMER: readonly number[] = [
   0.1, 0.1, 0.1, 0.06, 0.06, 0.06, 0.06, 0.06, 0.06, 0.06, 0, 0,
-  0, 0, 0, 0, 0.06, 0.06, 0.13, 0.13, 0.13, 0.13, 0.13, 0.1,
+  0, 0, 0, 0, 0, 0.06, 0.06, 0.13, 0.13, 0.13, 0.13, 0.13,
 ];
 
 /** Maand 1–12 naar het uurprofiel dat die maand geldt. */
