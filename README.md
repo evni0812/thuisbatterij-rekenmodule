@@ -16,7 +16,7 @@ gebruik, alles vanaf de CDN.
 ```bash
 npm install
 npm run dev          # http://localhost:3000
-npm test             # 143 tests, waaronder de modelinvarianten
+npm test             # 147 tests, waaronder de modelinvarianten
 npm run build        # statische export naar out/
 npm run clean        # bij een vastgelopen build-cache
 ```

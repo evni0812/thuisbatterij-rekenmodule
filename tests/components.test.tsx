@@ -28,6 +28,7 @@ import { runAnalysis, type AnalysisResult, type SampleDay } from "../lib/model/a
 import { buildResidual } from "../lib/model/residual";
 import { buildPriceSeries } from "../lib/model/tariff";
 import { PRESETS } from "../lib/presets";
+import { STANDAARD } from "../lib/configuratie";
 
 // Zonder opruimen stapelen de gerenderde DOM's op en vinden queries meerdere
 // treffers uit eerdere tests.
@@ -560,5 +561,80 @@ describe("labels in het dagprofiel botsen niet", () => {
         `"${vorige.t}" (y=${vorige.y}) en "${huidige.t}" (y=${huidige.y}) overlappen`,
       ).toBeGreaterThanOrEqual(10);
     }
+  });
+});
+
+describe("de instellingen zijn geordend op wat ze veranderen", () => {
+  /**
+   * De vraag kwam waarom de jaaropbrengst zou veranderen als je de rente
+   * aanpast. Dat doet hij niet, maar dat was uit het paneel niet af te lezen:
+   * looptijd, rente en prijsstijging stonden onder "De doorrekening" tussen
+   * instellingen die de uitkomst wél veranderen.
+   *
+   * De indeling gaat nu op effect. Deze test bewaakt dat de groep die alleen de
+   * businesscase raakt dat ook zegt, en dat capaciteitsverlies bij de accu staat
+   * en niet bij de doorrekening.
+   */
+  function toon(over: Partial<typeof LEGE_INSTELLINGEN> = {}) {
+    return render(
+      <Geavanceerd
+        inst={{ ...LEGE_INSTELLINGEN, ...over }}
+        manifest={manifest}
+        preset={PRESETS[1]!}
+        capaciteit={2.1}
+        vermogen={0.8}
+        prijs={1199}
+        onChange={() => {}}
+        onReset={() => {}}
+        onBereken={() => {}}
+        verouderd={false}
+        bezig={false}
+      />,
+    );
+  }
+
+  it("zegt bij elke groep wat hij beïnvloedt", () => {
+    toon();
+    const koppen = [...document.querySelectorAll("h3")].map((el) => el.textContent);
+    expect(koppen).toEqual([
+      "Jouw situatie",
+      "De batterij",
+      "Je contract",
+      "Hoe je ernaar kijkt",
+    ]);
+    const tekst = document.body.textContent ?? "";
+    // De groep die de fysica niet raakt, zegt dat met zoveel woorden.
+    expect(tekst).toMatch(/Niet de jaaropbrengst/);
+  });
+
+  it("zet capaciteitsverlies bij de batterij, niet bij de doorrekening", () => {
+    const { container } = toon();
+    const secties = [...container.querySelectorAll("section section")];
+    const batterij = secties.find((s) => s.querySelector("h3")?.textContent === "De batterij");
+    expect(batterij?.textContent).toMatch(/Capaciteitsverlies per jaar/);
+    const kijk = secties.find(
+      (s) => s.querySelector("h3")?.textContent === "Hoe je ernaar kijkt",
+    );
+    expect(kijk?.textContent).not.toMatch(/Capaciteitsverlies/);
+  });
+
+  it("laat de heffing als een keuze tussen twee zien, niet als vinkje", () => {
+    toon();
+    // Een vinkje "reken met de belasting van nu" laat de andere kant naamloos.
+    expect(screen.getByRole("button", { name: /Van toen/ })).toBeDefined();
+    expect(screen.getByRole("button", { name: /Van nu/ })).toBeDefined();
+  });
+
+  it("meldt hoeveel instellingen afwijken van de standaard", () => {
+    // LEGE_INSTELLINGEN kiest bewust een andere batterij dan de standaard, dus
+    // dat is al één afwijking; hier zetten we hem gelijk om vanaf nul te tellen.
+    toon({ presetId: STANDAARD.presetId });
+    expect(
+      screen.getByRole("button", { name: /Alles staat op de standaardwaarden/ }),
+    ).toBeDefined();
+
+    cleanup();
+    toon({ presetId: STANDAARD.presetId, discontovoet: 0.05, spreiding: 1.4 });
+    expect(screen.getByRole("button", { name: /2 gewijzigd/ })).toBeDefined();
   });
 });

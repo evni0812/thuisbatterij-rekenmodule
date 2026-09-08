@@ -13,7 +13,20 @@ import type { Manifest } from "../lib/data/manifest";
 import { netgebiedNaam } from "../lib/data/manifest";
 import { centPerKwh, euro, getal, procent } from "../lib/format";
 import { PRIJSPEILDATUM, type BatteryPreset } from "../lib/presets";
+import { STANDAARD } from "../lib/configuratie";
 import type { Instellingen } from "../lib/url-state";
+
+/**
+ * Hoeveel instellingen afwijken van de standaard.
+ *
+ * Zonder dit is de resetknop een gok: je ziet niet of er iets te resetten valt,
+ * en na het schuiven aan vier regelaars weet je niet meer welke.
+ */
+function telAfwijkingen(inst: Instellingen): number {
+  return (Object.keys(STANDAARD) as (keyof Instellingen)[]).filter(
+    (k) => inst[k] !== STANDAARD[k],
+  ).length;
+}
 
 /** De heffing van het meest recente prijsjaar in de data, of null zonder manifest. */
 function actueleHeffingUit(manifest: Manifest | null): number | null {
@@ -95,6 +108,7 @@ export function Geavanceerd({
   const jaren = manifest ? Object.values(manifest.profielen[inst.domein] ?? {}) : [];
   const vroegste = jaren[0]?.eerste_dag ?? "2023-04-01";
   const laatste = jaren[jaren.length - 1]?.laatste_dag ?? "2026-12-31";
+  const afwijkingen = telAfwijkingen(inst);
 
   return (
     <section className="geavanceerd" id="instellingen">
@@ -119,50 +133,21 @@ export function Geavanceerd({
       </div>
 
       <div className="geavanceerd-inhoud">
-        <section>
-          <h3>De batterij</h3>
-          <div className="instelling-grid">
-            <Schuif
-              label="Capaciteit"
-              uitleg="Hoeveel stroom er in past. Groter helpt alleen zolang je hem ook vol krijgt."
-              waarde={capaciteit}
-              min={0.5}
-              max={30}
-              stap={0.1}
-              formatteer={(v) => `${getal(v, 1)} kWh`}
-              onChange={(v) => onChange({ capaciteitKwh: v })}
-            />
-            <Schuif
-              label="Laad- en ontlaadvermogen"
-              uitleg="Hoe snel hij kan laden en leveren. Te weinig vermogen betekent dat je de zonnepiek niet kunt wegvangen."
-              waarde={vermogen}
-              min={0.3}
-              max={10}
-              stap={0.1}
-              formatteer={(v) => `${getal(v, 1)} kW`}
-              onChange={(v) => onChange({ vermogenKw: v })}
-            />
-            <Schuif
-              label="Aanschafprijs"
-              uitleg="Inclusief installatie. Dit bepaalt zowel de terugverdientijd als hoe zuinig het model met cycli omgaat."
-              waarde={prijs}
-              min={200}
-              max={15000}
-              stap={50}
-              formatteer={(v) => euro(v)}
-              onChange={(v) => onChange({ prijsEur: v })}
-            />
-          </div>
-          <p className="instelling-noot">
-            Rendement {procent(preset.spec.efficiency ** 2)} heen en terug,
-            bruikbaar deel {procent(preset.spec.depthOfCharge)}, standby{" "}
-            {preset.spec.standbyWatt} W, levensduur {preset.cycleLife} laadbeurten. Overgenomen van {preset.naam}.
-            Prijs: {preset.prijsNoot}, richtprijs {PRIJSPEILDATUM}.
-          </p>
-        </section>
+        {/*
+          De volgorde volgt de rekenketen: eerst wat er bij jou gebeurt, dan de
+          accu die erop reageert, dan de prijzen waartegen dat wordt afgerekend,
+          en pas daarna hoe je naar de uitkomst kijkt.
 
+          Die laatste groep staat bewust apart en zegt het ook. De vraag kwam
+          waarom de jaaropbrengst verandert als je de rente aanpast; dat doet hij
+          niet, maar dat was uit deze indeling niet af te lezen omdat looptijd,
+          rente en prijsstijging tussen de fysieke instellingen stonden.
+        */}
         <section>
-          <h3>Je situatie</h3>
+          <h3>Jouw situatie</h3>
+          <p className="groep-uitleg">
+            Bepaalt hoeveel er te halen valt. Verandert de jaaropbrengst.
+          </p>
           <div className="instelling-grid">
             <div className="instelling">
               <label htmlFor="netgebied">Netgebied</label>
@@ -205,7 +190,8 @@ export function Geavanceerd({
               </div>
               <p className="instelling-uitleg">
                 Beschikbaar van {vroegste} tot {laatste}. Een periode korter dan
-                een jaar laat vooral het seizoen zien, niet of de batterij zich terugverdient.
+                een jaar laat vooral het seizoen zien, niet of de batterij zich
+                terugverdient.
               </p>
             </div>
 
@@ -230,15 +216,15 @@ export function Geavanceerd({
                 <span className="eenheid">kWh per jaar</span>
               </div>
               <p className="instelling-uitleg">
-                Optioneel. Hiermee kunnen zelfconsumptie en autarkie berekend
-                worden; die volgen niet uit je meterstanden. Vuistregel: ongeveer
-                900 kWh per kWp (Milieu Centraal).
+                Optioneel, en het enige veld hier dat de uitkomst niet verandert:
+                het zet alleen zelfconsumptie en autarkie aan. Vuistregel:
+                ongeveer 900 kWh per kWp (Milieu Centraal).
               </p>
             </div>
 
             <Schuif
               label="Pieken in je verbruik"
-              uitleg="Het gemeten verbruikspatroon is een gemiddelde over veel huishoudens en daardoor vlakker dan één huis. Hoger zet de pieken en dalen aan. Je jaarverbruik blijft gelijk."
+              uitleg="Het gemeten patroon is een gemiddelde over veel huishoudens en daardoor vlakker dan één huis. Hoger zet de pieken en dalen aan. Je jaarverbruik blijft gelijk."
               waarde={inst.spreiding}
               min={0.5}
               max={2}
@@ -250,11 +236,74 @@ export function Geavanceerd({
         </section>
 
         <section>
-          <h3>Het contract</h3>
+          <h3>De batterij</h3>
+          <p className="groep-uitleg">
+            Bepaalt wat de accu ermee kan. Verandert de jaaropbrengst.
+          </p>
+          <div className="instelling-grid">
+            <Schuif
+              label="Capaciteit"
+              uitleg="Hoeveel stroom er in past. Groter helpt alleen zolang je hem ook vol krijgt."
+              waarde={capaciteit}
+              min={0.5}
+              max={30}
+              stap={0.1}
+              formatteer={(v) => `${getal(v, 1)} kWh`}
+              onChange={(v) => onChange({ capaciteitKwh: v })}
+            />
+            <Schuif
+              label="Laad- en ontlaadvermogen"
+              uitleg="Hoe snel hij kan laden en leveren. Te weinig vermogen betekent dat je de zonnepiek niet kunt wegvangen."
+              waarde={vermogen}
+              min={0.3}
+              max={10}
+              stap={0.1}
+              formatteer={(v) => `${getal(v, 1)} kW`}
+              onChange={(v) => onChange({ vermogenKw: v })}
+            />
+            <Schuif
+              label="Aanschafprijs"
+              uitleg="Inclusief installatie. Bepaalt de terugverdientijd, en via de slijtageprijs per laadbeurt ook hoe zuinig de accu met zijn cycli omgaat."
+              waarde={prijs}
+              min={200}
+              max={15000}
+              stap={50}
+              formatteer={(v) => euro(v)}
+              onChange={(v) => onChange({ prijsEur: v })}
+            />
+            {/* Capaciteitsverlies hoort bij de accu, niet bij de doorrekening.
+                Het stond in "De doorrekening" terwijl het een fysieke
+                eigenschap is, naast rendement en levensduur. */}
+            <Schuif
+              label="Capaciteitsverlies per jaar"
+              uitleg="Hoeveel capaciteit hij per jaar kwijtraakt door ouderdom, ook als je hem niet gebruikt. Slijtage door laden en ontladen zit apart in de levensduur hieronder."
+              waarde={inst.degradatie}
+              min={0}
+              max={0.05}
+              stap={0.0025}
+              formatteer={(v) => procent(v, 2)}
+              onChange={(v) => onChange({ degradatie: v })}
+            />
+          </div>
+          <p className="instelling-noot">
+            Vast overgenomen van {preset.naam}: rendement{" "}
+            {procent(preset.spec.efficiency ** 2)} heen en terug, bruikbaar deel{" "}
+            {procent(preset.spec.depthOfCharge)}, standby {preset.spec.standbyWatt} W,
+            levensduur {preset.cycleLife} laadbeurten en{" "}
+            {preset.kalenderLevensduurJaren} jaar. Prijs: {preset.prijsNoot},
+            richtprijs {PRIJSPEILDATUM}.
+          </p>
+        </section>
+
+        <section>
+          <h3>Je contract</h3>
+          <p className="groep-uitleg">
+            Bepaalt waartegen alles wordt afgerekend. Verandert de jaaropbrengst.
+          </p>
           <div className="instelling-grid">
             <Schuif
               label="Terugleverkosten"
-              uitleg="Wat je leverancier in rekening brengt per teruggeleverde kilowattuur. Sinds de saldering wegvalt rekenen steeds meer leveranciers dit."
+              uitleg="Wat je leverancier per teruggeleverde kilowattuur rekent. Sinds de saldering wegvalt doen steeds meer leveranciers dat."
               waarde={inst.terugleverkostenCt}
               min={0}
               max={15}
@@ -262,6 +311,42 @@ export function Geavanceerd({
               formatteer={(v) => `${getal(v, 1)} ct/kWh`}
               onChange={(v) => onChange({ terugleverkostenCt: v })}
             />
+
+            {/* Een keuze tussen twee even geldige opties, geen aan-uitschakelaar:
+                een vinkje met "reken met de belasting van nu" laat de andere kant
+                naamloos, en dan weet je niet waar je vandaan komt. */}
+            <div className="instelling">
+              <label>Energiebelasting en opslag</label>
+              <div className="segment" role="group" aria-label="Welke heffing">
+                <button
+                  type="button"
+                  aria-pressed={inst.heffing === "toen"}
+                  className={inst.heffing === "toen" ? "segment-knop actief" : "segment-knop"}
+                  onClick={() => onChange({ heffing: "toen" })}
+                >
+                  Van toen
+                </button>
+                <button
+                  type="button"
+                  aria-pressed={inst.heffing === "nu"}
+                  className={inst.heffing === "nu" ? "segment-knop actief" : "segment-knop"}
+                  onClick={() => onChange({ heffing: "nu" })}
+                >
+                  Van nu
+                  {actueleHeffingUit(manifest) !== null
+                    ? ` (${centPerKwh(actueleHeffingUit(manifest)!)})`
+                    : ""}
+                </button>
+              </div>
+              <p className="instelling-uitleg">
+                Standaard geldt per uur de heffing die toen echt gold: het verschil
+                tussen wat je aan de kassa betaalde en de kale marktprijs. In 2024
+                en 2025 lag die een kwart tot een derde hoger dan nu, en de
+                besparing schaalt daar bijna één-op-één mee. Kies "van nu" om de
+                prijzen van toen te combineren met de belasting van vandaag.
+              </p>
+            </div>
+
             <div className="instelling">
               <label className="schakel">
                 <input
@@ -273,42 +358,25 @@ export function Geavanceerd({
               </label>
               <p className="instelling-uitleg">
                 Moderne omvormers stoppen met terugleveren als de prijs negatief
-                is. Zet dit uit als jouw installatie dat niet kan. Dan betaal je op die momenten om je
-                stroom kwijt te raken.
+                is. Zet dit uit als jouw installatie dat niet kan; dan betaal je
+                op die momenten om je stroom kwijt te raken.
               </p>
             </div>
-          </div>
-          <div className="instelling">
-            <label className="schakel">
-              <input
-                type="checkbox"
-                checked={inst.heffing === "nu"}
-                onChange={(e) => onChange({ heffing: e.target.checked ? "nu" : "toen" })}
-              />
-              <span>
-                Reken met de energiebelasting van nu
-                {actueleHeffingUit(manifest) !== null
-                  ? ` (${centPerKwh(actueleHeffingUit(manifest)!)})`
-                  : ""}
-              </span>
-            </label>
-            <p className="instelling-uitleg">
-              Standaard geldt per uur de belasting en opslag die toen echt golden:
-              het verschil tussen wat je aan de kassa betaalde en de kale
-              marktprijs. In 2024 en 2025 lag die heffing een kwart tot een derde
-              hoger dan nu, en de besparing van een batterij schaalt daar bijna
-              één-op-één mee. Zet dit aan om de prijzen van toen te combineren
-              met de belasting van vandaag.
-            </p>
           </div>
         </section>
 
         <section>
-          <h3>De doorrekening</h3>
+          <h3>Hoe je ernaar kijkt</h3>
+          <p className="groep-uitleg">
+            Verandert de terugverdientijd en de contante waarde.{" "}
+            <strong>Niet de jaaropbrengst</strong>: wat de batterij fysiek doet
+            hangt af van prijzen en verbruik, niet van hoe je de investering
+            beoordeelt.
+          </p>
           <div className="instelling-grid">
             <Schuif
               label="Looptijd"
-              uitleg="Over hoeveel jaar je de investering beoordeelt."
+              uitleg="Over hoeveel jaar je de investering beoordeelt. De accu zelf gaat door tot zijn eigen levensduur op is."
               waarde={inst.analysejaren}
               min={5}
               max={25}
@@ -336,21 +404,18 @@ export function Geavanceerd({
               formatteer={(v) => procent(v, 1)}
               onChange={(v) => onChange({ discontovoet: v })}
             />
-            <Schuif
-              label="Slijtage per jaar"
-              uitleg="Hoeveel capaciteit de batterij per jaar verliest, ook zonder gebruik."
-              waarde={inst.degradatie}
-              min={0}
-              max={0.05}
-              stap={0.0025}
-              formatteer={(v) => procent(v, 2)}
-              onChange={(v) => onChange({ degradatie: v })}
-            />
           </div>
         </section>
 
-        <button type="button" className="reset" onClick={onReset}>
-          Terug naar de standaardwaarden
+        <button
+          type="button"
+          className="reset"
+          onClick={onReset}
+          disabled={afwijkingen === 0}
+        >
+          {afwijkingen === 0
+            ? "Alles staat op de standaardwaarden"
+            : `Terug naar de standaardwaarden (${afwijkingen} gewijzigd)`}
         </button>
       </div>
     </section>

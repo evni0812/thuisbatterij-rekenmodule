@@ -1213,6 +1213,18 @@ input[type="date"] {
   margin-bottom: 14px;
 }
 
+/*
+ * Eén regel onder elke groepskop: wat de instellingen erin beïnvloeden. De
+ * indeling gaat op effect en niet op onderwerp, en dan moet dat effect er ook
+ * staan — anders is het weer raden of de rente de jaaropbrengst verandert.
+ */
+.groep-uitleg {
+  margin: -8px 0 14px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  max-width: 62ch;
+}
+
 .instelling-grid {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
@@ -1267,6 +1279,11 @@ input[type="date"] {
   accent-color: var(--series-1);
   width: 17px;
   height: 17px;
+}
+
+.reset:disabled {
+  opacity: 0.55;
+  cursor: default;
 }
 
 .reset {
