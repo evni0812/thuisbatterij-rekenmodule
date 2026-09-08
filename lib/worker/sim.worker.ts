@@ -298,7 +298,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
             invoer.cycleLife,
             invoer.battery,
             laatsteCycli,
-            invoer.years,
+            invoer.calendarLifeYears,
           ),
         },
         dispatches: new Map(dispatches.map((d, i) => [i, d])),
@@ -306,6 +306,15 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       };
 
       post({ type: "result", id: msg.id, result, elapsedMs: performance.now() - t0 });
+      return;
+    }
+    if (msg.type === "scenario") {
+      // Een tweede volledige doorrekening met een andere tariefopbouw. Hij raakt
+      // `laatste` bewust niet aan: de dagkiezer hoort bij het hoofdresultaat, en
+      // die zou anders stilletjes op het scenario gaan wijzen.
+      if (!manifest) throw new Error("worker is nog niet geïnitialiseerd");
+      const invoer = await buildInput(msg.config);
+      post({ type: "scenario", id: msg.id, result: runAnalysis(invoer) });
     }
   } catch (err) {
     post({

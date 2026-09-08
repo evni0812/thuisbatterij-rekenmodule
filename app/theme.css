@@ -1281,6 +1281,46 @@ input[type="date"] {
   height: 17px;
 }
 
+/* ── Tariefblad van het nettariefscenario ─────────────────────────────────── */
+
+.tariefblad {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+  margin: 4px 0 8px;
+  overflow-x: auto;
+}
+
+.tariefblad-rij {
+  display: grid;
+  grid-template-columns: 56px repeat(24, minmax(14px, 1fr));
+  gap: 2px;
+  align-items: center;
+}
+
+.tariefblad-naam {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.tariefblad-cel {
+  height: 20px;
+  border-radius: 2px;
+}
+
+.tariefblad-as .tariefblad-cel {
+  height: auto;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  text-align: left;
+}
+
+.tariefblad-legenda {
+  margin: 0 0 14px;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
 .reset:disabled {
   opacity: 0.55;
   cursor: default;

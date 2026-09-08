@@ -34,6 +34,16 @@ export interface Configuration {
    * werkelijk golden.
    */
   useHistoricalLevy: boolean;
+  /**
+   * Reken met het tijdsafhankelijke nettarief dat vanaf 2029 gaat gelden.
+   *
+   * Optioneel en standaard afwezig: zo verandert de configuratiehash van een
+   * gewone doorrekening niet, en blijft het vooruitgerekende standaardantwoord
+   * bruikbaar. Alleen het scenario zet hem aan.
+   */
+  netTariff?: boolean;
+  /** Heft het nettarief ook op teruglevering. Onzeker in het voorstel. */
+  netTariffOnExport?: boolean;
 }
 
 /** Eén doorgerekende combinatie van capaciteit en vermogen. */
@@ -73,6 +83,15 @@ export type WorkerRequest =
       date: string;
       config: Configuration;
     }
+  | {
+      /**
+       * Reken hetzelfde nog eens door met een afwijkende configuratie, zonder de
+       * hoofddoorrekening te verstoren. Gebruikt voor het nettariefscenario.
+       */
+      type: "scenario";
+      id: number;
+      config: Configuration;
+    }
   | { type: "cancel" };
 
 export type WorkerResponse =
@@ -87,4 +106,5 @@ export type WorkerResponse =
       done: boolean;
     }
   | { type: "day"; id: number; day: SampleDay | null; date: string }
+  | { type: "scenario"; id: number; result: AnalysisResult }
   | { type: "error"; id: number | null; message: string };

@@ -58,8 +58,11 @@ export function Verantwoording({
           <ul>
             <li>
               De getoonde bedragen zijn de <strong>variabele stroomkosten</strong>.
-              Vastrecht, netbeheerkosten en de belastingvermindering zijn met en
-              zonder batterij gelijk en beïnvloeden de besparing niet.
+              Vastrecht, de belastingvermindering en het vaste deel van de
+              netbeheerkosten zijn met en zonder batterij gelijk en beïnvloeden de
+              besparing niet. Vanaf 2029 gaat een deel van die netkosten wél van
+              je gedrag afhangen; wat dat doet staat in de sectie over het
+              tijdsafhankelijke nettarief.
             </li>
             <li>
               Het profiel is een <strong>gemiddelde over veel huishoudens</strong> en

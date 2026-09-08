@@ -30,6 +30,8 @@ import {
   type NettingScale,
 } from "../model/residual";
 import { buildPriceSeries } from "../model/tariff";
+import { nettariefPerStap } from "../nettarief";
+import { LocalTimeIndex } from "./timeaxis";
 import type { Configuration } from "../worker/protocol";
 
 /** Welke kalenderjaren raakt het gekozen venster? */
@@ -259,7 +261,18 @@ export class Invoerbron {
             gridImportKwh: delen.gridImportKwh,
             gridExportKwh: delen.gridExportKwh,
           },
-          prices: buildPriceSeries(market, config.tariff, heffing),
+          prices: buildPriceSeries(
+          market,
+          config.tariff,
+          heffing,
+          config.netTariff && startMs.length > 0
+            ? nettariefPerStap(
+                startMs,
+                new LocalTimeIndex(startMs[0]!, startMs[startMs.length - 1]!),
+              )
+            : undefined,
+          config.netTariffOnExport ?? false,
+        ),
         },
       });
     }

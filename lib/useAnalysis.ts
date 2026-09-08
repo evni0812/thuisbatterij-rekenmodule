@@ -66,6 +66,11 @@ export interface AnalysisState {
   dagOntbreekt: string | null;
   /** Vraag het batterijgedrag van één kalenderdag op. */
   vraagDag: (datum: string) => void;
+  /** Uitkomst van het nettariefscenario, of null zolang het niet gedraaid is. */
+  scenario: AnalysisResult | null;
+  scenarioBezig: boolean;
+  /** Reken dezelfde periode nog eens door mét het tijdsafhankelijke nettarief. */
+  startScenario: (opTeruglevering: boolean) => void;
   wisDag: () => void;
 }
 
@@ -114,7 +119,10 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
   const pendingId = useRef<number | null>(null);
 
   const [state, setState] = useState<
-    Omit<AnalysisState, "startGrid" | "vraagDag" | "wisDag" | "herbereken">
+    Omit<
+      AnalysisState,
+      "startGrid" | "vraagDag" | "wisDag" | "herbereken" | "startScenario"
+    >
   >({
     manifest: null,
     result: null,
@@ -128,11 +136,14 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
     dag: null,
     dagBezig: false,
     dagOntbreekt: null,
+    scenario: null,
+    scenarioBezig: false,
   });
   /** De configuratie waar het getoonde resultaat bij hoort. */
   const getoondVoor = useRef<string | null>(null);
   const gridId = useRef(0);
   const dagId = useRef(0);
+  const scenarioId = useRef(0);
 
   useEffect(() => {
     const worker = new Worker(
@@ -178,6 +189,11 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
             grid: { ...s.grid, rows, klaar: msg.done, bezig: !msg.done },
           };
         });
+        return;
+      }
+      if (msg.type === "scenario") {
+        if (msg.id !== scenarioId.current) return;
+        setState((s) => ({ ...s, scenario: msg.result, scenarioBezig: false }));
         return;
       }
       if (msg.type === "day") {
@@ -359,5 +375,27 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
     // manier om op inhoud te vergelijken in plaats van op referentie.
   }, [JSON.stringify(config), state.manifest, state.result, send]);
 
-  return { ...state, startGrid, vraagDag, wisDag, herbereken };
+  const startScenario = useCallback(
+    (opTeruglevering: boolean) => {
+      const worker = workerRef.current;
+      const config = laatsteConfig.current;
+      if (!worker || !config) return;
+      const id = ++scenarioId.current;
+      setState((s) => ({ ...s, scenarioBezig: true }));
+      worker.postMessage({
+        type: "scenario",
+        id,
+        config: { ...config, netTariff: true, netTariffOnExport: opTeruglevering },
+      } satisfies WorkerRequest);
+    },
+    [],
+  );
+
+  // Een nieuw hoofdresultaat maakt het scenario ongeldig: het hoort bij de
+  // vorige configuratie en zou anders naast verse cijfers blijven staan.
+  useEffect(() => {
+    setState((s) => (s.scenario === null ? s : { ...s, scenario: null }));
+  }, [JSON.stringify(config)]);
+
+  return { ...state, startGrid, vraagDag, wisDag, herbereken, startScenario };
 }

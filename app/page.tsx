@@ -9,6 +9,7 @@ import { Dagprofiel } from "../components/Dagprofiel";
 import { Geavanceerd } from "../components/Geavanceerd";
 import { Invoer } from "../components/Invoer";
 import { MaandVerloop } from "../components/MaandVerloop";
+import { Nettarief } from "../components/Nettarief";
 import { Prijskloof } from "../components/Prijskloof";
 import { Statistieken } from "../components/Statistieken";
 import { Uitsplitsing } from "../components/Uitsplitsing";
@@ -63,6 +64,9 @@ export default function Page() {
     startGrid,
     dag,
     dagBezig,
+    scenario,
+    scenarioBezig,
+    startScenario,
     dagOntbreekt,
     vraagDag,
     wisDag,
@@ -188,6 +192,13 @@ export default function Page() {
           />
 
           <MaandVerloop maanden={result.perMonth} />
+
+          <Nettarief
+            huidig={result}
+            scenario={scenario}
+            bezig={scenarioBezig}
+            onStart={startScenario}
+          />
 
           <BesparingPerJaar jaren={result.perYear} />
 

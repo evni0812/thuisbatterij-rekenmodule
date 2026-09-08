@@ -16,7 +16,7 @@ gebruik, alles vanaf de CDN.
 ```bash
 npm install
 npm run dev          # http://localhost:3000
-npm test             # 152 tests, waaronder de modelinvarianten
+npm test             # 160 tests, waaronder de modelinvarianten
 npm run build        # statische export naar out/
 npm run clean        # bij een vastgelopen build-cache
 ```
@@ -281,11 +281,49 @@ De dagweergave toont daarom de **teruglevering** per kwartier, met dat voorbehou
 er expliciet bij. Voor bruto opwek per kwartier zou je de opbrengstmeting van de
 omvormer nodig hebben.
 
+### Het nettarief dat er vanaf 2029 aankomt
+
+Per 1 januari 2029 wordt een groot deel van de netkosten volume- en
+tijdsafhankelijk: het voorstel van de netbeheerders ligt sinds 4 mei 2026 bij de
+ACM, die naar verwachting voor eind 2026 beslist. Circa een derde blijft vast,
+de rest gaat afhangen van wanneer en hoeveel je gebruikt. Vier prijsniveaus,
+vijf tijdsblokken, twee seizoenen.
+
+**De bedragen zijn nog niet gepubliceerd**; het voorstel toont alleen relatieve
+niveaus. `lib/nettarief.ts` bevat daarom een prognose: CE Delft, geprognosticeerde
+nettarieven 2030, op basis van Netbeheer Nederland (2026b, 2026c). Vijf niveaus,
+per uur en per maand:
+
+| Uur | 0 | 1–6 | 7–9 | 10–15 | 16–17 | 18–22 | 23 |
+|---|---|---|---|---|---|---|---|
+| **okt–mrt** | 0,13 | 0,10 | 0,13 | 0,10 | 0,19 | 0,19 | 0,13 |
+| **apr–sep** | 0,10 | 0,10 / 0,06 | 0,06 | 0,00 | 0,06 | 0,13 | 0,10 |
+
+Dat verandert de businesscase ingrijpend, want de piek valt op de uren waarop een
+batterij levert en het nultarief op de uren waarop hij laadt. Gemeten op Liander
+2024–2025, 2.500/2.000 kWh:
+
+| | Zendure 1,92 kWh | Thuisaccu 10 kWh |
+|---|---|---|
+| Nu | € 94,71, terugverdiend in 8,5 jaar | € 269,72, verdient zich niet terug |
+| Met nettarief | € 157,52, in 5,2 jaar | € 404,12, in 13,3 jaar |
+| Waarvan winter | € 22 → € 51 | € 65 → € 134 |
+
+De winst zit vooral in de winter, precies het seizoen waarin de accu nu bijna
+stilstaat. Of teruglevering ook wordt beprijsd staat niet in het voorstel; dat is
+een schakelaar die standaard uit staat.
+
+Het variabele deel telt in dit scenario dus wél mee in de besparing, anders dan
+de vaste netbeheerkosten hieronder. Dat is geen inconsistentie maar het hele
+punt: zodra netkosten van je gedrag afhangen, zijn ze niet meer gelijk met en
+zonder batterij.
+
 ### Wat er niet in zit
 
-- Vastrecht, netbeheerkosten en de belastingvermindering. Die zijn met en zonder
-  batterij gelijk en beïnvloeden de besparing niet; de getoonde bedragen zijn de
-  variabele stroomkosten.
+- Vastrecht, de belastingvermindering en het vaste deel van de netbeheerkosten.
+  Die zijn met en zonder batterij gelijk en beïnvloeden de besparing niet; de
+  getoonde bedragen zijn de variabele stroomkosten. Het tijdsafhankelijke deel
+  van het nettarief is daar vanaf 2029 de uitzondering op — zie hierboven.
 - Terugleverkosten-staffels per leverancier — wel als één instelbare €/kWh.
 - Het profiel is een gemiddelde over veel huishoudens en daardoor gladder dan één
   aansluiting. Dat onderschat de waarde van een batterij eerder dan dat het hem

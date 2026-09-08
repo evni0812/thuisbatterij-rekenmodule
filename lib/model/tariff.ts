@@ -29,6 +29,14 @@ export function buildPriceSeries(
   marketPrice: Float64Array,
   tariff: TariffSpec,
   levyPerStep?: Float64Array,
+  /**
+   * Tijdsafhankelijk nettarief per kwartier, EUR/kWh. Optioneel: alleen het
+   * scenario voor 2029 vult dit. Komt bovenop de afnameprijs, en wordt van de
+   * terugleververgoeding afgetrokken als het ook op invoeding wordt geheven —
+   * of dat gebeurt is in het voorstel nog niet vastgelegd.
+   */
+  netTariffPerStep?: Float64Array,
+  netTariffOnExport = false,
 ): PriceSeries {
   const n = marketPrice.length;
   if (levyPerStep && levyPerStep.length !== n) {
@@ -44,8 +52,10 @@ export function buildPriceSeries(
     const heffing = levyPerStep
       ? levyPerStep[i]! + tariff.purchaseSurchargeEurPerKwh
       : surcharge;
-    importPrice[i] = marketPrice[i]! + heffing;
-    exportPrice[i] = marketPrice[i]! - tariff.feedInCostEurPerKwh;
+    const net = netTariffPerStep ? netTariffPerStep[i]! : 0;
+    importPrice[i] = marketPrice[i]! + heffing + net;
+    exportPrice[i] =
+      marketPrice[i]! - tariff.feedInCostEurPerKwh - (netTariffOnExport ? net : 0);
   }
   return { importPrice, exportPrice };
 }
