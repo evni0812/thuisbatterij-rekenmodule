@@ -16,7 +16,7 @@ gebruik, alles vanaf de CDN.
 ```bash
 npm install
 npm run dev          # http://localhost:3000
-npm test             # 164 tests, waaronder de modelinvarianten
+npm test             # 167 tests, waaronder de modelinvarianten
 npm run build        # statische export naar out/
 npm run clean        # bij een vastgelopen build-cache
 ```
@@ -151,6 +151,27 @@ niet kent, maar dat ze de zon van morgen niet kent. De voorspelling hier is het
 gemiddelde van hetzelfde kwartier over de voorgaande week; een echte batterij
 gebruikt een weersverwachting en doet het dus beter. Deze tool rekent daarmee
 aan de voorzichtige kant.
+
+**Waarom meer vermogen soms minder oplevert.** In het raster van batterijmaten
+zakt de besparing op de kleinste maten iets als het vermogen omhooggaat: bij
+1 kWh van € 47,43 bij 0,8 kW naar € 46,49 bij 5 kW, twee procent. Dat is geen
+rekenfout en ook geen slijtagedrempel — die is over de hele rij gelijk (1,68
+ct/kWh). Het is de voorspelfout, uitvergroot door vermogen. Dezelfde rij met een
+perfecte verbruiksvoorspelling loopt netjes op:
+
+| 1 kWh | 0,5 kW | 0,8 kW | 1,5 kW | 2,5 kW | 3,6 kW | 5 kW |
+|---|---|---|---|---|---|---|
+| Realistisch | 47,24 | 47,43 | 46,66 | 46,65 | 46,54 | 46,49 |
+| Perfecte voorspelling | 51,80 | 52,46 | 52,51 | 52,49 | 52,47 | 52,46 |
+
+Een accu van 0,8 kW kan er per kwartier hooguit 0,2 kWh naast zitten, een van
+5 kW 1,25 kWh. Meer vermogen betekent dus ook harder de verkeerde kant op
+handelen als de verwachting niet uitkomt, en bij een kleine accu weegt dat
+zwaarder dan wat het extra vermogen oplevert — die is toch al capaciteitsgebonden.
+Een echte batterij met een weersverwachting, of een regelaar die voorzichtiger
+wordt naarmate hij onzekerder is, zou deze dip niet hebben. Onze regelaar hedget
+niet en voert zijn plan op vol vermogen uit; de tool rekent daarmee aan de
+voorzichtige kant.
 
 **Standby is geen detail.** Bij de Zendure van 1,92 kWh kost 12 W continu
 € 22,47 per jaar, tegenover een besparing van € 101. Dat is ook de verklaring

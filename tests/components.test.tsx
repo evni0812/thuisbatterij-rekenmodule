@@ -316,7 +316,7 @@ describe("de pagina toont het antwoord", () => {
     // Standaard is dat de opbrengst per kWh capaciteit, want daarop is de
     // afnemende meeropbrengst zichtbaar: 40/2 = 20, 95/5 = 19.
     const tabel = screen.getByRole("table");
-    for (const perKwh of ["20", "22,5", "14", "19"]) {
+    for (const perKwh of ["20,0", "22,5", "14,0", "19,0"]) {
       expect(within(tabel).getByText(perKwh)).toBeDefined();
     }
 
@@ -328,7 +328,7 @@ describe("de pagina toont het antwoord", () => {
 
     // En per kW deelt door het vermogen: 40/0,8 = 50, 95/2,5 = 38.
     fireEvent.click(screen.getByRole("button", { name: "Per kW" }));
-    for (const perKw of ["50", "18", "87,5", "38"]) {
+    for (const perKw of ["50,0", "18,0", "87,5", "38,0"]) {
       expect(within(tabel).getByText(perKw)).toBeDefined();
     }
   });
@@ -764,5 +764,65 @@ describe("de pagina vertelt het verhaal in vier delen, in die volgorde", () => {
     cleanup();
     render(<Antwoord result={result} scenario={null} investeringEur={819} bezig={false} />);
     expect(document.body.textContent).toMatch(/wordt doorgerekend/);
+  });
+});
+
+describe("het batterijraster is leesbaar", () => {
+  const grid = {
+    capacities: [1, 2],
+    powers: [0.8, 2.5],
+    klaar: true,
+    bezig: false,
+    rows: [
+      [
+        { capacityKwh: 1, powerKw: 0.8, savingEur: 47.4, cyclesPerYear: 406 },
+        { capacityKwh: 1, powerKw: 2.5, savingEur: 46.6, cyclesPerYear: 407 },
+      ],
+      [
+        { capacityKwh: 2, powerKw: 0.8, savingEur: 104.4, cyclesPerYear: 359 },
+        { capacityKwh: 2, powerKw: 2.5, savingEur: 103.3, cyclesPerYear: 366 },
+      ],
+    ],
+  };
+
+  function toon() {
+    return render(
+      <BatterijMaat
+        grid={grid}
+        huidigeCapaciteit={1}
+        huidigVermogen={0.8}
+        onKies={() => {}}
+      />,
+    );
+  }
+
+  it("markeert de cel met de hoogste waarde, en maar één", () => {
+    const { container } = toon();
+    const beste = container.querySelectorAll(".heat-cel.beste");
+    expect(beste.length).toBe(1);
+    // Per kWh is dat 2 kWh bij 0,8 kW: 104,4/2 = 52,2 tegen 47,4 bij 1 kWh.
+    expect(beste[0]!.textContent).toBe("52,2");
+    expect(beste[0]!.getAttribute("aria-label")).toMatch(/de hoogste in dit raster/);
+  });
+
+  it("geeft elk vakje dezelfde vorm, zodat de kolommen uitlijnen", () => {
+    const { container } = toon();
+    const cellen = [...container.querySelectorAll("table .heat-cel")].map(
+      (el) => el.textContent ?? "",
+    );
+    // Altijd één decimaal, ook bij een rond getal: 47,4 en niet 47,4 naast 52.
+    for (const c of cellen) expect(c, `"${c}"`).toMatch(/^\d+,\d$/);
+  });
+
+  it("legt uit waarom meer vermogen soms minder oplevert", () => {
+    /**
+     * Op rij 1 kWh zakt de besparing van 47,4 naar 46,6 als het vermogen
+     * omhooggaat. Dat ziet eruit als een rekenfout en is het niet: de strategie
+     * plant op een verwachting, en met meer vermogen kan ze ook harder de
+     * verkeerde kant op. Dat hoort erbij te staan waar je het ziet.
+     */
+    toon();
+    expect(document.body.textContent).toMatch(/méér vermogen iets mínder/);
+    expect(document.body.textContent).toMatch(/geen rekenfout/);
   });
 });

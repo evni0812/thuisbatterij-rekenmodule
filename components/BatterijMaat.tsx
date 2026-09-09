@@ -44,13 +44,25 @@ interface Modus {
   noot: string;
 }
 
+/**
+ * Eén vaste decimaal, ook bij een rond getal.
+ *
+ * `getal(n, 1)` laat een nul weg, en dan staat "51" naast "51,8" en zakken de
+ * kolommen uit elkaar. In een raster van tweeënveertig getallen die je met
+ * elkaar vergelijkt, telt die uitlijning.
+ */
+const eenDecimaal = new Intl.NumberFormat("nl-NL", {
+  minimumFractionDigits: 1,
+  maximumFractionDigits: 1,
+});
+
 const MODI: Record<Weergave, Modus> = {
   perKwh: {
     knop: "Per kWh",
     // Delen door de capaciteit maakt de afnemende meeropbrengst direct
     // zichtbaar: hetzelfde bedrag, maar afgezet tegen wat je ervoor koopt.
     waarde: (p) => (p.capacityKwh > 0 ? p.savingEur / p.capacityKwh : 0),
-    cel: (n) => getal(n, 1),
+    cel: (n) => eenDecimaal.format(n),
     bedrag: (n) => `${euroPrecies(n)} per kWh`,
     eenheid: "per kilowattuur capaciteit",
     noot:
@@ -60,7 +72,7 @@ const MODI: Record<Weergave, Modus> = {
   perKw: {
     knop: "Per kW",
     waarde: (p) => (p.powerKw > 0 ? p.savingEur / p.powerKw : 0),
-    cel: (n) => getal(n, 1),
+    cel: (n) => eenDecimaal.format(n),
     bedrag: (n) => `${euroPrecies(n)} per kW`,
     eenheid: "per kilowatt vermogen",
     noot:
@@ -162,6 +174,19 @@ export function BatterijMaat({
       : "Wat elke kilowatt vermogen oplevert";
   })();
 
+  /**
+   * Levert meer vermogen ergens in het raster minder op? Dat gebeurt, en het
+   * ziet eruit als een rekenfout. Dat is het niet, maar het verdient uitleg
+   * waar de lezer het ziet.
+   */
+  const vermogenDipt = grid.rows.some((rij) => {
+    if (!rij) return false;
+    const top = Math.max(...rij.map(modus.waarde));
+    // Een halve procent. Daaronder is het discretisatieruis van het SoC-rooster;
+    // de echte dip door voorspelfouten is op de kleinste maten zo'n twee procent.
+    return modus.waarde(rij[rij.length - 1]!) < top * 0.995;
+  });
+
   const besteZin = ((): ReactNode => {
     if (!beste) return null;
     const plek = (
@@ -232,7 +257,7 @@ export function BatterijMaat({
           <thead>
             <tr>
               <th scope="col" className="heat-hoek">
-
+                kWh \ kW
               </th>
               {grid.powers.map((kw) => (
                 <th key={kw} scope="col">
@@ -259,6 +284,7 @@ export function BatterijMaat({
                             "heat-cel",
                             `stap-${stap(modus.waarde(punt))}`,
                             isHuidig ? "huidig" : "",
+                            punt === beste ? "beste" : "",
                           ]
                             .filter(Boolean)
                             .join(" ")}
@@ -269,7 +295,7 @@ export function BatterijMaat({
                           onClick={() => onKies(cap, kw)}
                           aria-label={`${cap} kWh bij ${kw} kW: ${modus.bedrag(
                             modus.waarde(punt),
-                          )}`}
+                          )}${punt === beste ? ", de hoogste in dit raster" : ""}`}
                         >
                           {/* Het getal staat er altijd bij: kleur draagt nooit
                               alleen de betekenis. */}
@@ -304,6 +330,16 @@ export function BatterijMaat({
         ) : (
           <p>Wijs een vakje aan voor de details.</p>
         )}
+        {vermogenDipt ? (
+          <p className="heat-noot">
+            Op sommige rijen levert méér vermogen iets mínder op. Dat is geen
+            rekenfout: de batterij plant op een verwachting van morgen, en met
+            meer vermogen kan hij ook harder de verkeerde kant op handelen. Met
+            een perfecte verbruiksvoorspelling verdwijnt het effect en loopt elke
+            rij netjes op. Een echte batterij gebruikt een weersverwachting en
+            zit daar tussenin; deze tool rekent aan de voorzichtige kant.
+          </p>
+        ) : null}
         <p className="heat-noot">{modus.noot}</p>
       </div>
     </Figure>
