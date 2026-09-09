@@ -1,12 +1,24 @@
 "use client";
 
 /**
- * React-hook om de rekenworker aan te sturen.
+ * React-hook om de rekenworkers aan te sturen.
  *
- * De worker wordt één keer opgestart en hergebruikt; elke aanvraag krijgt een
- * volgnummer zodat een laat antwoord op een inmiddels achterhaalde configuratie
- * genegeerd kan worden. Zonder die controle zou snel schuiven met een regelaar
- * de resultaten door elkaar kunnen gooien.
+ * Twee workers, uit hetzelfde bestand:
+ *
+ *   hoofdworker        de analyse en de dagkiezer
+ *   achtergrondworker  het nettariefscenario en het raster van batterijmaten
+ *
+ * ── Waarom twee ─────────────────────────────────────────────────────────────
+ * Scenario en raster draaien nu automatisch, zonder knop. Samen kosten ze een
+ * seconde of vijfentwintig. In één worker zou de dagkiezer al die tijd dood
+ * zijn: de worker is bezet. Met een tweede worker blijft de hoofdworker vrij en
+ * reageert de dagkiezer direct, terwijl de achtergrond doorrekent. Beide laden
+ * dezelfde assets; dat is twee keer zestien megabyte in het geheugen, en dat
+ * mag.
+ *
+ * Elke aanvraag krijgt een volgnummer zodat een laat antwoord op een inmiddels
+ * achterhaalde configuratie genegeerd kan worden. Zonder die controle zou snel
+ * schuiven met een regelaar de resultaten door elkaar kunnen gooien.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -14,6 +26,7 @@ import { configSleutel, leesCache, schrijfCache } from "./cache";
 import type { AnalysisResult } from "./model/analysis";
 import type { Manifest } from "./data/manifest";
 import type { SampleDay } from "./model/analysis";
+import { RASTER_CAPACITEITEN, RASTER_VERMOGENS } from "./model/raster";
 import type {
   Configuration,
   GridPoint,
@@ -52,9 +65,8 @@ export interface AnalysisState {
   verouderd: boolean;
   /** Reken opnieuw door, ook als er een bewaard resultaat is. */
   herbereken: () => void;
+  /** Het raster van maten; null zolang het nog loopt of nog niet is gestart. */
   grid: GridState | null;
-  /** Start de rasterberekening; kost enkele seconden. */
-  startGrid: (capacities: number[], powers: number[]) => void;
   /** Een opgevraagde losse dag, of null zolang er geen is opgehaald. */
   dag: SampleDay | null;
   /**
@@ -66,12 +78,13 @@ export interface AnalysisState {
   dagOntbreekt: string | null;
   /** Vraag het batterijgedrag van één kalenderdag op. */
   vraagDag: (datum: string) => void;
-  /** Uitkomst van het nettariefscenario, of null zolang het niet gedraaid is. */
-  scenario: AnalysisResult | null;
-  scenarioBezig: boolean;
-  /** Reken dezelfde periode nog eens door mét het tijdsafhankelijke nettarief. */
-  startScenario: (opTeruglevering: boolean) => void;
   wisDag: () => void;
+  /** Uitkomst van het nettariefscenario, of null zolang het nog loopt. */
+  scenario: AnalysisResult | null;
+  /** Of het scenario ook op teruglevering heft. */
+  scenarioOpTeruglevering: boolean;
+  /** Reken het scenario opnieuw met of zonder heffing op teruglevering. */
+  zetScenarioOpTeruglevering: (opTeruglevering: boolean) => void;
 }
 
 /**
@@ -87,8 +100,9 @@ const DEBOUNCE_MS = 180;
  *
  * Wie de tool opent zonder iets in te stellen, zag eerst vier seconden een leeg
  * scherm terwijl de worker vier profieljaren doorrekende. Dat antwoord is voor
- * iedereen hetzelfde, dus het staat nu als bestand klaar: 12 kB over de lijn in
- * plaats van vier seconden rekenen.
+ * iedereen hetzelfde, dus het staat nu als bestand klaar — inclusief het
+ * scenario en het raster, die anders nog eens vijfentwintig seconden zouden
+ * kosten.
  *
  * De sleutel bepaalt of het bruikbaar is. Hij bevat zowel het modelversienummer
  * als een hash van de configuratie, dus een bezoeker met een afwijkende invoer
@@ -99,6 +113,8 @@ interface Vooruitgerekend {
   sleutel: string;
   gemaakt: string;
   result: AnalysisResult;
+  scenario?: AnalysisResult;
+  grid?: GridPoint[][];
 }
 
 let voorbeeldBelofte: Promise<Vooruitgerekend | null> | null = null;
@@ -113,17 +129,34 @@ function haalVoorbeeld(): Promise<Vooruitgerekend | null> {
   return voorbeeldBelofte;
 }
 
+function maakWorker(): Worker {
+  return new Worker(new URL("./worker/sim.worker.ts", import.meta.url), {
+    type: "module",
+  });
+}
+
+function volRaster(rows: GridPoint[][]): GridState {
+  return {
+    rows,
+    capacities: RASTER_CAPACITEITEN,
+    powers: RASTER_VERMOGENS,
+    klaar: true,
+    bezig: false,
+  };
+}
+
+type InterneState = Omit<
+  AnalysisState,
+  "vraagDag" | "wisDag" | "herbereken" | "zetScenarioOpTeruglevering"
+>;
+
 export function useAnalysis(config: Configuration | null): AnalysisState {
-  const workerRef = useRef<Worker | null>(null);
+  const hoofdRef = useRef<Worker | null>(null);
+  const achtergrondRef = useRef<Worker | null>(null);
   const nextId = useRef(0);
   const pendingId = useRef<number | null>(null);
 
-  const [state, setState] = useState<
-    Omit<
-      AnalysisState,
-      "startGrid" | "vraagDag" | "wisDag" | "herbereken" | "startScenario"
-    >
-  >({
+  const [state, setState] = useState<InterneState>({
     manifest: null,
     result: null,
     busy: false,
@@ -137,22 +170,73 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
     dagBezig: false,
     dagOntbreekt: null,
     scenario: null,
-    scenarioBezig: false,
+    scenarioOpTeruglevering: false,
   });
   /** De configuratie waar het getoonde resultaat bij hoort. */
   const getoondVoor = useRef<string | null>(null);
+  /** De configuratie van de lopende of laatst verstuurde aanvraag. */
+  const laatsteConfig = useRef<Configuration | null>(null);
   const gridId = useRef(0);
   const dagId = useRef(0);
   const scenarioId = useRef(0);
+  const opTerugleveringRef = useRef(false);
+
+  /**
+   * Start scenario en raster in de achtergrondworker voor een configuratie,
+   * behalve wat er al is. Het scenario gaat eerst: het staat in de kop en kost
+   * vier seconden, het raster twintig.
+   */
+  const startAchtergrond = useCallback(
+    (cfg: Configuration, al: { scenario?: AnalysisResult; grid?: GridPoint[][] }) => {
+      const worker = achtergrondRef.current;
+      if (!worker) return;
+      if (al.scenario) {
+        setState((s) => ({ ...s, scenario: al.scenario! }));
+      } else {
+        const id = ++scenarioId.current;
+        worker.postMessage({
+          type: "scenario",
+          id,
+          config: {
+            ...cfg,
+            netTariff: true,
+            netTariffOnExport: opTerugleveringRef.current,
+          },
+        } satisfies WorkerRequest);
+      }
+      if (al.grid) {
+        setState((s) => ({ ...s, grid: volRaster(al.grid!) }));
+      } else {
+        const id = ++gridId.current;
+        setState((s) => ({
+          ...s,
+          grid: {
+            rows: RASTER_CAPACITEITEN.map(() => null),
+            capacities: RASTER_CAPACITEITEN,
+            powers: RASTER_VERMOGENS,
+            klaar: false,
+            bezig: true,
+          },
+        }));
+        worker.postMessage({
+          type: "grid",
+          id,
+          config: cfg,
+          capacities: RASTER_CAPACITEITEN,
+          powers: RASTER_VERMOGENS,
+        } satisfies WorkerRequest);
+      }
+    },
+    [],
+  );
 
   useEffect(() => {
-    const worker = new Worker(
-      new URL("./worker/sim.worker.ts", import.meta.url),
-      { type: "module" },
-    );
-    workerRef.current = worker;
+    const hoofd = maakWorker();
+    const achtergrond = maakWorker();
+    hoofdRef.current = hoofd;
+    achtergrondRef.current = achtergrond;
 
-    worker.onmessage = (event: MessageEvent<WorkerResponse>) => {
+    hoofd.onmessage = (event: MessageEvent<WorkerResponse>) => {
       const msg = event.data;
       if (msg.type === "ready") {
         setState((s) => ({ ...s, manifest: msg.manifest as Manifest }));
@@ -162,38 +246,22 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
         // Een antwoord op een achterhaalde aanvraag negeren we: anders zou een
         // trage berekening een nieuwere overschrijven.
         if (msg.id !== pendingId.current) return;
+        const cfg = laatsteConfig.current;
         setState((s) => ({
           ...s,
           result: msg.result,
           busy: false,
           error: null,
           elapsedMs: msg.elapsedMs,
-          getoondeConfig: laatsteConfig.current,
+          getoondeConfig: cfg,
           uitCache: false,
           verouderd: false,
         }));
-        if (laatsteConfig.current) {
-          schrijfCache(laatsteConfig.current, msg.result);
-          getoondVoor.current = JSON.stringify(laatsteConfig.current);
+        if (cfg) {
+          schrijfCache(cfg, { result: msg.result });
+          getoondVoor.current = JSON.stringify(cfg);
+          startAchtergrond(cfg, {});
         }
-        return;
-      }
-      if (msg.type === "grid-row") {
-        if (msg.id !== gridId.current) return;
-        setState((s) => {
-          if (!s.grid) return s;
-          const rows = [...s.grid.rows];
-          rows[msg.row] = msg.points;
-          return {
-            ...s,
-            grid: { ...s.grid, rows, klaar: msg.done, bezig: !msg.done },
-          };
-        });
-        return;
-      }
-      if (msg.type === "scenario") {
-        if (msg.id !== scenarioId.current) return;
-        setState((s) => ({ ...s, scenario: msg.result, scenarioBezig: false }));
         return;
       }
       if (msg.type === "day") {
@@ -212,33 +280,77 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
       }
     };
 
-    worker.onerror = (event) => {
+    achtergrond.onmessage = (event: MessageEvent<WorkerResponse>) => {
+      const msg = event.data;
+      if (msg.type === "scenario") {
+        if (msg.id !== scenarioId.current) return;
+        setState((s) => ({ ...s, scenario: msg.result }));
+        const cfg = laatsteConfig.current;
+        if (cfg) {
+          schrijfCache(cfg, {
+            result: state.result ?? msg.result,
+            scenario: msg.result,
+            scenarioOpTeruglevering: opTerugleveringRef.current,
+          });
+        }
+        return;
+      }
+      if (msg.type === "grid-row") {
+        if (msg.id !== gridId.current) return;
+        setState((s) => {
+          if (!s.grid) return s;
+          const rows = [...s.grid.rows];
+          rows[msg.row] = msg.points;
+          const grid = { ...s.grid, rows, klaar: msg.done, bezig: !msg.done };
+          if (msg.done && laatsteConfig.current && rows.every((r) => r !== null)) {
+            schrijfCache(laatsteConfig.current, {
+              result: s.result!,
+              grid: rows as GridPoint[][],
+            });
+          }
+          return { ...s, grid };
+        });
+        return;
+      }
+      if (msg.type === "error") {
+        // Een fout in de achtergrond mag het hoofdantwoord niet raken; het
+        // scenario en het raster blijven dan leeg en de pagina zegt dat.
+        setState((s) => ({ ...s, grid: s.grid ? { ...s.grid, bezig: false } : null }));
+      }
+    };
+
+    const stuk = (event: ErrorEvent) => {
       setState((s) => ({
         ...s,
         busy: false,
         error: event.message || "de rekenmodule kon niet starten",
       }));
     };
+    hoofd.onerror = stuk;
+    achtergrond.onerror = stuk;
 
     const init: WorkerRequest = { type: "init", baseUrl: "/data" };
-    worker.postMessage(init);
+    hoofd.postMessage(init);
+    achtergrond.postMessage(init);
 
-    // Meteen naast de worker starten. Het bestand is klein en de kans is groot
+    // Meteen naast de workers starten. Het bestand is klein en de kans is groot
     // dat we het nodig hebben; zo staat het klaar tegen de tijd dat de
     // configuratie bekend is, in plaats van er dan pas op te wachten.
     void haalVoorbeeld();
 
     return () => {
-      worker.terminate();
-      workerRef.current = null;
+      hoofd.terminate();
+      achtergrond.terminate();
+      hoofdRef.current = null;
+      achtergrondRef.current = null;
     };
-  }, []);
-
-  /** De configuratie van de lopende of laatst verstuurde aanvraag. */
-  const laatsteConfig = useRef<Configuration | null>(null);
+    // state.result in de scenario-handler is een momentopname; de cache wordt
+    // daar alleen aangevuld, nooit als enige bron gelezen.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [startAchtergrond]);
 
   const send = useCallback((cfg: Configuration) => {
-    const worker = workerRef.current;
+    const worker = hoofdRef.current;
     if (!worker) return;
     const id = ++nextId.current;
     pendingId.current = id;
@@ -252,30 +364,9 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
     if (config) send(config);
   }, [config, send]);
 
-  const startGrid = useCallback(
-    (capacities: number[], powers: number[]) => {
-      const worker = workerRef.current;
-      if (!worker || !config) return;
-      const id = ++gridId.current;
-      setState((s) => ({
-        ...s,
-        grid: {
-          rows: capacities.map(() => null),
-          capacities,
-          powers,
-          klaar: false,
-          bezig: true,
-        },
-      }));
-      const msg: WorkerRequest = { type: "grid", id, config, capacities, powers };
-      worker.postMessage(msg);
-    },
-    [config],
-  );
-
   const vraagDag = useCallback(
     (datum: string) => {
-      const worker = workerRef.current;
+      const worker = hoofdRef.current;
       if (!worker || !config) return;
       const id = ++dagId.current;
       // De configuratie gaat mee: de worker kan de analyse niet zelf hebben
@@ -296,19 +387,35 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
     setState((s) => ({ ...s, dag: null, dagBezig: false, dagOntbreekt: null }));
   }, []);
 
-  // Een wijziging in de invoer maakt een eerder raster en een opgehaalde dag
-  // achterhaald: die hoorden bij de vorige doorrekening.
+  const zetScenarioOpTeruglevering = useCallback((opTeruglevering: boolean) => {
+    opTerugleveringRef.current = opTeruglevering;
+    const worker = achtergrondRef.current;
+    const cfg = laatsteConfig.current;
+    setState((s) => ({ ...s, scenarioOpTeruglevering: opTeruglevering, scenario: null }));
+    if (!worker || !cfg) return;
+    const id = ++scenarioId.current;
+    worker.postMessage({
+      type: "scenario",
+      id,
+      config: { ...cfg, netTariff: true, netTariffOnExport: opTeruglevering },
+    } satisfies WorkerRequest);
+  }, []);
+
+  // Een wijziging in de invoer maakt raster, scenario en een opgehaalde dag
+  // achterhaald: die hoorden bij de vorige doorrekening. Lopend achtergrondwerk
+  // wordt afgebroken; de volgnummers gaan omhoog zodat een laat antwoord niet
+  // alsnog binnenvalt.
   useEffect(() => {
-    // Ook het volgnummer omhoog: een dag die nog onderweg is hoort bij de
-    // vorige configuratie en mag niet alsnog binnenvallen.
     dagId.current++;
+    gridId.current++;
+    scenarioId.current++;
     setState((s) =>
-      s.grid || s.dag || s.dagBezig
-        ? { ...s, grid: null, dag: null, dagBezig: false, dagOntbreekt: null }
+      s.grid || s.dag || s.dagBezig || s.scenario
+        ? { ...s, grid: null, dag: null, dagBezig: false, dagOntbreekt: null, scenario: null }
         : s,
     );
-    const worker = workerRef.current;
-    if (worker) worker.postMessage({ type: "cancel" } satisfies WorkerRequest);
+    const achtergrond = achtergrondRef.current;
+    if (achtergrond) achtergrond.postMessage({ type: "cancel" } satisfies WorkerRequest);
   }, [JSON.stringify(config)]);
 
   useEffect(() => {
@@ -326,13 +433,21 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
       laatsteConfig.current = config;
       setState((s) => ({
         ...s,
-        result: bewaard,
+        result: bewaard.result,
         busy: false,
         error: null,
         getoondeConfig: config,
         uitCache: true,
         verouderd: false,
       }));
+      // Wat er bewaard is, tonen we; wat ontbreekt, rekent de achtergrond bij.
+      const scenarioPast =
+        bewaard.scenario !== undefined &&
+        (bewaard.scenarioOpTeruglevering ?? false) === opTerugleveringRef.current;
+      startAchtergrond(config, {
+        scenario: scenarioPast ? bewaard.scenario : undefined,
+        grid: bewaard.grid,
+      });
       return;
     }
 
@@ -342,15 +457,19 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
       let levend = true;
       const timer = setTimeout(async () => {
         // Eerst het antwoord dat bij de build is uitgerekend. Past het bij deze
-        // configuratie, dan is er niets te rekenen en staat het er meteen.
+        // configuratie, dan is er niets te rekenen en staat het er meteen —
+        // inclusief scenario en raster, als de build die heeft meegeleverd.
         const vooruit = await haalVoorbeeld();
         if (!levend) return;
         if (vooruit && vooruit.sleutel === configSleutel(config)) {
           getoondVoor.current = sleutel;
           laatsteConfig.current = config;
-          // Ook bewaren, zodat een volgend bezoek het bestand niet meer hoeft
-          // op te halen en een gewijzigde invoer er weer op terug kan vallen.
-          schrijfCache(config, vooruit.result);
+          schrijfCache(config, {
+            result: vooruit.result,
+            scenario: vooruit.scenario,
+            scenarioOpTeruglevering: false,
+            grid: vooruit.grid,
+          });
           setState((s) => ({
             ...s,
             result: vooruit.result,
@@ -360,6 +479,10 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
             uitCache: true,
             verouderd: false,
           }));
+          startAchtergrond(config, {
+            scenario: opTerugleveringRef.current ? undefined : vooruit.scenario,
+            grid: vooruit.grid,
+          });
           return;
         }
         send(config);
@@ -373,29 +496,7 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
     return;
     // De configuratie is een gewoon object; serialiseren is de eenvoudigste
     // manier om op inhoud te vergelijken in plaats van op referentie.
-  }, [JSON.stringify(config), state.manifest, state.result, send]);
+  }, [JSON.stringify(config), state.manifest, state.result, send, startAchtergrond]);
 
-  const startScenario = useCallback(
-    (opTeruglevering: boolean) => {
-      const worker = workerRef.current;
-      const config = laatsteConfig.current;
-      if (!worker || !config) return;
-      const id = ++scenarioId.current;
-      setState((s) => ({ ...s, scenarioBezig: true }));
-      worker.postMessage({
-        type: "scenario",
-        id,
-        config: { ...config, netTariff: true, netTariffOnExport: opTeruglevering },
-      } satisfies WorkerRequest);
-    },
-    [],
-  );
-
-  // Een nieuw hoofdresultaat maakt het scenario ongeldig: het hoort bij de
-  // vorige configuratie en zou anders naast verse cijfers blijven staan.
-  useEffect(() => {
-    setState((s) => (s.scenario === null ? s : { ...s, scenario: null }));
-  }, [JSON.stringify(config)]);
-
-  return { ...state, startGrid, vraagDag, wisDag, herbereken, startScenario };
+  return { ...state, vraagDag, wisDag, herbereken, zetScenarioOpTeruglevering };
 }

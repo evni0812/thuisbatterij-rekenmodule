@@ -113,7 +113,7 @@ beforeAll(async () => {
 
 describe("de pagina toont het antwoord", () => {
   it("noemt een bedrag per jaar en een terugverdientijd", () => {
-    render(<Antwoord result={result} investeringEur={1199} bezig={false} />);
+    render(<Antwoord result={result} scenario={null} investeringEur={1199} bezig={false} />);
     expect(screen.getByText(/per jaar/)).toBeDefined();
     // Er moet een concreet eurobedrag staan, geen placeholder.
     expect(document.body.textContent).toMatch(/€/);
@@ -269,17 +269,22 @@ describe("de pagina toont het antwoord", () => {
     expect(tekst).toMatch(/variabele stroomkosten/);
   });
 
-  it("laat het batterijraster starten voordat het rekent", () => {
+  it("meldt dat het raster wordt doorgerekend, zonder knop", () => {
+    /**
+     * Het raster stond achter een startknop, en daardoor zag vrijwel niemand de
+     * kaart die laat zien of een andere maat beter was geweest. Hij draait nu
+     * automatisch in een tweede worker; hier staat alleen wat er komt.
+     */
     render(
       <BatterijMaat
         grid={null}
         huidigeCapaciteit={2.1}
         huidigVermogen={0.8}
-        onStart={() => {}}
         onKies={() => {}}
       />,
     );
-    expect(screen.getByRole("button", { name: /Reken de maten door/ })).toBeDefined();
+    expect(document.body.textContent).toMatch(/wordt doorgerekend/);
+    expect(screen.queryByRole("button")).toBeNull();
   });
 
   it("toont elk vakje van het raster met zijn bedrag als getal", () => {
@@ -304,7 +309,6 @@ describe("de pagina toont het antwoord", () => {
         grid={grid}
         huidigeCapaciteit={5}
         huidigVermogen={2.5}
-        onStart={() => {}}
         onKies={() => {}}
       />,
     );
@@ -711,5 +715,54 @@ describe("het maandverloop", () => {
   it("dekt twaalf maanden bij een volledig jaar", () => {
     expect(result.perMonth.length).toBe(12);
     expect(result.perMonth.map((m) => m.month)).toEqual([1,2,3,4,5,6,7,8,9,10,11,12]);
+  });
+});
+
+describe("de pagina vertelt het verhaal in vier delen, in die volgorde", () => {
+  /**
+   * De paginacomponent draait op workers en is hier niet te renderen; de
+   * volgorde staat wél letterlijk in de bron. Dat is voldoende om te bewaken
+   * dat niemand een sectie terugzet waar hij niet hoort — het antwoord voorop,
+   * dan waarom, dan wanneer van grof naar fijn, dan de wat-als-vragen, en pas
+   * daarna de instellingen.
+   */
+  it("zet de deelkoppen en de secties in de bedoelde volgorde", () => {
+    const bron = readFileSync("app/page.tsx", "utf8");
+    const volgorde = [
+      "Het antwoord",
+      "<Antwoord",
+      "<Statistieken",
+      "Waarom",
+      "<Prijskloof",
+      "<Uitsplitsing",
+      "<Verliezen",
+      "Wanneer",
+      "<BesparingPerJaar",
+      "<MaandVerloop",
+      "<Dagprofiel",
+      "Wat als",
+      "<Nettarief",
+      "<BatterijMaat",
+      "<Cashflow",
+      "<Geavanceerd",
+      "<Verantwoording",
+    ];
+    let vanaf = 0;
+    for (const stuk of volgorde) {
+      const plek = bron.indexOf(stuk, vanaf);
+      expect(plek, `"${stuk}" staat niet (op zijn plaats) in app/page.tsx`).toBeGreaterThan(-1);
+      vanaf = plek + stuk.length;
+    }
+  });
+
+  it("laat het nettarief-antwoord in het antwoordblok zien zodra het er is", () => {
+    render(
+      <Antwoord result={result} scenario={result} investeringEur={819} bezig={false} />,
+    );
+    expect(document.body.textContent).toMatch(/Met het nettarief dat in 2029 ingaat/);
+    // Zolang het scenario nog loopt staat er een plaatshouder, geen lege regel.
+    cleanup();
+    render(<Antwoord result={result} scenario={null} investeringEur={819} bezig={false} />);
+    expect(document.body.textContent).toMatch(/wordt doorgerekend/);
   });
 });

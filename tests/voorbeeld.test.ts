@@ -18,12 +18,16 @@ import { GET } from "../app/voorbeeld.json/route";
 import { MODEL_VERSIE, configSleutel } from "../lib/cache";
 import { STANDAARD, standaardConfiguratie } from "../lib/configuratie";
 import type { AnalysisResult } from "../lib/model/analysis";
+import { RASTER_CAPACITEITEN, RASTER_VERMOGENS } from "../lib/model/raster";
+import type { GridPoint } from "../lib/worker/protocol";
 
 interface Payload {
   versie: number;
   sleutel: string;
   gemaakt: string;
   result: AnalysisResult;
+  scenario: AnalysisResult;
+  grid: GridPoint[][];
 }
 
 /** De route draait de volledige analyse; dat kost een paar seconden. */
@@ -58,6 +62,28 @@ describe("het vooruitgerekende antwoord", () => {
     expect(r.priceGap).toBeDefined();
     expect(r.curve.length).toBeGreaterThan(1);
     expect(r.finance.cashflows.length).toBe(STANDAARD.analysejaren);
+  });
+
+  it("levert het nettariefscenario en het raster mee, zodat niemand erop wacht", () => {
+    /**
+     * Scenario en raster draaien automatisch en kosten samen een seconde of
+     * vijfentwintig. Voor de standaardbezoeker rekent de build ze vooruit; deze
+     * test bewaakt dat ze er zijn en bij dezelfde configuratie horen.
+     */
+    expect(payload.scenario.averageSavingEur).toBeGreaterThan(payload.result.averageSavingEur);
+    expect(payload.grid.length).toBe(RASTER_CAPACITEITEN.length);
+    for (const rij of payload.grid) {
+      expect(rij.length).toBe(RASTER_VERMOGENS.length);
+      for (const p of rij) expect(Number.isFinite(p.savingEur)).toBe(true);
+    }
+    // Het raster is monotoon in capaciteit bij gelijk vermogen, op ruis na.
+    for (let k = 0; k < RASTER_VERMOGENS.length; k++) {
+      for (let r = 1; r < payload.grid.length; r++) {
+        const vorige = payload.grid[r - 1]![k]!.savingEur;
+        const huidige = payload.grid[r]![k]!.savingEur;
+        expect(huidige).toBeGreaterThanOrEqual(vorige - Math.abs(vorige) * 0.02 - 0.01);
+      }
+    }
   });
 
   it("overleeft de reis door JSON", () => {

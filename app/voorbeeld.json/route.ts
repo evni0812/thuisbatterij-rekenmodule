@@ -25,6 +25,14 @@ import { standaardConfiguratie } from "../../lib/configuratie";
 import { Invoerbron } from "../../lib/data/invoer";
 import type { Ophaler } from "../../lib/data/loader";
 import { runAnalysis } from "../../lib/model/analysis";
+import { dispatchBaseline } from "../../lib/model/dispatch-baseline";
+import {
+  RASTER_CAPACITEITEN,
+  RASTER_VERMOGENS,
+  prijsPerKwhVan,
+  rasterJaar,
+  rasterPunt,
+} from "../../lib/model/raster";
 
 export const dynamic = "force-static";
 
@@ -49,10 +57,36 @@ export async function GET(): Promise<Response> {
   const invoer = await bron.bouwInvoer(config);
   const result = runAnalysis(invoer);
 
+  // Het scenario en het raster gaan mee. Samen kosten ze in de browser een
+  // seconde of vijfentwintig, en bij de build maakt het niet uit hoe lang het
+  // duurt. De standaardbezoeker ziet zo álles direct.
+  const scenario = runAnalysis(await bron.bouwInvoer({ ...config, netTariff: true }));
+
+  const entry = rasterJaar(invoer);
+  const basis = dispatchBaseline(entry.window, invoer.tariff);
+  const prijsPerKwh = prijsPerKwhVan(invoer, config.investmentEur);
+  const grid = RASTER_CAPACITEITEN.map((cap) =>
+    RASTER_VERMOGENS.map((kw) =>
+      rasterPunt(
+        entry,
+        basis,
+        invoer.battery,
+        invoer.tariff,
+        cap,
+        kw,
+        prijsPerKwh,
+        config.cycleLife,
+        config.calendarLifeYears,
+      ),
+    ),
+  );
+
   return Response.json({
     versie: MODEL_VERSIE,
     sleutel: configSleutel(config),
     gemaakt: new Date().toISOString(),
     result,
+    scenario,
+    grid,
   });
 }

@@ -204,6 +204,12 @@ export function Invoer({
         ) : null}
       </div>
 
+      {/* De instellingen staan onderaan, zodat de hoofdstroom van de pagina
+          schoon blijft. Wie wil bijstellen is vanaf hier één klik verwijderd. */}
+      <p className="invoer-sprong">
+        <a href="#instellingen">Meer instellingen ↓</a>
+      </p>
+
       {waarschuwingen.length > 0 ? (
         <ul className="waarschuwingen" role="status">
           {waarschuwingen.map((w) => (

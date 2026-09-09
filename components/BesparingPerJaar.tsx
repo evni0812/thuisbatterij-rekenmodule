@@ -34,7 +34,7 @@ export function BesparingPerJaar({ jaren }: { jaren: YearAnalysis[] }) {
 
   return (
     <Figure
-      titel="In elk jaar levert de batterij iets op, maar niet evenveel"
+      titel="Van jaar tot jaar: elk jaar levert iets op, maar niet evenveel"
       toelichting={
         <>
           Hoeveel een batterij oplevert hangt af van hoe grillig de prijzen dat

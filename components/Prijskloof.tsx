@@ -33,7 +33,8 @@ export function Prijskloof({
       titel="Je betaalt veel meer voor stroom dan je ervoor terugkrijgt"
       toelichting={
         <>
-          Dit is het gat waar een thuisbatterij in stapt. Beide bedragen zijn
+          Dit is waar de besparing vandaan komt: het gat waar een thuisbatterij in
+          stapt. Beide bedragen zijn
           gewogen naar wanneer je werkelijk afneemt en teruglevert. Niet het
           gemiddelde over alle uren dus, want dat verhult juist het effect.
         </>

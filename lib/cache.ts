@@ -11,7 +11,18 @@
  */
 
 import type { AnalysisResult } from "./model/analysis";
-import type { Configuration } from "./worker/protocol";
+import type { Configuration, GridPoint } from "./worker/protocol";
+
+/**
+ * Alles wat bij één configuratie hoort. Scenario en raster kunnen ontbreken
+ * zolang ze nog worden doorgerekend; het hoofdresultaat is er altijd.
+ */
+export interface Bundel {
+  result: AnalysisResult;
+  scenario?: AnalysisResult;
+  scenarioOpTeruglevering?: boolean;
+  grid?: GridPoint[][];
+}
 
 /**
  * Ophogen bij elke wijziging die de uitkomst beïnvloedt: de solver, de
@@ -23,6 +34,11 @@ import type { Configuration } from "./worker/protocol";
  * "Cannot read properties of undefined". Een nieuw veld is dus net zo goed een
  * reden om deze teller te verhogen als een nieuw getal.
  *
+ * Versie 9: het bewaarde resultaat is een bundel — hoofdresultaat, het
+ * nettariefscenario en het raster van maten — zodat een terugkerende bezoeker
+ * ook die niet opnieuw hoeft af te wachten. Een bewaard antwoord van versie 8
+ * mist die velden.
+ *
  * Versie 8: de slijtagedrempel kent een ondergrens en de kalenderlevensduur komt
  * uit de batterij in plaats van uit de analyseperiode. Beide veranderen hoeveel
  * de batterij handelt en dus de bedragen.
@@ -31,7 +47,7 @@ import type { Configuration } from "./worker/protocol";
  * heffing per uur in plaats van een jaarconstante, en de uitvoerder die bewuste
  * verkoop aan het net doorlaat. Alle drie veranderen de bedragen.
  */
-export const MODEL_VERSIE = 8;
+export const MODEL_VERSIE = 9;
 
 const SLEUTEL_PREFIX = "tbat:v" + MODEL_VERSIE + ":";
 /** Hoeveel doorrekeningen we bewaren voordat de oudste eruit gaat. */
@@ -49,17 +65,17 @@ export function configSleutel(config: Configuration): string {
   return SLEUTEL_PREFIX + (h >>> 0).toString(36);
 }
 
-interface Bewaard {
-  result: AnalysisResult;
+interface Bewaard extends Bundel {
   opgeslagen: number;
 }
 
-export function leesCache(config: Configuration): AnalysisResult | null {
+export function leesCache(config: Configuration): Bundel | null {
   if (typeof window === "undefined") return null;
   try {
     const ruw = window.localStorage.getItem(configSleutel(config));
     if (!ruw) return null;
-    return (JSON.parse(ruw) as Bewaard).result;
+    const { result, scenario, scenarioOpTeruglevering, grid } = JSON.parse(ruw) as Bewaard;
+    return { result, scenario, scenarioOpTeruglevering, grid };
   } catch {
     // Een volle of geblokkeerde opslag mag de tool nooit stukmaken; dan rekenen
     // we gewoon opnieuw.
@@ -67,20 +83,22 @@ export function leesCache(config: Configuration): AnalysisResult | null {
   }
 }
 
-export function schrijfCache(config: Configuration, result: AnalysisResult): void {
+/**
+ * Bewaar een bundel, of vul een bestaande aan. Scenario en raster komen later
+ * binnen dan het hoofdresultaat, en mogen dat niet overschrijven met niets.
+ */
+export function schrijfCache(config: Configuration, deel: Partial<Bundel> & Pick<Bundel, "result">): void {
   if (typeof window === "undefined") return;
+  const bestaand = leesCache(config);
+  const bewaard: Bewaard = { ...bestaand, ...deel, opgeslagen: Date.now() };
   try {
-    const bewaard: Bewaard = { result, opgeslagen: Date.now() };
     window.localStorage.setItem(configSleutel(config), JSON.stringify(bewaard));
     ruimOp();
   } catch {
     // Opslag vol: gooi alles van ons weg en probeer het één keer opnieuw.
     try {
       wisAlles();
-      window.localStorage.setItem(
-        configSleutel(config),
-        JSON.stringify({ result, opgeslagen: Date.now() } satisfies Bewaard),
-      );
+      window.localStorage.setItem(configSleutel(config), JSON.stringify(bewaard));
     } catch {
       // Dan niet. De tool werkt ook zonder cache.
     }

@@ -18,7 +18,6 @@
  * van CE Delft voor 2030, en dat staat er ook bij.
  */
 
-import { useState } from "react";
 import type { AnalysisResult } from "../lib/model/analysis";
 import {
   NETTARIEF_BRON,
@@ -42,16 +41,15 @@ function tint(tarief: number): string {
 export function Nettarief({
   huidig,
   scenario,
-  bezig,
-  onStart,
+  opTeruglevering,
+  onOpTeruglevering,
 }: {
   huidig: AnalysisResult;
+  /** Null zolang het scenario nog wordt doorgerekend in de achtergrond. */
   scenario: AnalysisResult | null;
-  bezig: boolean;
-  onStart: (opTeruglevering: boolean) => void;
+  opTeruglevering: boolean;
+  onOpTeruglevering: (opTeruglevering: boolean) => void;
 }) {
-  const [opTeruglevering, setOpTeruglevering] = useState(false);
-
   const verschil = scenario
     ? scenario.averageSavingEur - huidig.averageSavingEur
     : 0;
@@ -154,14 +152,10 @@ export function Nettarief({
           </div>
         </dl>
       ) : (
-        <button
-          type="button"
-          className="start-knop"
-          onClick={() => onStart(opTeruglevering)}
-          disabled={bezig}
-        >
-          {bezig ? "Bezig met rekenen…" : "Reken dit scenario door"}
-        </button>
+        <p className="scenario-wacht">
+          Dezelfde periode wordt nog een keer doorgerekend, nu met dit tarief
+          erbij…
+        </p>
       )}
 
       <div className="instelling">
@@ -169,10 +163,7 @@ export function Nettarief({
           <input
             type="checkbox"
             checked={opTeruglevering}
-            onChange={(e) => {
-              setOpTeruglevering(e.target.checked);
-              if (scenario) onStart(e.target.checked);
-            }}
+            onChange={(e) => onOpTeruglevering(e.target.checked)}
           />
           <span>Ook heffen op teruglevering</span>
         </label>

@@ -28,9 +28,6 @@ import type { GridPoint } from "../lib/worker/protocol";
 import { euro, euroPrecies, getal } from "../lib/format";
 import { Figure } from "./chart-parts";
 
-const CAPACITEITEN = [1, 2, 3, 5, 7.5, 10, 15];
-const VERMOGENS = [0.5, 0.8, 1.5, 2.5, 3.6, 5];
-
 type Weergave = "perKwh" | "perKw" | "totaal";
 
 interface Modus {
@@ -94,37 +91,34 @@ export function BatterijMaat({
   grid,
   huidigeCapaciteit,
   huidigVermogen,
-  onStart,
   onKies,
 }: {
+  /** Null zolang het raster nog wordt doorgerekend in de achtergrond. */
   grid: GridState | null;
   huidigeCapaciteit: number;
   huidigVermogen: number;
-  onStart: (capaciteiten: number[], vermogens: number[]) => void;
   onKies: (capaciteit: number, vermogen: number) => void;
 }) {
   const [gehoverd, setGehoverd] = useState<{ r: number; k: number } | null>(null);
   const [weergave, setWeergave] = useState<Weergave>("perKwh");
 
   if (!grid) {
+    // Het raster draait automatisch in de achtergrond zodra het hoofdantwoord
+    // er is; hier staat alleen wat er komt. Geen knop meer: die stond de meeste
+    // bezoekers in de weg, en het is juist de kaart die laat zien of een
+    // andere maat beter was geweest.
     return (
       <Figure
         titel="Welke maat batterij loont eigenlijk?"
         toelichting={
           <>
-            Reken een reeks combinaties van capaciteit en vermogen door met jouw
-            gegevens. Dat kost een paar seconden, want elke combinatie is een
-            volledige doorrekening van een jaar aan kwartierdata.
+            Tweeënveertig combinaties van capaciteit en vermogen, elk een
+            volledige doorrekening van een jaar aan kwartierdata. Dat kost een
+            paar seconden en gebeurt op de achtergrond.
           </>
         }
       >
-        <button
-          type="button"
-          className="start-knop"
-          onClick={() => onStart(CAPACITEITEN, VERMOGENS)}
-        >
-          Reken de maten door
-        </button>
+        <p className="raster-wacht">De kaart wordt doorgerekend…</p>
       </Figure>
     );
   }

@@ -13,11 +13,18 @@ import { euro, jaren } from "../lib/format";
 
 export function Antwoord({
   result,
+  scenario,
   investeringEur,
   bezig,
   heffingVanNu = false,
 }: {
   result: AnalysisResult;
+  /**
+   * Dezelfde doorrekening met het tijdsafhankelijke nettarief vanaf 2029, of
+   * null zolang die nog loopt. Dit is het inzicht dat de businesscase omslaat,
+   * en het hoort dus in het antwoord — niet acht secties lager achter een knop.
+   */
+  scenario: AnalysisResult | null;
   investeringEur: number;
   bezig: boolean;
   /**
@@ -64,6 +71,22 @@ export function Antwoord({
             De aanschaf van {euro(investeringEur)} verdient zichzelf binnen de
             levensduur <strong>niet terug</strong>.
           </>
+        )}
+      </p>
+      <p className={scenario ? "antwoord-scenario" : "antwoord-scenario plaatshouder"}>
+        {scenario ? (
+          <>
+            Met het nettarief dat in 2029 ingaat:{" "}
+            <strong>{euro(scenario.averageSavingEur)} per jaar</strong>
+            {scenario.finance.paybackYears !== null ? (
+              <>, terugverdiend na {jaren(scenario.finance.paybackYears)}</>
+            ) : (
+              <>, en dan nog niet terugverdiend</>
+            )}
+            .
+          </>
+        ) : (
+          <>Met het nettarief dat in 2029 ingaat: wordt doorgerekend…</>
         )}
       </p>
     </section>

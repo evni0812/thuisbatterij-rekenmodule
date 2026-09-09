@@ -61,12 +61,11 @@ export default function Page() {
     busy,
     error,
     grid,
-    startGrid,
     dag,
     dagBezig,
     scenario,
-    scenarioBezig,
-    startScenario,
+    scenarioOpTeruglevering,
+    zetScenarioOpTeruglevering,
     dagOntbreekt,
     vraagDag,
     wisDag,
@@ -147,14 +146,33 @@ export default function Page() {
 
       {result ? (
         <>
+          {/*
+            De pagina is een verhaal in vier delen, in de volgorde van een
+            gesprek: wat is het antwoord, waarom, wanneer gebeurt het, en wat als
+            het anders was. Elke sectie heeft één plek en één vraag.
+
+            Eerder stonden beschrijving en wat-als door elkaar en sprong de
+            tijdschaal van dag naar maand naar jaar. En het belangrijkste inzicht
+            — dat het nettarief vanaf 2029 de uitkomst omgooit — stond acht
+            secties lager achter een knop.
+          */}
+          <h2 className="deel-kop" id="antwoord">
+            Het antwoord <span>wat deze batterij je had opgeleverd</span>
+          </h2>
+
           <Antwoord
             result={result}
+            scenario={scenario}
             investeringEur={toonPrijs}
             bezig={busy}
             heffingVanNu={toon?.useHistoricalLevy === false}
           />
 
           <Statistieken stats={result.stats} opwekBekend={toonOpwekBekend} />
+
+          <h2 className="deel-kop">
+            Waarom <span>waar de besparing vandaan komt</span>
+          </h2>
 
           <Prijskloof
             gap={result.priceGap}
@@ -180,6 +198,14 @@ export default function Page() {
             besparingEur={result.averageSavingEur}
           />
 
+          <h2 className="deel-kop">
+            Wanneer <span>van jaar tot dag</span>
+          </h2>
+
+          <BesparingPerJaar jaren={result.perYear} />
+
+          <MaandVerloop maanden={result.perMonth} />
+
           <Dagprofiel
             voorbeelden={result.sampleDays}
             losseDag={dag}
@@ -191,22 +217,21 @@ export default function Page() {
             onWisDag={wisDag}
           />
 
-          <MaandVerloop maanden={result.perMonth} />
+          <h2 className="deel-kop">
+            Wat als <span>het nettarief, een andere maat, de looptijd</span>
+          </h2>
 
           <Nettarief
             huidig={result}
             scenario={scenario}
-            bezig={scenarioBezig}
-            onStart={startScenario}
+            opTeruglevering={scenarioOpTeruglevering}
+            onOpTeruglevering={zetScenarioOpTeruglevering}
           />
-
-          <BesparingPerJaar jaren={result.perYear} />
 
           <BatterijMaat
             grid={grid}
             huidigeCapaciteit={toonCapaciteit}
             huidigVermogen={toonVermogen}
-            onStart={startGrid}
             onKies={(cap, kw) => {
               // Een klik op een vakje is een expliciete opdracht: meteen
               // doorrekenen. Anders kost de klik je het raster en levert hij

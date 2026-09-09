@@ -16,7 +16,7 @@ gebruik, alles vanaf de CDN.
 ```bash
 npm install
 npm run dev          # http://localhost:3000
-npm test             # 161 tests, waaronder de modelinvarianten
+npm test             # 164 tests, waaronder de modelinvarianten
 npm run build        # statische export naar out/
 npm run clean        # bij een vastgelopen build-cache
 ```
@@ -33,13 +33,38 @@ te maken, is de webpack-compile gesmoord door geheugendruk — kijk naar
 `vm.swapusage`. `npx next build --turbopack` doet hetzelfde werk in een fractie
 van het geheugen en levert dezelfde export op.
 
+## De pagina is een verhaal in vier delen
+
+In de volgorde van een gesprek, met een zichtbare deelkop boven elk deel:
+
+| Deel | Vraag | Secties |
+|---|---|---|
+| **Het antwoord** | Wat had het opgeleverd? | invoer, antwoord (nu én met het nettarief vanaf 2029), de cijfers op een rij |
+| **Waarom** | Waar komt de besparing vandaan? | prijskloof, uitsplitsing, verliezen |
+| **Wanneer** | Wanneer gebeurt het? | van jaar tot jaar, door het jaar heen, één dag van dichtbij |
+| **Wat als** | En als het anders was? | het nettarief, een andere maat, over de looptijd |
+
+Daarna de instellingen — onderaan, met een sprong ernaartoe vanaf de invoer en
+terug — en de verantwoording. Beschrijving en wat-als staan zo niet meer door
+elkaar, de tijdschaal loopt van grof naar fijn, en het inzicht dat de
+businesscase omgooit staat in het antwoordblok in plaats van acht secties lager
+achter een knop.
+
+**Twee workers.** Scenario en raster draaien automatisch, zonder knop. Samen
+kosten ze een seconde of vijfentwintig; in één worker zou de dagkiezer al die
+tijd niet reageren. `lib/useAnalysis.ts` start daarom naast de hoofdworker een
+tweede, uit hetzelfde bestand: de hoofdworker doet de analyse en de dagkiezer,
+de achtergrondworker het scenario en het raster. De rasterlogica staat in
+`lib/model/raster.ts`, gedeeld tussen worker en build.
+
 ## Het standaardantwoord staat klaar
 
 Wie de tool opent zonder iets in te stellen, zag eerst vier seconden een leeg
 scherm terwijl de worker vier profieljaren doorrekende. Dat antwoord is voor
 iedereen hetzelfde — er zit geen willekeur in het model — dus het wordt bij de
-build één keer uitgerekend en als `/voorbeeld.json` meegeleverd: 40 kB, 12 kB
-over de lijn.
+build één keer uitgerekend en als `/voorbeeld.json` meegeleverd — inclusief het
+nettariefscenario en het raster van batterijmaten, die anders nog eens
+vijfentwintig seconden zouden kosten.
 
 De route-handler in `app/voorbeeld.json/route.ts` draait tijdens de build en
 leest de assets van schijf in plaats van via `fetch`. Daarom neemt

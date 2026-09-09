@@ -113,7 +113,10 @@ export function Geavanceerd({
   return (
     <section className="geavanceerd" id="instellingen">
       <div className="geavanceerd-kop">
-        <h2>Instellingen</h2>
+        <div>
+          <h2>Instellingen</h2>
+          <a className="terug-sprong" href="#antwoord">↑ terug naar het antwoord</a>
+        </div>
         {/* Wijzigingen rekenen niet vanzelf door: een volledige doorrekening
             kost seconden, en dan zou elke sleep van een regelaar er een starten.
             Je bepaalt zelf wanneer. */}

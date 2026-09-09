@@ -13,6 +13,7 @@ import {
   wearCostPerKwh,
   WEAR_ONDERGRENS_DEEL,
 } from "../model/battery";
+import { prijsPerKwhVan, rasterJaar, rasterPunt } from "../model/raster";
 import { dispatchBaseline } from "../model/dispatch-baseline";
 import { dispatchOptimal } from "../model/dispatch-optimal";
 import { dispatchRolling } from "../model/dispatch-rolling";
@@ -62,69 +63,28 @@ async function runGrid(
   powers: number[],
 ): Promise<void> {
   const invoer = await buildInput(config);
-  // Het meest recente volledige jaar is het representatiefst; anders het laatste.
-  const volledig = invoer.windows.filter((w) => w.isFullYear);
-  const entry = (volledig.length > 0 ? volledig : invoer.windows).at(-1);
-  if (!entry) throw new Error("geen doorrekenbare periode voor het raster");
-
+  const entry = rasterJaar(invoer);
   const basis = dispatchBaseline(entry.window, invoer.tariff);
+  const prijsPerKwh = prijsPerKwhVan(invoer, config.investmentEur);
 
   for (let r = 0; r < capacities.length; r++) {
     if (huidigeGrid !== id) return; // een nieuwere aanvraag heeft voorrang
     const cap = capacities[r]!;
-    const points: GridPoint[] = [];
-
-    // De investering schaalt mee met de capaciteit: een batterij van 20 kWh kost
-    // niet hetzelfde als de gekozen batterij van 2 kWh. Zonder die correctie
-    // kreeg elke maat de prijs van de gekozen batterij, en werd een grote
-    // batterij vrijwel zonder slijtagedrempel doorgerekend.
-    const prijsPerKwh =
-      invoer.battery.capacityKwh > 0
-        ? config.investmentEur / invoer.battery.capacityKwh
-        : 0;
-
-    for (const kw of powers) {
-      const maat: BatterySpec = {
-        ...invoer.battery,
-        capacityKwh: cap,
-        maxChargeKw: kw,
-        maxDischargeKw: kw,
-        wearCostEurPerKwh: 0,
-      };
-      // Eerst met de ondergrens: dat vertelt of de beurten voor deze maat
-      // schaars zijn. Zijn ze dat niet, dan blijft de drempel op die ondergrens
-      // staan en ís deze run al het antwoord. Alleen bij schaarste volgt een
-      // tweede run met een hogere drempel. Zo kost het raster in de regel één
-      // doorrekening per punt in plaats van twee.
-      const ondergrens =
-        wearCostPerKwh(prijsPerKwh * cap, config.cycleLife, maat) *
-        WEAR_ONDERGRENS_DEEL;
-      const vrij = dispatchRolling(
-        entry.window,
-        { ...maat, wearCostEurPerKwh: ondergrens },
+    const points: GridPoint[] = powers.map((kw) =>
+      rasterPunt(
+        entry,
+        basis,
+        invoer.battery,
         invoer.tariff,
-      );
-      const wear = marginalWearCostPerKwh(
-        prijsPerKwh * cap,
+        cap,
+        kw,
+        prijsPerKwh,
         config.cycleLife,
-        maat,
-        vrij.equivalentCycles,
         config.calendarLifeYears,
-      );
-      const res =
-        wear > ondergrens + 1e-12
-          ? dispatchRolling(entry.window, { ...maat, wearCostEurPerKwh: wear }, invoer.tariff)
-          : vrij;
-      points.push({
-        capacityKwh: cap,
-        powerKw: kw,
-        savingEur: basis.totalCostEur - res.totalCostEur,
-        cyclesPerYear: res.equivalentCycles,
-      });
-    }
-
+      ),
+    );
     post({ type: "grid-row", id, row: r, points, done: r === capacities.length - 1 });
-    // Even terug naar de berichtenlus.
+    // Even terug naar de berichtenlus, zodat een annulering ertussen kan.
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
 }

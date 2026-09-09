@@ -199,6 +199,52 @@ select {
   margin: 0;
 }
 
+/* ── Deelkoppen ───────────────────────────────────────────────────────────── */
+
+/*
+ * De pagina is een verhaal in vier delen: het antwoord, waarom, wanneer, wat
+ * als. Deze koppen maken die structuur zichtbaar zonder inhoudsopgave. Zelfde
+ * stijl als de groepskoppen in de instellingen, zodat het één systeem is.
+ */
+.deel-kop {
+  margin: 20px 0 -12px;
+  font-size: 0.85rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  font-weight: 600;
+}
+
+.deel-kop span {
+  color: var(--text-secondary);
+  font-weight: 400;
+  text-transform: none;
+  letter-spacing: 0;
+  margin-left: 10px;
+}
+
+.invoer-sprong {
+  margin: 14px 0 0;
+  font-size: 0.85rem;
+}
+
+.invoer-sprong a,
+.terug-sprong {
+  color: var(--text-secondary);
+  text-decoration: none;
+}
+
+.invoer-sprong a:hover,
+.terug-sprong:hover {
+  text-decoration: underline;
+}
+
+.terug-sprong {
+  display: inline-block;
+  margin-top: 4px;
+  font-size: 0.85rem;
+}
+
 /* ── Invoer ───────────────────────────────────────────────────────────────── */
 
 .invoer {
@@ -374,6 +420,29 @@ input[type="date"] {
   font-weight: 500;
   color: var(--text-secondary);
   letter-spacing: 0;
+}
+
+.antwoord-scenario {
+  margin: 12px 0 0;
+  padding-top: 12px;
+  border-top: 1px solid var(--border);
+  font-size: 1.05rem;
+}
+
+.antwoord-scenario strong {
+  color: var(--success-text);
+}
+
+.antwoord-scenario.plaatshouder {
+  color: var(--text-muted);
+}
+
+.raster-wacht,
+.scenario-wacht {
+  margin: 0;
+  padding: 18px 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
 }
 
 .antwoord-zin {
