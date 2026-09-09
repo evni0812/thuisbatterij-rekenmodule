@@ -322,14 +322,25 @@ export function Dagprofiel({
   const nTicks = kiesTicks(gLaag, gHoog, 4);
   const yN = (v: number) => Y.net + (1 - (v - gLaag) / gSpan) * HOOGTE.net;
 
+  /**
+   * Welk moment de lijnlabels tonen.
+   *
+   * Standaard het einde van de dag, maar zodra je een moment aanwijst dát
+   * moment. Eerder stonden er twee verschillende getallen voor dezelfde reeks
+   * op het scherm: de uitleesregel onderaan zei "13:00, afname 22,5 ct" terwijl
+   * het label bij de lijn 32,2 ct bleef tonen — de eindstand van de dag. Wat de
+   * prijs op het aangewezen moment was, stond dus nergens bij de lijn zelf.
+   */
+  const wijs = cursor ?? laatste;
+
   // Lijnlabels ontvlechten per paneel.
   const [yAfname, yTerug] = ontvlecht([
-    yP(dag.importPrice[laatste]!),
-    yP(dag.exportPrice[laatste]!),
+    yP(dag.importPrice[wijs]!),
+    yP(dag.exportPrice[wijs]!),
   ]) as [number, number];
   const [yMet, yZonder] = ontvlecht([
-    yN(heeftGeldreeks ? cumBat[laatste]! : 0),
-    yN(heeftGeldreeks ? cumBasis[laatste]! : 0),
+    yN(heeftGeldreeks ? cumBat[wijs]! : 0),
+    yN(heeftGeldreeks ? cumBasis[wijs]! : 0),
   ]) as [number, number];
 
   const i = cursor;
@@ -505,17 +516,17 @@ export function Dagprofiel({
           />
           <LijnLabel
             y={yAfname}
-            yLijn={yP(dag.importPrice[laatste]!)}
+            yLijn={yP(dag.importPrice[wijs]!)}
             kleur="var(--series-1)"
             naam="je betaalt"
-            waarde={centPerKwh(dag.importPrice[laatste]!)}
+            waarde={centPerKwh(dag.importPrice[wijs]!)}
           />
           <LijnLabel
             y={yTerug}
-            yLijn={yP(dag.exportPrice[laatste]!)}
+            yLijn={yP(dag.exportPrice[wijs]!)}
             kleur="var(--series-2)"
             naam="je krijgt"
-            waarde={centPerKwh(dag.exportPrice[laatste]!)}
+            waarde={centPerKwh(dag.exportPrice[wijs]!)}
             gestippeld
           />
 
@@ -848,17 +859,17 @@ export function Dagprofiel({
               />
               <LijnLabel
                 y={yMet}
-                yLijn={yN(cumBat[laatste]!)}
+                yLijn={yN(cumBat[wijs]!)}
                 kleur="var(--series-4)"
                 naam="mét batterij"
-                waarde={euroPrecies(cumBat[laatste]!)}
+                waarde={euroPrecies(cumBat[wijs]!)}
               />
               <LijnLabel
                 y={yZonder}
-                yLijn={yN(cumBasis[laatste]!)}
+                yLijn={yN(cumBasis[wijs]!)}
                 kleur="var(--text-muted)"
                 naam="zónder batterij"
-                waarde={euroPrecies(cumBasis[laatste]!)}
+                waarde={euroPrecies(cumBasis[wijs]!)}
                 gestippeld
               />
             </>

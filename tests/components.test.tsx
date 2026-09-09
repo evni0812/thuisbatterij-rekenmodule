@@ -826,3 +826,71 @@ describe("het batterijraster is leesbaar", () => {
     expect(document.body.textContent).toMatch(/geen rekenfout/);
   });
 });
+
+describe("de lijnlabels volgen het aangewezen moment", () => {
+  /**
+   * Er stonden twee verschillende getallen voor dezelfde reeks op het scherm:
+   * de uitleesregel onderaan zei "13:00, afname 22,5 ct" terwijl het label bij
+   * de lijn 32,2 ct bleef tonen — de eindstand van de dag. Wat de prijs op het
+   * aangewezen moment was, stond dus nergens bij de lijn zelf.
+   */
+  function prijslabels(container: HTMLElement): string[] {
+    const namen = [...container.querySelectorAll("text.lijn-label")];
+    return namen
+      .filter((el) => /je betaalt|je krijgt/.test(el.textContent ?? ""))
+      .map((el) => el.nextElementSibling?.textContent ?? "");
+  }
+
+  it("toont zonder aanwijzen de stand aan het einde van de dag", () => {
+    const dag = result.sampleDays[0]!;
+    const { container } = render(
+      <Dagprofiel
+        voorbeelden={[dag]}
+        losseDag={null}
+        ontbreekt={null}
+        eersteDag="2025-01-01"
+        laatsteDag="2025-12-31"
+        onVraagDag={() => {}}
+        onWisDag={() => {}}
+      />,
+    );
+    const labels = prijslabels(container);
+    expect(labels.length).toBe(2);
+    // Het laatste kwartier van de dag, in centen met één decimaal.
+    const laatsteAfname = dag.importPrice[dag.importPrice.length - 1]!;
+    expect(labels[0]).toContain((laatsteAfname * 100).toFixed(1).replace(".", ","));
+  });
+
+  it("springt naar het aangewezen kwartier zodra je de grafiek aanwijst", () => {
+    const dag = result.sampleDays[0]!;
+    const { container } = render(
+      <Dagprofiel
+        voorbeelden={[dag]}
+        losseDag={null}
+        ontbreekt={null}
+        eersteDag="2025-01-01"
+        laatsteDag="2025-12-31"
+        onVraagDag={() => {}}
+        onWisDag={() => {}}
+      />,
+    );
+    const svg = container.querySelector("svg")!;
+    // De grafiek luistert op de svg; een muisbeweging op een kwart van de breedte
+    // zet de cursor ergens in de ochtend.
+    svg.getBoundingClientRect = () =>
+      ({ left: 0, top: 0, width: 860, height: 900, right: 860, bottom: 900, x: 0, y: 0, toJSON: () => ({}) }) as DOMRect;
+    fireEvent.mouseMove(svg, { clientX: 300, clientY: 100 });
+
+    const labels = prijslabels(container);
+    const laatsteAfname = (dag.importPrice[dag.importPrice.length - 1]! * 100)
+      .toFixed(1)
+      .replace(".", ",");
+    // Het label hoort nu een ander kwartier te tonen dan het einde van de dag.
+    // Zijn ze toevallig gelijk, dan zegt deze test niets; dat controleren we.
+    const ochtend = dag.importPrice[Math.round((300 - 84) / (628 / (dag.importPrice.length - 1)))];
+    if (ochtend !== undefined && Math.abs(ochtend - dag.importPrice[dag.importPrice.length - 1]!) > 0.005) {
+      expect(labels[0]).not.toContain(laatsteAfname);
+    }
+    expect(labels.length).toBe(2);
+  });
+});
