@@ -62,9 +62,16 @@ de achtergrondworker het scenario en het raster. De rasterlogica staat in
 Wie de tool opent zonder iets in te stellen, zag eerst vier seconden een leeg
 scherm terwijl de worker vier profieljaren doorrekende. Dat antwoord is voor
 iedereen hetzelfde — er zit geen willekeur in het model — dus het wordt bij de
-build één keer uitgerekend en als `/voorbeeld.json` meegeleverd — inclusief het
-nettariefscenario en het raster van batterijmaten, die anders nog eens
-vijfentwintig seconden zouden kosten.
+build één keer uitgerekend en als `/voorbeeld.json` meegeleverd, samen met het
+nettariefscenario dat in het antwoordblok staat.
+
+Het **raster** van batterijmaten zit er bewust niet in. Tweeënveertig volledige
+doorrekeningen passen niet binnen de zestig seconden die Next.js een statische
+route gunt; de eerste poging brak daar de hele Vercel-build op af, drie keer
+opnieuw geprobeerd en toen gestopt. Het raster staat ver onder de vouw en wordt
+in de achtergrondworker berekend terwijl je de rest van de pagina leest.
+`staticPageGenerationTimeout` staat op 180 zodat het scenario wél de ruimte
+heeft.
 
 De route-handler in `app/voorbeeld.json/route.ts` draait tijdens de build en
 leest de assets van schijf in plaats van via `fetch`. Daarom neemt

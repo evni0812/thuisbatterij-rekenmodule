@@ -18,8 +18,6 @@ import { GET } from "../app/voorbeeld.json/route";
 import { MODEL_VERSIE, configSleutel } from "../lib/cache";
 import { STANDAARD, standaardConfiguratie } from "../lib/configuratie";
 import type { AnalysisResult } from "../lib/model/analysis";
-import { RASTER_CAPACITEITEN, RASTER_VERMOGENS } from "../lib/model/raster";
-import type { GridPoint } from "../lib/worker/protocol";
 
 interface Payload {
   versie: number;
@@ -27,7 +25,6 @@ interface Payload {
   gemaakt: string;
   result: AnalysisResult;
   scenario: AnalysisResult;
-  grid: GridPoint[][];
 }
 
 /** De route draait de volledige analyse; dat kost een paar seconden. */
@@ -64,26 +61,21 @@ describe("het vooruitgerekende antwoord", () => {
     expect(r.finance.cashflows.length).toBe(STANDAARD.analysejaren);
   });
 
-  it("levert het nettariefscenario en het raster mee, zodat niemand erop wacht", () => {
+  it("levert het nettariefscenario mee, want dat staat in het antwoord", () => {
     /**
-     * Scenario en raster draaien automatisch en kosten samen een seconde of
-     * vijfentwintig. Voor de standaardbezoeker rekent de build ze vooruit; deze
-     * test bewaakt dat ze er zijn en bij dezelfde configuratie horen.
+     * Het scenario staat in het antwoordblok bovenaan; daarop wachten is het
+     * meest zichtbaar. Het kost vier seconden bij de build en die zijn het waard.
+     *
+     * Het raster zit er bewust NIET in. Tweeënveertig volledige doorrekeningen
+     * passen niet binnen de zestig seconden die Next.js een statische route
+     * gunt — de eerste poging brak daar de hele Vercel-build op af. Het raster
+     * staat ver onder de vouw en wordt in de achtergrondworker berekend.
      */
-    expect(payload.scenario.averageSavingEur).toBeGreaterThan(payload.result.averageSavingEur);
-    expect(payload.grid.length).toBe(RASTER_CAPACITEITEN.length);
-    for (const rij of payload.grid) {
-      expect(rij.length).toBe(RASTER_VERMOGENS.length);
-      for (const p of rij) expect(Number.isFinite(p.savingEur)).toBe(true);
-    }
-    // Het raster is monotoon in capaciteit bij gelijk vermogen, op ruis na.
-    for (let k = 0; k < RASTER_VERMOGENS.length; k++) {
-      for (let r = 1; r < payload.grid.length; r++) {
-        const vorige = payload.grid[r - 1]![k]!.savingEur;
-        const huidige = payload.grid[r]![k]!.savingEur;
-        expect(huidige).toBeGreaterThanOrEqual(vorige - Math.abs(vorige) * 0.02 - 0.01);
-      }
-    }
+    expect(payload.scenario.averageSavingEur).toBeGreaterThan(
+      payload.result.averageSavingEur,
+    );
+    expect(payload.scenario.finance.paybackYears).not.toBeNull();
+    expect((payload as { grid?: unknown }).grid).toBeUndefined();
   });
 
   it("overleeft de reis door JSON", () => {
