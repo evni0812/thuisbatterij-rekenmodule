@@ -24,7 +24,6 @@
 import {
   maxChargeKwhPerStep,
   maxDischargeKwhPerStep,
-  standbyKwhPerStep,
   usableCapacityKwh,
 } from "./battery";
 import { stepCost } from "./tariff";
@@ -167,7 +166,6 @@ export function planSocPath(
   const maxOut = maxDischargeKwhPerStep(spec);
   const eta = spec.efficiency;
   const wear = spec.wearCostEurPerKwh;
-  const standby = standbyKwhPerStep(spec);
   const curtail = tariff.allowCurtailment;
 
   let next = new Float64Array(levels);
@@ -237,7 +235,7 @@ export function planSocPath(
 
         // stepCost() is hier met opzet uitgeschreven: deze regel draait
         // tientallen miljoenen keren per jaar en de aanroep zelf woog mee.
-        const g = r + b + standby;
+        const g = r + b;
         let cost = g > 0 ? g * ip : g < 0 && !(curtail && ep < 0) ? g * ep : 0;
         if (b < 0) cost -= wear * b;
 
@@ -340,12 +338,11 @@ export function executePath(
   const maxIn = maxChargeKwhPerStep(spec);
   const maxOut = maxDischargeKwhPerStep(spec);
   const eta = spec.efficiency;
-  const standby = standbyKwhPerStep(spec);
   let soc = socStart;
 
   for (let t = from; t < to; t++) {
     const local = t - from;
-    const r = window.residualKwh[t]! + standby;
+    const r = window.residualKwh[t]!;
     const ep = window.prices.exportPrice[t]!;
 
     // Gewenste ladingsverandering volgens het plan.
@@ -383,7 +380,7 @@ export function executePath(
         if (plannedResidual) {
           const doelVorig = local === 0 ? socStart : socTarget[local - 1]!;
           const geplandeOntlading = Math.max(0, (doelVorig - socTarget[local]!) * eta);
-          const verwachtTekort = Math.max(0, plannedResidual[t]! + standby);
+          const verwachtTekort = Math.max(0, plannedResidual[t]!);
           geplandeExport = Math.max(0, geplandeOntlading - verwachtTekort);
         }
         discharge = Math.min(discharge, r + geplandeExport);
@@ -468,7 +465,6 @@ const spec0 = {
   maxChargeKw: 0,
   maxDischargeKw: 0,
   efficiency: 1,
-  standbyWatt: 0,
   wearCostEurPerKwh: 0,
 } satisfies BatterySpec;
 

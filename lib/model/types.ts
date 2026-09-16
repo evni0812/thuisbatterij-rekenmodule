@@ -26,9 +26,13 @@ export interface BatterySpec {
    * gelden aan de AC-zijde (wat door de meter gaat).
    */
   efficiency: number;
-  /** Eigen verbruik van omvormer/BMS in W, continu. */
-  standbyWatt: number;
-  /** Slijtagekosten per kWh doorzet, EUR/kWh. Zie wearCostPerKwh(). */
+  /**
+   * Slijtagekosten per kWh doorzet, EUR/kWh. Zie wearCostPerKwh().
+   *
+   * Het eigen verbruik van de omvormer (standby) zit bewust NIET in het model.
+   * Dit model gaat over wat de handel oplevert; standby is een vaste post van
+   * het bezit, net als de aanschaf, en hoort naast de businesscase, niet erin.
+   */
   wearCostEurPerKwh: number;
 }
 

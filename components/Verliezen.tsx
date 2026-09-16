@@ -1,158 +1,163 @@
 "use client";
 
 /**
- * Waar de kilowatturen blijven.
+ * Hoe efficiënt een thuisbatterij werkelijk is.
  *
- * Een batterij geeft minder terug dan je erin stopt, en dat is voor veel mensen
- * de verrassing: niet het rendement op papier, maar hoeveel stroom er in een
- * jaar werkelijk in verdwijnt. Drie posten, en ze zijn wezenlijk anders:
- * laadverlies en ontlaadverlies schalen mee met het gebruik, standby juist
- * niet. Bij een kleine batterij die niet elke dag volloopt is die derde post
- * vaak de grootste — precies het inzicht dat een rendementspercentage verbergt.
+ * Eén verlies: de omzetting, wat er bij laden en ontladen verdwijnt. Schaalt
+ * mee met hoeveel je opslaat, en is wat "rendement heen en terug" op een
+ * datasheet betekent.
  *
- * Bewust geen SVG maar gewone elementen: de waarden staan dan als tekst in de
- * pagina en zijn voorleesbaar, en de kleuren dragen nergens informatie die niet
- * ook in het label staat.
+ * Het sluipverbruik van de omvormer stond hier eerder als tweede blok. Het zit
+ * niet meer in het model: dit model gaat over wat de handel oplevert, en
+ * standby loopt door of de batterij nu handelt of niet. Het is een vaste post
+ * van het bezit, naast de aanschaf, en hoort niet in de dagcijfers.
  */
 
+import type { ReactNode } from "react";
 import type { EnergyLosses } from "../lib/model/analysis";
 import { euro, getal, kwh, procent } from "../lib/format";
-import { Figure } from "./chart-parts";
+import { Figure, TipLaag, useTip } from "./chart-parts";
 
 const GELEVERD = "var(--series-3)";
 const OMZETTING = "var(--series-4)";
-const STANDBY = "var(--series-1)";
-
-interface Regel {
-  label: string;
-  uitleg: string;
-  kleur: string;
-  kwh: number;
-  eur: number;
-}
 
 export function Verliezen({
   losses,
   afnameKwh,
   besparingEur,
+  actie,
 }: {
   losses: EnergyLosses;
   /** Jaarafname zonder batterij, om het verlies tegen af te zetten. */
   afnameKwh: number;
   /** Gemiddelde jaarbesparing, om de verliezen op schaal te zetten. */
   besparingEur: number;
+  /** De knop "Hoe is dit berekend?" in de kop. */
+  actie?: ReactNode;
 }) {
+  const { kader, tip, toon, wis } = useTip();
+
   const {
     chargedKwh,
     deliveredKwh,
     chargeLossKwh,
     dischargeLossKwh,
-    standbyKwh,
     totalKwh,
     roundtrip,
   } = losses;
 
   if (chargedKwh <= 0) return null;
 
-  // Beide balken op dezelfde schaal, anders vergelijk je lengtes die niets met
-  // elkaar te maken hebben.
-  const schaal = Math.max(chargedKwh, standbyKwh);
-  const breedte = (v: number) => `${(v / schaal) * 100}%`;
-
   const omzetting = chargeLossKwh + dischargeLossKwh;
   const omzettingEur = losses.chargeLossEur + losses.dischargeLossEur;
-  const standbyDomineert = standbyKwh > omzetting;
 
-  // De titel noemt de conclusie, en die verschilt: bij een batterij die veel
-  // draait is de omzetting de grootste post, bij een die stilstaat de
-  // elektronica. Een vaste kop zou de balken eronder kunnen tegenspreken.
-  const titel = standbyDomineert
-    ? "Het meeste verlies zit niet in de omzetting, maar in de batterij zelf"
-    : `Van elke 100 kWh die je opslaat, komt er ${getal(roundtrip * 100, 0)} weer uit`;
+  // Blok A staat op de schaal van wat erin ging; de rest van de balk is lading
+  // die aan het eind van het jaar nog in de cel zat.
+  const deelVanLading = (v: number) => `${(v / chargedKwh) * 100}%`;
+  const restInCel = Math.max(0, chargedKwh - deliveredKwh - omzetting);
 
-  const regels: Regel[] = [
-    {
-      label: "Verlies bij het laden",
-      uitleg:
-        "Omzetten van wisselstroom naar de cel kost energie. Dit schaalt mee " +
-        "met hoeveel je opslaat.",
-      kleur: OMZETTING,
-      kwh: chargeLossKwh,
-      eur: losses.chargeLossEur,
-    },
-    {
-      label: "Verlies bij het ontladen",
-      uitleg: "Dezelfde omzetting, de andere kant op.",
-      kleur: OMZETTING,
-      kwh: dischargeLossKwh,
-      eur: losses.dischargeLossEur,
-    },
-    {
-      label: "Stroom voor de batterij zelf",
-      uitleg:
-        "De omvormer en de regeling staan dag en nacht aan, ook als er niets " +
-        "gebeurt. Dit hangt niet van je gebruik af.",
-      kleur: STANDBY,
-      kwh: standbyKwh,
-      eur: losses.standbyEur,
-    },
-  ];
+  const titel = `Van elke 100 kWh die je opslaat, komt er ${getal(roundtrip * 100, 0)} weer uit`;
 
   return (
     <Figure
+      actie={actie}
       titel={titel}
       toelichting={
         <>
-          Stroom opslaan kost stroom. Hieronder staat waar die kilowatturen
-          blijven, gemiddeld per jaar over de volledige jaren in de gekozen
-          periode. De bedragen zijn wat die stroom je had opgeleverd als hij er
-          nog was geweest: uit eigen zon de terugleverprijs, van het net de
-          afnameprijs.
+          Stroom opslaan kost stroom: bij het laden en bij het ontladen gaat een
+          deel verloren in de omzetting. Gemiddeld per jaar over de volledige
+          jaren in de gekozen periode. Het eigen verbruik van de omvormer staat
+          hier bewust niet bij: dat loopt door of de batterij nu handelt of
+          niet, en hoort bij de aanschaf, niet bij de handel.
         </>
       }
     >
-      <div className="verlies">
-        <div className="verlies-balkrij">
-          <div className="verlies-balklabel">
-            <span>In de batterij gestopt</span>
-            <strong>{kwh(chargedKwh)}</strong>
+      <div className="chart-hover" ref={kader} onMouseLeave={wis}>
+        {/* ── 1. De omzetting ─────────────────────────────────────────────── */}
+        <section className="efficientie-blok">
+          <div className="efficientie-kop">
+            <h4>De omzetting</h4>
+            <p>
+              Wat er van je lading overblijft. Dit schaalt mee met hoeveel je
+              opslaat.
+            </p>
           </div>
-          <div className="verlies-balk">
-            <span
-              className="verlies-deel"
-              style={{ width: breedte(deliveredKwh), background: GELEVERD }}
-            />
-            {/* Laden en ontladen als één vlak: het is dezelfde omzetting, en
-                twee even gekleurde segmenten naast elkaar suggereren een
-                onderscheid dat de kleur niet maakt. De splitsing staat in de
-                tabel eronder. */}
-            <span
-              className="verlies-deel"
-              style={{ width: breedte(omzetting), background: OMZETTING }}
-            />
-          </div>
-          <p className="verlies-onder">
-            Daarvan kwam <strong>{kwh(deliveredKwh)}</strong> er weer uit; de
-            rest ging op aan omzetting.
-          </p>
-        </div>
 
-        <div className="verlies-balkrij">
-          <div className="verlies-balklabel">
-            <span>Verbruikt door de elektronica</span>
-            <strong>{kwh(standbyKwh)}</strong>
-          </div>
-          <div className="verlies-balk">
+          <div
+            className="verlies-balk groot"
+            onMouseMove={(e) =>
+              toon(e, {
+                titel: "De omzetting, per jaar",
+                regels: [
+                  { kleur: GELEVERD, label: "Geleverd aan het huis", waarde: kwh(deliveredKwh) },
+                  { kleur: OMZETTING, label: "Verlies bij het laden", waarde: kwh(chargeLossKwh) },
+                  { kleur: OMZETTING, label: "Verlies bij het ontladen", waarde: kwh(dischargeLossKwh) },
+                  { label: "In de batterij gestopt", waarde: kwh(chargedKwh), uitkomst: true },
+                ],
+                noot: `Rondgang: ${procent(roundtrip, 1)} van wat erin gaat, komt er weer uit.`,
+              })
+            }
+          >
             <span
               className="verlies-deel"
-              style={{ width: breedte(standbyKwh), background: STANDBY }}
+              style={{ width: deelVanLading(deliveredKwh), background: GELEVERD }}
+            >
+              <b>{procent(roundtrip)}</b>
+            </span>
+            <span
+              className="verlies-deel"
+              style={{ width: deelVanLading(chargeLossKwh), background: OMZETTING }}
+            />
+            <span
+              className="verlies-deel streep"
+              style={{ width: deelVanLading(dischargeLossKwh), background: OMZETTING }}
             />
           </div>
-          <p className="verlies-onder">
-            Continu verbruik, los van hoeveel je opslaat.
+
+          <p className="efficientie-zin">
+            Je stopte er <strong>{kwh(chargedKwh)}</strong> in en kreeg{" "}
+            <strong>{kwh(deliveredKwh)}</strong> terug. De omzetting kostte{" "}
+            {kwh(omzetting)}, oftewel {euro(omzettingEur)}
+            {restInCel > 1
+              ? `; ${kwh(restInCel)} zat aan het eind van het jaar nog in de cel`
+              : ""}
+            .
           </p>
-        </div>
+        </section>
+
+        <TipLaag tip={tip} />
       </div>
+
+      {/* ── Samen ──────────────────────────────────────────────────────────── */}
+      <dl className="kerncijfers">
+        <div>
+          <dt>Rondgang van de omzetting</dt>
+          <dd>{procent(roundtrip, 1)}</dd>
+        </div>
+        <div>
+          <dt>Samen verloren</dt>
+          <dd>
+            {kwh(totalKwh)}
+            <span className="dd-noot">
+              {procent(totalKwh / Math.max(1, afnameKwh))} van de {kwh(afnameKwh)}{" "}
+              die je zonder batterij van het net haalt
+            </span>
+          </dd>
+        </div>
+        <div>
+          <dt>Wat dat verlies waard was</dt>
+          <dd>
+            {euro(losses.totalEur)}
+            {besparingEur > 0 ? (
+              <span className="dd-noot">
+                tegenover {euro(besparingEur)} besparing; zonder enig verlies had
+                de batterij ruwweg {euro(besparingEur + losses.totalEur)}{" "}
+                opgeleverd
+              </span>
+            ) : null}
+          </dd>
+        </div>
+      </dl>
 
       <table className="verlies-tabel">
         <caption className="visueel-verborgen">
@@ -166,19 +171,22 @@ export function Verliezen({
           </tr>
         </thead>
         <tbody>
-          {regels.map((r) => (
-            <tr key={r.label}>
-              <th scope="row">
-                <span className="post-vlak" style={{ background: r.kleur }} />
-                <span>
-                  {r.label}
-                  <span className="verlies-uitleg">{r.uitleg}</span>
-                </span>
-              </th>
-              <td>{kwh(r.kwh)}</td>
-              <td>{euro(r.eur)}</td>
-            </tr>
-          ))}
+          <tr>
+            <th scope="row">
+              <span className="post-vlak" style={{ background: OMZETTING }} />
+              <span>Verlies bij het laden</span>
+            </th>
+            <td>{kwh(chargeLossKwh)}</td>
+            <td>{euro(losses.chargeLossEur)}</td>
+          </tr>
+          <tr>
+            <th scope="row">
+              <span className="post-vlak" style={{ background: OMZETTING }} />
+              <span>Verlies bij het ontladen</span>
+            </th>
+            <td>{kwh(dischargeLossKwh)}</td>
+            <td>{euro(losses.dischargeLossEur)}</td>
+          </tr>
         </tbody>
         <tfoot>
           <tr>
@@ -188,34 +196,6 @@ export function Verliezen({
           </tr>
         </tfoot>
       </table>
-
-      <p className="posten-noot">
-        Dat is {procent(totalKwh / Math.max(1, afnameKwh))} van de{" "}
-        {kwh(afnameKwh)} die je zonder batterij van het net haalt, en{" "}
-        {getal(totalKwh / Math.max(0.001, deliveredKwh), 2)} kWh voor elke
-        kilowattuur die de batterij aflevert.
-      </p>
-
-      {besparingEur > 0 ? (
-        <p className="posten-noot">
-          Tegenover die {euro(losses.totalEur)} staat een besparing van{" "}
-          {euro(besparingEur)}. Zonder enig verlies had de batterij dus ruwweg{" "}
-          {euro(besparingEur + losses.totalEur)} opgeleverd: {" "}
-          {procent(losses.totalEur / (besparingEur + losses.totalEur))} van wat
-          hij bruto verdient, verdwijnt in het apparaat zelf.
-        </p>
-      ) : null}
-
-      {standbyDomineert ? (
-        <p className="posten-noot">
-          De elektronica kost je hier meer dan de omzetting: {kwh(standbyKwh)}{" "}
-          tegen {kwh(omzetting)}, oftewel {euro(losses.standbyEur)} tegen{" "}
-          {euro(omzettingEur)}. Dat komt doordat dit verbruik dóórloopt terwijl
-          de batterij een groot deel van het jaar weinig te doen heeft. Een
-          grotere batterij, of een met minder eigen verbruik, verdeelt die vaste
-          post over meer opgeslagen kilowatturen.
-        </p>
-      ) : null}
 
       <p className="posten-noot">
         Deze kilowatturen zijn geen extra kostenpost bovenop de besparing

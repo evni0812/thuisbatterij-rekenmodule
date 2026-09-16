@@ -9,6 +9,12 @@
 export interface Instellingen {
   afnameKwh: number;
   terugleveringKwh: number;
+  /**
+   * Met zonnepanelen (standaard) rekent de tool met het gemeten profiel van
+   * huishoudens mét invoeding; zonder met dat van huishoudens zonder. Beide
+   * zijn echte metingen (MFFBAS E1A, afnametype AMI en AZI).
+   */
+  zonnepanelen: boolean;
   presetId: string;
   domein: string;
   /** Leeg betekent: de volledige beschikbare periode. */
@@ -27,6 +33,11 @@ export interface Instellingen {
   discontovoet: number;
   prijsstijging: number;
   degradatie: number;
+  /**
+   * Deel van de volle slijtageprijs dat de planner per geleverde kWh rekent,
+   * 0–1. Zie lib/strategie.ts voor de drie standen.
+   */
+  slijtageDeel: number;
   /** Null betekent: neem de waarde van de gekozen batterij over. */
   prijsEur: number | null;
   capaciteitKwh: number | null;
@@ -39,6 +50,7 @@ export interface Instellingen {
 const SLEUTELS: Record<keyof Instellingen, string> = {
   afnameKwh: "af",
   terugleveringKwh: "tl",
+  zonnepanelen: "zon",
   presetId: "bat",
   domein: "net",
   van: "van",
@@ -51,6 +63,7 @@ const SLEUTELS: Record<keyof Instellingen, string> = {
   discontovoet: "disc",
   prijsstijging: "stg",
   degradatie: "deg",
+  slijtageDeel: "slt",
   prijsEur: "prijs",
   capaciteitKwh: "cap",
   vermogenKw: "kw",
@@ -81,6 +94,7 @@ export function leesUrl(): Partial<Instellingen> {
   zetGetal("discontovoet", getal(SLEUTELS.discontovoet));
   zetGetal("prijsstijging", getal(SLEUTELS.prijsstijging));
   zetGetal("degradatie", getal(SLEUTELS.degradatie));
+  zetGetal("slijtageDeel", getal(SLEUTELS.slijtageDeel));
   zetGetal("prijsEur", getal(SLEUTELS.prijsEur));
   zetGetal("capaciteitKwh", getal(SLEUTELS.capaciteitKwh));
   zetGetal("vermogenKw", getal(SLEUTELS.vermogenKw));
@@ -96,15 +110,23 @@ export function leesUrl(): Partial<Instellingen> {
   if (tot) uit.tot = tot;
   const afr = p.get(SLEUTELS.curtailment);
   if (afr !== null) uit.curtailment = afr === "1";
+  const zon = p.get(SLEUTELS.zonnepanelen);
+  if (zon !== null) uit.zonnepanelen = zon === "1";
   const hef = p.get(SLEUTELS.heffing);
   if (hef === "toen" || hef === "nu") uit.heffing = hef;
 
   return uit;
 }
 
-export function schrijfUrl(inst: Instellingen, standaard: Instellingen): void {
+export function schrijfUrl(
+  inst: Instellingen,
+  standaard: Instellingen,
+  /** Losse parameters naast de instellingen, zoals het open tabblad. */
+  extra: Record<string, string> = {},
+): void {
   if (typeof window === "undefined") return;
   const p = new URLSearchParams();
+  for (const [k, v] of Object.entries(extra)) p.set(k, v);
 
   for (const sleutel of Object.keys(SLEUTELS) as (keyof Instellingen)[]) {
     const waarde = inst[sleutel];

@@ -11,6 +11,7 @@
 
 import {
   PRESETS,
+  geschatteOpwekKwh,
   STANDAARD_AFNAME_KWH,
   STANDAARD_ANALYSEJAREN,
   STANDAARD_DISCONTOVOET,
@@ -20,6 +21,7 @@ import {
   STANDAARD_TERUGLEVERING_KWH,
   type BatteryPreset,
 } from "./presets";
+import { STANDAARD_SLIJTAGEDEEL } from "./strategie";
 import type { Instellingen } from "./url-state";
 import type { Configuration } from "./worker/protocol";
 
@@ -36,6 +38,7 @@ export const LAATSTE_DAG = "2026-12-31";
 export const STANDAARD: Instellingen = {
   afnameKwh: STANDAARD_AFNAME_KWH,
   terugleveringKwh: STANDAARD_TERUGLEVERING_KWH,
+  zonnepanelen: true,
   presetId: STANDAARD_PRESET_ID,
   domein: STANDAARD_NETGEBIED,
   van: "",
@@ -48,6 +51,7 @@ export const STANDAARD: Instellingen = {
   discontovoet: STANDAARD_DISCONTOVOET,
   prijsstijging: STANDAARD_PRIJSSTIJGING,
   degradatie: STANDAARD_KALENDERDEGRADATIE,
+  slijtageDeel: STANDAARD_SLIJTAGEDEEL,
   prijsEur: null,
   capaciteitKwh: null,
   vermogenKw: null,
@@ -67,15 +71,20 @@ export function kiesPreset(presetId: string): BatteryPreset {
  */
 export function maakConfiguratie(inst: Instellingen): Configuration {
   const preset = kiesPreset(inst.presetId);
+  // Zonder zonnepanelen is er niets om terug te leveren en geen eigen opwek;
+  // het profiel wisselt naar de gemeten aansluitingen zonder invoeding. Het
+  // veld blijft afwezig in het standaardgeval, zodat de hash niet verandert.
+  const zon = inst.zonnepanelen;
   return {
     domain: inst.domein,
     from: inst.van || VROEGSTE_DAG,
     to: inst.tot || LAATSTE_DAG,
     household: {
       annualGridImportKwh: inst.afnameKwh,
-      annualGridExportKwh: inst.terugleveringKwh,
+      annualGridExportKwh: zon ? inst.terugleveringKwh : 0,
       spreadFactor: inst.spreiding,
     },
+    ...(zon ? {} : { afnametype: "AZI" as const }),
     battery: {
       ...preset.spec,
       capacityKwh: inst.capaciteitKwh ?? preset.capaciteitKwh,
@@ -96,8 +105,12 @@ export function maakConfiguratie(inst: Instellingen): Configuration {
     priceEscalation: inst.prijsstijging,
     discountRate: inst.discontovoet,
     calendarFadePerYear: inst.degradatie,
+    wearFraction: inst.slijtageDeel,
     residualValueEur: 0,
-    annualProductionKwh: inst.opwekKwh ?? undefined,
+    // Zonder opgegeven jaaropwek een schatting uit de teruglevering, zodat
+    // "eigen verbruik" en "onafhankelijk van het net" niet leeg blijven. Dat de
+    // waarde geschat is, staat bij de cijfers zelf.
+    annualProductionKwh: zon ? (inst.opwekKwh ?? geschatteOpwekKwh(inst.terugleveringKwh)) : 0,
     useHistoricalLevy: inst.heffing === "toen",
   };
 }

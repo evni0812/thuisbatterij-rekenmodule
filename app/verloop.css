@@ -1,0 +1,54 @@
+/* De periodeweergave (components/Verloop.tsx). Apart bestand, zodat deze
+   stijl los staat van het thema dat elders wordt bijgewerkt. */
+
+.verloop-nav {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+
+.verloop-periode {
+  font-weight: 600;
+  min-width: 14ch;
+  text-align: center;
+}
+
+.verloop-bezig {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+svg.verloop.bezig {
+  opacity: 0.55;
+  transition: opacity 0.2s;
+}
+
+.verloop-vak {
+  cursor: pointer;
+}
+
+.verloop-vak:hover rect:first-of-type {
+  fill: var(--acs, rgba(0, 0, 0, 0.05));
+}
+
+/* Een instelling die de volle breedte van het instellingenraster neemt,
+   zoals de strategieknoppen met hun toelichting. */
+.instelling-breed {
+  grid-column: 1 / -1;
+}
+
+/* De keuze met of zonder zonnepanelen boven de invoervelden. */
+.invoer-keuze {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+  margin-bottom: 1rem;
+}
+.invoer-keuze-hint {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-2, #5b6660);
+}

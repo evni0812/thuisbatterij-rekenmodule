@@ -8,122 +8,63 @@
  * drager van betekenis is.
  */
 
+/*
+ * Het uiterlijk volgt de Energiecontract Monitor (~/code/energiecontract-monitor):
+ * IBM Plex, één diep-teal accent, een lichte grijsgroene ondergrond, witte
+ * kaarten met dunne lijnen. Eén thema; geen donkere modus. De twee tools horen
+ * er als familie uit te zien.
+ *
+ * Het categorische palet is semantisch: afname, teruglevering, batterij, een
+ * vierde post en de zon. Reekskleuren staan los van het accent, zodat een
+ * teal kop nooit met een teal lijn in een grafiek wordt verward.
+ */
 :root {
   color-scheme: light;
 
-  --surface-1: #fcfcfb;
-  --surface-2: #f9f9f7;
-  --page: #f4f4f1;
+  /* accent */
+  --ac: #23504f;
+  --ac2: #1a3c3b;
+  --acs: #e3ecea;
 
-  --text-primary: #0b0b0b;
-  --text-secondary: #52514e;
-  /* 4,62:1 op de lichte ondergrond. De vorige waarde (#898781) haalde 3,55:1
-     en was daarmee de slechtst leesbare tekst op de pagina — uitgerekend alle
-     uitleg onder de velden en de tegels. */
-  --text-muted: #6e6c67;
+  --surface-1: #ffffff;
+  --surface-2: #f4f6f4;
+  --page: #f4f6f4;
 
-  --grid: #e1e0d9;
-  --axis: #c3c2b7;
-  --border: rgba(11, 11, 11, 0.1);
-  --border-strong: rgba(11, 11, 11, 0.18);
+  --text-primary: #1a1f1e;
+  --text-secondary: #4b5654;
+  --text-muted: #6f7a78;
+
+  --grid: #e6eae7;
+  --axis: #d3d9d5;
+  --border: #e6eae7;
+  --border-strong: #d3d9d5;
 
   /* Categorisch: identiteit, vaste volgorde, nooit doorgerouleerd. */
-  --series-1: #2a78d6; /* afname van het net */
-  --series-2: #eb6834; /* teruglevering */
-  --series-3: #1baf7a; /* batterij / besparing */
-  --series-4: #eda100; /* vierde post */
-  /*
-   * Vijfde reeks: de zon die de meter haalde, in het dagprofiel. Paars, omdat
-   * de vier hierboven blauw, oranje, groen en geel bezetten en een vijfde geel
-   * niet van --series-4 te onderscheiden zou zijn.
-   */
-  --series-5: #8f5bd6;
+  --series-1: #0e7490; /* afname van het net */
+  --series-2: #b4530a; /* teruglevering */
+  --series-3: #1a6b40; /* batterij / besparing */
+  --series-4: #c98500; /* vierde post */
+  --series-5: #7c5cbf; /* de zon die de meter haalde */
 
   /* Sequentieel: één hue, licht naar donker, voor magnitude. */
-  --seq-100: #cde2fb;
-  --seq-200: #9ec5f4;
-  --seq-300: #6da7ec;
-  --seq-400: #3987e5;
-  --seq-500: #256abf;
-  --seq-600: #184f95;
-  --seq-700: #0d366b;
+  --seq-100: #e3ecea;
+  --seq-200: #c2d6d2;
+  --seq-300: #9dbcb6;
+  --seq-400: #6f9e97;
+  --seq-500: #4a807a;
+  --seq-600: #2f625e;
+  --seq-700: #1a3c3b;
 
-  --good: #0ca30c;
-  --warning: #fab219;
-  --critical: #d03b3b;
-  --success-text: #006300;
+  --good: #1a6b40;
+  --warning: #8a5a00;
+  --critical: #b3261e;
+  --success-text: #1a6b40;
 
-  --radius: 10px;
+  --radius: 8px;
   --radius-sm: 6px;
-  --font: system-ui, -apple-system, "Segoe UI", sans-serif;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    color-scheme: dark;
-
-    --surface-1: #1a1a19;
-    --surface-2: #131312;
-    --page: #0d0d0d;
-
-    --text-primary: #ffffff;
-    --text-secondary: #c3c2b7;
-    --text-muted: #898781;
-
-    --grid: #2c2c2a;
-    --axis: #383835;
-    --border: rgba(255, 255, 255, 0.1);
-    --border-strong: rgba(255, 255, 255, 0.18);
-
-    --series-1: #3987e5;
-    --series-2: #d95926;
-    --series-3: #199e70;
-    --series-4: #c98500;
-    --series-5: #a37ae0;
-
-    --seq-100: #0d366b;
-    --seq-200: #184f95;
-    --seq-300: #256abf;
-    --seq-400: #2a78d6;
-    --seq-500: #3987e5;
-    --seq-600: #6da7ec;
-    --seq-700: #9ec5f4;
-
-    --success-text: #0ca30c;
-  }
-}
-
-:root[data-theme="dark"] {
-  color-scheme: dark;
-
-  --surface-1: #1a1a19;
-  --surface-2: #131312;
-  --page: #0d0d0d;
-
-  --text-primary: #ffffff;
-  --text-secondary: #c3c2b7;
-  --text-muted: #898781;
-
-  --grid: #2c2c2a;
-  --axis: #383835;
-  --border: rgba(255, 255, 255, 0.1);
-  --border-strong: rgba(255, 255, 255, 0.18);
-
-  --series-1: #3987e5;
-  --series-2: #d95926;
-  --series-3: #199e70;
-  --series-4: #c98500;
-  --series-5: #a37ae0;
-
-  --seq-100: #0d366b;
-  --seq-200: #184f95;
-  --seq-300: #256abf;
-  --seq-400: #2a78d6;
-  --seq-500: #3987e5;
-  --seq-600: #6da7ec;
-  --seq-700: #9ec5f4;
-
-  --success-text: #0ca30c;
+  --font: var(--font-plex-sans), "Segoe UI", "Helvetica Neue", Arial, sans-serif;
+  --font-mono: var(--font-plex-mono), "SFMono-Regular", Menlo, Consolas, monospace;
+  --nav-h: 56px;
 }
 
 * {
@@ -136,12 +77,15 @@ body {
   padding: 0;
 }
 
+html {
+  font-size: 15px;
+}
+
 body {
   background: var(--page);
   color: var(--text-primary);
   font-family: var(--font);
-  font-size: 16px;
-  line-height: 1.55;
+  line-height: 1.5;
   -webkit-font-smoothing: antialiased;
 }
 
@@ -150,8 +94,13 @@ h2,
 h3 {
   line-height: 1.25;
   margin: 0;
-  font-weight: 620;
-  letter-spacing: -0.011em;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+  color: var(--ac2);
+}
+
+a {
+  color: var(--ac);
 }
 
 button,
@@ -163,7 +112,7 @@ select {
 
 /* Toetsenbordfocus blijft altijd zichtbaar. */
 :focus-visible {
-  outline: 2px solid var(--series-1);
+  outline: 2px solid var(--ac);
   outline-offset: 2px;
   border-radius: var(--radius-sm);
 }
@@ -180,12 +129,14 @@ select {
 /* ── Pagina-indeling ──────────────────────────────────────────────────────── */
 
 .pagina {
-  max-width: 860px;
+  max-width: 980px;
+  width: 100%;
   margin: 0 auto;
-  padding: 32px 20px 96px;
+  padding: 28px 24px 64px;
   display: flex;
   flex-direction: column;
-  gap: 28px;
+  gap: 24px;
+  flex: 1;
 }
 
 .kop h1 {
@@ -397,6 +348,13 @@ input[type="date"] {
   opacity: 0.55;
 }
 
+.antwoord-kop {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
 .antwoord-aanhef {
   color: var(--text-secondary);
   margin: 0;
@@ -404,11 +362,12 @@ input[type="date"] {
 
 .antwoord-bedrag {
   font-size: clamp(2.75rem, 9vw, 4rem);
-  font-weight: 660;
+  font-weight: 700;
   letter-spacing: -0.03em;
   line-height: 1.05;
   margin: 4px 0 8px;
-  color: var(--series-3);
+  color: var(--ac2);
+  font-variant-numeric: tabular-nums;
   display: flex;
   align-items: baseline;
   gap: 12px;
@@ -420,6 +379,17 @@ input[type="date"] {
   font-weight: 500;
   color: var(--text-secondary);
   letter-spacing: 0;
+}
+
+/*
+ * De grondslag onder het antwoord: waar het meten ophoudt en het doortrekken
+ * begint. Klein en grijs — het hoort erbij, maar het is niet het antwoord.
+ */
+.antwoord-grondslag {
+  margin: 10px 0 0;
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  max-width: 62ch;
 }
 
 .antwoord-scenario {
@@ -519,6 +489,107 @@ input[type="date"] {
   outline-offset: 3px;
 }
 
+/*
+ * Aanwijzen: de kaart met de waarden onder de cursor.
+ *
+ * Hij hangt aan een kader búiten de scrollende laag. Binnen .chart-wrap zou
+ * `overflow-x: auto` hem afknippen en zou hij met de plot mee scrollen.
+ */
+.chart-hover {
+  position: relative;
+}
+
+.tip {
+  position: absolute;
+  z-index: 5;
+  transform: translateY(-50%);
+  pointer-events: none;
+  min-width: 150px;
+  max-width: 260px;
+  padding: 9px 11px;
+  border-radius: var(--radius-sm);
+  background: var(--surface-1);
+  border: 1px solid var(--border-strong);
+  box-shadow: 0 6px 20px rgb(26 31 30 / 14%);
+  font-size: 0.82rem;
+  line-height: 1.35;
+  color: var(--text-secondary);
+}
+
+.tip-titel {
+  margin: 0 0 6px;
+  font-weight: 640;
+  font-size: 0.86rem;
+  color: var(--text-primary);
+}
+
+.tip-regels {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.tip-regels li {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.tip-label {
+  display: flex;
+  align-items: baseline;
+  gap: 6px;
+}
+
+.tip-label i {
+  width: 9px;
+  height: 9px;
+  border-radius: 2px;
+  flex: none;
+  transform: translateY(1px);
+}
+
+.tip-waarde {
+  font-variant-numeric: tabular-nums;
+  font-weight: 560;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+.tip-uitkomst {
+  margin-top: 4px;
+  padding-top: 5px;
+  border-top: 1px solid var(--border);
+  font-weight: 640;
+  color: var(--text-primary);
+}
+
+.tip-noot {
+  margin: 7px 0 0;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+/* Het trefvlak vangt de muis; zichtbaar is het nooit. */
+.trefvlak {
+  cursor: crosshair;
+}
+
+/* Wat je aanwijst, licht op áchter de marks. */
+.aangewezen {
+  fill: var(--surface-2);
+}
+
+@media (hover: none) {
+  .tip {
+    font-size: 0.86rem;
+  }
+}
+
 .as-label {
   fill: var(--text-muted);
   font-size: 11px;
@@ -535,6 +606,15 @@ input[type="date"] {
   font-size: 11.5px;
   font-weight: 560;
   font-variant-numeric: tabular-nums;
+}
+
+/* Een label dat over een gevuld vlak valt: een witte rand eromheen houdt het
+   leesbaar zonder dat er een dekvlak onder hoeft. */
+.op-lijn {
+  stroke: var(--surface-1);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+  paint-order: stroke fill;
 }
 
 .legenda {
@@ -585,19 +665,42 @@ input[type="date"] {
   color: var(--text-secondary);
 }
 
-.kloof-balk,
-.post-balk {
+.kloof-balk {
+  position: relative;
   background: var(--surface-2);
   border-radius: 4px;
-  height: 22px;
+  height: 28px;
   overflow: hidden;
 }
 
-.kloof-vulling,
-.post-vulling {
+.kloof-vulling {
   display: block;
   height: 100%;
   border-radius: 4px;
+}
+
+/*
+ * Het gat tussen beide prijzen, als vlak binnen de afnamebalk. Het begint waar
+ * de terugleverbalk eindigt, zodat je het verschil ziet in plaats van het te
+ * moeten uitrekenen.
+ */
+.kloof-gat {
+  position: absolute;
+  inset-block: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-left: 2px dashed var(--surface-1);
+  color: var(--surface-1);
+  font-size: 0.78rem;
+  letter-spacing: 0.01em;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.kloof-gat b {
+  font-weight: 600;
+  padding: 0 6px;
 }
 
 .kloof-waarde {
@@ -628,57 +731,35 @@ input[type="date"] {
 
 /* ── Uitsplitsing ─────────────────────────────────────────────────────────── */
 
-.posten {
+/*
+ * De posten staan als waterval in de grafiek; hieronder alleen nog de
+ * legenda die elke post in één zin uitlegt.
+ */
+.posten-legenda {
   list-style: none;
-  padding: 0;
+  padding: 16px 0 0;
   margin: 0;
   display: flex;
   flex-direction: column;
-  gap: 18px;
-}
-
-.post-kop {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 12px;
-  margin-bottom: 6px;
-}
-
-.post-label {
-  display: flex;
-  align-items: center;
   gap: 8px;
-  font-weight: 540;
-}
-
-.post-waarde {
-  font-variant-numeric: tabular-nums;
-  font-weight: 560;
-}
-
-.post-waarde.negatief {
+  font-size: 0.86rem;
   color: var(--text-secondary);
+  max-width: 78ch;
 }
 
-.post-uitleg {
-  margin: 7px 0 0;
-  font-size: 0.85rem;
-  color: var(--text-muted);
-  max-width: 68ch;
-}
-
-.posten-totaal {
+.posten-legenda li {
   display: flex;
-  justify-content: space-between;
-  border-top: 1px solid var(--border);
-  margin-top: 20px;
-  padding-top: 14px;
-  font-size: 1.05rem;
+  align-items: baseline;
+  gap: 9px;
 }
 
-.posten-totaal strong {
-  font-variant-numeric: tabular-nums;
+.posten-legenda .post-vlak {
+  transform: translateY(1px);
+}
+
+.posten-legenda b {
+  font-weight: 600;
+  color: var(--text-primary);
 }
 
 .posten-noot {
@@ -688,7 +769,7 @@ input[type="date"] {
   max-width: 68ch;
 }
 
-/* ── Verliezen ────────────────────────────────────────────────────────────── */
+/* ── Verliezen: de efficiëntie ────────────────────────────────────────────── */
 
 .visueel-verborgen {
   position: absolute;
@@ -702,55 +783,80 @@ input[type="date"] {
   border: 0;
 }
 
-.verlies {
-  display: flex;
-  flex-direction: column;
-  gap: 22px;
+/*
+ * De omzetting als één blok met zijn eigen kengetal: wat er van je lading
+ * overblijft. De kop zegt wat je leest, zodat het percentage nergens los in de
+ * lucht hangt.
+ */
+.efficientie-blok {
+  padding: 18px 0 4px;
+  border-top: 1px solid var(--border);
 }
 
-.verlies-balklabel {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: 12px;
-  margin-bottom: 7px;
-  font-weight: 540;
+.efficientie-blok:first-child {
+  border-top: 0;
+  padding-top: 4px;
 }
 
-.verlies-balklabel strong {
+.efficientie-kop h4 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 640;
+  color: var(--ac2);
+}
+
+.efficientie-kop p {
+  margin: 3px 0 12px;
+  font-size: 0.86rem;
+  color: var(--text-muted);
+  max-width: 64ch;
+}
+
+.efficientie-zin {
+  margin: 12px 0 0;
+  font-size: 0.9rem;
+  color: var(--text-secondary);
+  max-width: 68ch;
+}
+
+.efficientie-zin strong {
+  color: var(--text-primary);
   font-variant-numeric: tabular-nums;
 }
 
 .verlies-balk {
   display: flex;
-  /* De achtergrond loopt door tot de volle breedte, zodat zichtbaar blijft dat
-     de tweede balk op dezelfde schaal staat als de eerste. */
   background: var(--surface-2);
   border-radius: 4px;
-  height: 26px;
   overflow: hidden;
-  /* 2px tussenruimte tussen de vlakken: die scheidt ze zonder een lijn, ook bij
-     kleurenblindheid en in geforceerde kleuren. */
-  gap: 2px;
+}
+
+.verlies-balk.groot {
+  height: 34px;
+  cursor: crosshair;
 }
 
 .verlies-deel {
-  display: block;
+  display: flex;
+  align-items: center;
+  justify-content: center;
   height: 100%;
-  border-radius: 4px;
-  min-width: 2px;
+  min-width: 0;
+  overflow: hidden;
 }
 
-.verlies-onder {
-  margin: 8px 0 0;
-  font-size: 0.85rem;
-  color: var(--text-muted);
-  max-width: 68ch;
+.verlies-deel b {
+  font-size: 0.82rem;
+  font-weight: 640;
+  color: var(--surface-1);
+  white-space: nowrap;
 }
 
-.verlies-onder strong {
-  color: var(--text-secondary);
-  font-variant-numeric: tabular-nums;
+/* Het ontlaadverlies krijgt dezelfde kleur als het laadverlies — het is
+   dezelfde omzetting — maar een dunne scheiding, zodat de twee posten uit de
+   tabel wel terug te vinden zijn. */
+.verlies-deel.streep {
+  box-shadow: inset 1px 0 0 var(--surface-1);
 }
 
 .verlies-tabel {
@@ -795,13 +901,10 @@ input[type="date"] {
   margin-top: 5px;
 }
 
-.verlies-uitleg {
-  display: block;
-  margin-top: 4px;
-  font-weight: 400;
-  font-size: 0.84rem;
-  color: var(--text-muted);
-  max-width: 52ch;
+/* De tabel staat na de kerncijfers en herhaalt ze niet: hij splitst alleen de
+   posten uit die daar als één getal staan. */
+.verlies-tabel {
+  margin-top: 18px;
 }
 
 .verlies-tabel tfoot th,
@@ -1098,6 +1201,12 @@ input[type="date"] {
   font-variant-numeric: tabular-nums;
 }
 
+/* Een cijfer dat erbij hoort maar niet de conclusie is. */
+.kerncijfers dd.zacht {
+  color: var(--text-secondary);
+  font-weight: 560;
+}
+
 .kerncijfers dd.goed {
   color: var(--success-text);
 }
@@ -1188,6 +1297,40 @@ input[type="date"] {
   color: var(--series-3);
 }
 
+/* De derde stand onder een tegel: wat het wordt onder het nettarief van 2029. */
+/*
+ * Hoeveel er veranderde, als chipje onder de twee waarden. Procentpunten bij
+ * een percentage, een percentage bij kilowatturen: "van 26% naar 35%" is negen
+ * procentpunt, niet "35% meer".
+ */
+.stat-delta {
+  display: inline-block;
+  margin-top: 6px;
+  padding: 2px 8px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  font-size: 0.78rem;
+  font-weight: 560;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-secondary);
+}
+
+.stat-delta.goed {
+  background: var(--acs);
+  color: var(--success-text);
+}
+
+.stat-extra {
+  margin-top: 4px;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-extra strong {
+  color: var(--series-3);
+}
+
 .stat-uitleg {
   margin: 5px 0 0;
   font-size: 0.8rem;
@@ -1257,8 +1400,8 @@ input[type="date"] {
 /* Zodra de invoer is gewijzigd, vraagt de knop om aandacht: anders zou je naar
    een uitkomst kijken die niet meer bij je instellingen hoort. */
 .bereken-knop.nadruk {
-  background: var(--series-1);
-  border-color: var(--series-1);
+  background: var(--ac);
+  border-color: var(--ac);
   color: #fff;
 }
 
@@ -1350,44 +1493,65 @@ input[type="date"] {
   height: 17px;
 }
 
-/* ── Tariefblad van het nettariefscenario ─────────────────────────────────── */
-
-.tariefblad {
-  display: flex;
-  flex-direction: column;
-  gap: 3px;
-  margin: 4px 0 8px;
-  overflow-x: auto;
-}
-
-.tariefblad-rij {
-  display: grid;
-  grid-template-columns: 56px repeat(24, minmax(14px, 1fr));
-  gap: 2px;
-  align-items: center;
-}
-
-.tariefblad-naam {
-  font-size: 0.8rem;
-  color: var(--text-muted);
-}
-
-.tariefblad-cel {
-  height: 20px;
-  border-radius: 2px;
-}
-
-.tariefblad-as .tariefblad-cel {
-  height: auto;
-  font-size: 0.7rem;
-  color: var(--text-muted);
-  text-align: left;
-}
+/* ── Tarievenblad van het nettariefscenario ───────────────────────────────── */
 
 .tariefblad-legenda {
-  margin: 0 0 14px;
+  margin: 10px 0 14px;
   font-size: 0.82rem;
   color: var(--text-muted);
+  max-width: 76ch;
+}
+
+/*
+ * De wat-als en de verantwoording staan uitgeklapt onder de figuur. Ze horen
+ * erbij — een scenario zonder bronvermelding is een bewering — maar ze hoeven
+ * niet mee te lezen met de conclusie erboven.
+ */
+details.voetnoot-uitklap {
+  margin-top: 14px;
+  border-top: 1px solid var(--border);
+  padding-top: 12px;
+}
+
+details.voetnoot-uitklap + details.voetnoot-uitklap {
+  border-top: 0;
+  padding-top: 0;
+  margin-top: 6px;
+}
+
+details.voetnoot-uitklap > summary {
+  list-style: none;
+  cursor: pointer;
+  font-size: 0.88rem;
+  font-weight: 560;
+  color: var(--ac);
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+details.voetnoot-uitklap > summary::-webkit-details-marker {
+  display: none;
+}
+
+details.voetnoot-uitklap > summary::before {
+  content: "▸";
+  transition: transform 0.15s;
+}
+
+details.voetnoot-uitklap[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+details.voetnoot-uitklap p {
+  margin: 10px 0 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  max-width: 72ch;
+}
+
+details.voetnoot-uitklap .schakel {
+  margin-top: 12px;
 }
 
 .reset:disabled {
@@ -1695,4 +1859,844 @@ input[type="date"] {
 .heat-noot {
   color: var(--text-muted);
   font-size: 0.82rem;
+}
+
+/* ── Schil: balk met tabs, voet ───────────────────────────────────────────── */
+
+.schil {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+}
+
+.balk {
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  min-height: var(--nav-h);
+  background: var(--ac);
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 0 24px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.14);
+  overflow-x: auto;
+}
+
+.balk-merk {
+  color: #fff;
+  font-weight: 700;
+  font-size: 1rem;
+  letter-spacing: -0.01em;
+  white-space: nowrap;
+  text-decoration: none;
+}
+
+.balk-merk span {
+  color: #9fd9c9;
+  font-weight: 500;
+}
+
+.balk-meta {
+  color: rgba(255, 255, 255, 0.55);
+  font-size: 0.78rem;
+  white-space: nowrap;
+  margin-left: auto;
+}
+
+/*
+ * Tabs in de balk. Semantiek van een tablist: pijltjestoetsen wisselen, Tab
+ * springt eruit. De panelen blijven gemount maar verborgen, zodat de dagkiezer
+ * zijn gekozen dag houdt als je heen en weer gaat.
+ */
+.tabs {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  flex: 1;
+}
+
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 12px;
+  border-radius: 6px;
+  border: 0;
+  background: none;
+  color: rgba(255, 255, 255, 0.72);
+  font-size: 0.86rem;
+  font-weight: 500;
+  white-space: nowrap;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.tab:hover {
+  background: rgba(255, 255, 255, 0.12);
+  color: #fff;
+}
+
+.tab[aria-selected="true"] {
+  background: rgba(255, 255, 255, 0.2);
+  color: #fff;
+  font-weight: 700;
+}
+
+.tab:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: 1px;
+}
+
+.tab-nummer {
+  font-size: 0.72rem;
+  opacity: 0.7;
+}
+
+/*
+ * De stapper onderaan: vorige — waar je bent — volgende.
+ *
+ * De pil is een venster van vaste breedte waar één titel in past; alle vijf
+ * staan naast elkaar op een spoor dat opschuift. Vaste breedte is de hele
+ * truc: zonder dat springt de pil per titel van maat en schuift er niets.
+ */
+.stapper {
+  /* Drie kolommen, waarvan de buitenste even breed: dan staat de pil precies
+     in het midden, ook al is "Wat als" langer dan "Start". */
+  display: grid;
+  grid-template-columns: 1fr auto 1fr;
+  align-items: center;
+  gap: 12px;
+  margin: 0 auto 40px;
+  padding: 18px 24px;
+  width: 100%;
+  max-width: 980px;
+  border-top: 1px solid var(--border);
+}
+
+.stapper-knop {
+  display: inline-flex;
+  align-items: center;
+  gap: 10px;
+  justify-self: start;
+  max-width: 100%;
+  padding: 8px 14px;
+  border: 1px solid var(--border-strong);
+  border-radius: 999px;
+  background: var(--surface-1);
+  color: var(--ac);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s, color 0.15s;
+}
+
+.stapper-knop:hover:not(:disabled) {
+  background: var(--acs);
+  border-color: var(--ac);
+}
+
+.stapper-knop:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.stapper-zij {
+  display: flex;
+  flex-direction: column;
+  line-height: 1.2;
+  text-align: left;
+}
+
+.stapper-knop.rechts {
+  justify-self: end;
+}
+
+.stapper-knop.rechts .stapper-zij {
+  text-align: right;
+}
+
+.stapper-richting {
+  font-size: 0.72rem;
+  color: var(--text-muted);
+}
+
+.stapper-naam {
+  font-size: 0.92rem;
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.stapper-chevron {
+  flex: none;
+}
+
+.stapper-venster {
+  flex: none;
+  width: 11rem;
+  overflow: hidden;
+  border-radius: 999px;
+  background: var(--ac);
+  padding: 9px 0;
+}
+
+.stapper-spoor {
+  display: flex;
+  transition: transform 0.42s cubic-bezier(0.32, 0.72, 0, 1);
+}
+
+.stapper-titel {
+  flex: 0 0 100%;
+  text-align: center;
+  color: #fff;
+  font-size: 1rem;
+  font-weight: 700;
+  letter-spacing: 0.01em;
+  white-space: nowrap;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .stapper-spoor {
+    transition: none;
+  }
+}
+
+/* Op smalle schermen alleen de chevrons: de namen eromheen passen niet naast
+   een pil van elf rem, en de pil zegt al waar je bent. */
+@media (max-width: 599px) {
+  .stapper {
+    padding: 14px 16px;
+  }
+
+  .stapper-zij {
+    display: none;
+  }
+
+  .stapper-knop {
+    padding: 8px 10px;
+  }
+
+  .stapper-venster {
+    width: 9rem;
+  }
+}
+
+.paneel[hidden] {
+  display: none;
+}
+
+.paneel {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.voet {
+  border-top: 1px solid var(--border);
+  padding: 20px 24px;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+  justify-content: space-between;
+}
+
+/* ── Sectiekop: eyebrow, stelling, toelichting ────────────────────────────── */
+
+.sectiekop {
+  margin-bottom: 4px;
+}
+
+.eyebrow {
+  display: block;
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--ac);
+  opacity: 0.7;
+  margin-bottom: 4px;
+}
+
+.sectiekop h1,
+.sectiekop h2 {
+  font-size: 1.5rem;
+  text-wrap: balance;
+}
+
+.sectiekop p {
+  font-size: 0.92rem;
+  color: var(--text-secondary);
+  margin: 8px 0 0;
+  max-width: 68ch;
+}
+
+/* ── Notitie ──────────────────────────────────────────────────────────────── */
+
+.notitie {
+  border-left: 3px solid var(--ac);
+  background: var(--acs);
+  padding: 10px 14px;
+  border-radius: 0 6px 6px 0;
+  font-size: 0.86rem;
+  color: var(--text-primary);
+  display: flex;
+  gap: 14px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.notitie.waarschuwing {
+  border-color: var(--warning);
+  background: #f9f1de;
+}
+
+.notitie b {
+  color: inherit;
+}
+
+.notitie p {
+  margin: 0;
+  flex: 1;
+}
+
+/* ── KPI-tegels: bovenrand in de kleur van de reeks ───────────────────────── */
+
+.stat {
+  position: relative;
+  padding-top: 18px;
+}
+
+.stat::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 0;
+  height: 4px;
+  background: var(--tegel-accent, var(--ac));
+  border-radius: var(--radius) var(--radius) 0 0;
+}
+
+.stat-kop {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 8px;
+}
+
+/* ── Knoppen in de kop van een figuur ─────────────────────────────────────── */
+
+.figure-acties {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+/* ── "Hoe is dit berekend?" ───────────────────────────────────────────────── */
+
+.uitleg-knop {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px 3px 7px;
+  border-radius: 20px;
+  border: 1.5px solid var(--border-strong);
+  background: var(--surface-1);
+  color: var(--ac);
+  font-size: 0.76rem;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.uitleg-knop:hover {
+  background: var(--acs);
+  border-color: var(--ac);
+}
+
+.uitleg-knop span {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: var(--ac);
+  color: #fff;
+  font-size: 0.68rem;
+  font-weight: 700;
+}
+
+.uitleg-knop.icoon {
+  padding: 0;
+  border: 0;
+  background: none;
+}
+
+.uitleg-knop.icoon span {
+  width: 18px;
+  height: 18px;
+  font-size: 0.72rem;
+  background: var(--acs);
+  color: var(--ac2);
+}
+
+.uitleg-knop.icoon:hover span {
+  background: var(--ac);
+  color: #fff;
+}
+
+dialog.uitleg {
+  width: min(660px, calc(100vw - 32px));
+  max-height: 86vh;
+  margin: auto;
+  padding: 0;
+  border: none;
+  border-radius: 10px;
+  background: var(--surface-1);
+  color: var(--text-primary);
+  box-shadow: 0 18px 50px rgba(0, 0, 0, 0.28);
+}
+
+dialog.uitleg::backdrop {
+  background: rgba(16, 24, 22, 0.5);
+}
+
+.uitleg-kop {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 18px 20px 14px;
+  background: var(--ac);
+  color: #fff;
+  border-radius: 10px 10px 0 0;
+}
+
+.uitleg-kop h3 {
+  font-size: 1.05rem;
+  color: #fff;
+  line-height: 1.25;
+}
+
+.uitleg-sluit {
+  border: none;
+  background: rgba(255, 255, 255, 0.16);
+  color: #fff;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  font-size: 1.05rem;
+  line-height: 1;
+  cursor: pointer;
+  flex-shrink: 0;
+}
+
+.uitleg-sluit:hover {
+  background: rgba(255, 255, 255, 0.3);
+}
+
+.uitleg-inhoud {
+  padding: 18px 20px 22px;
+  overflow-y: auto;
+  max-height: calc(86vh - 62px);
+  font-size: 0.9rem;
+}
+
+.uitleg-inhoud h4 {
+  font-size: 0.74rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+  color: var(--ac);
+  margin: 20px 0 8px;
+}
+
+.uitleg-lead {
+  font-size: 0.98rem;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.uitleg-bron {
+  list-style: none;
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+}
+
+.uitleg-bron li {
+  padding-left: 14px;
+  position: relative;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.uitleg-bron li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.55em;
+  width: 5px;
+  height: 5px;
+  border-radius: 50%;
+  background: var(--ac);
+}
+
+.uitleg-bron b {
+  color: var(--ac2);
+}
+
+.uitleg-stappen {
+  counter-reset: u;
+  list-style: none;
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+}
+
+.uitleg-stappen > li {
+  position: relative;
+  padding-left: 32px;
+  line-height: 1.55;
+}
+
+.uitleg-stappen > li::before {
+  counter-increment: u;
+  content: counter(u);
+  position: absolute;
+  left: 0;
+  top: -1px;
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: var(--acs);
+  color: var(--ac2);
+  font-size: 0.74rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.uitleg-tabel {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.86rem;
+}
+
+.uitleg-tabel td {
+  padding: 7px 10px;
+  border-bottom: 1px solid var(--border);
+}
+
+.uitleg-tabel td.num {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.uitleg-tabel tr:last-child td {
+  border-bottom: none;
+}
+
+.uitleg-uitkomst td {
+  background: var(--acs);
+  font-weight: 700;
+  color: var(--ac2);
+}
+
+.uitleg-letop {
+  list-style: none;
+  display: grid;
+  gap: 8px;
+  margin: 0;
+  padding: 0;
+}
+
+.uitleg-letop li {
+  padding-left: 22px;
+  position: relative;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+.uitleg-letop li::before {
+  content: "!";
+  position: absolute;
+  left: 0;
+  top: 0;
+  width: 15px;
+  height: 15px;
+  border-radius: 50%;
+  background: #f7edd6;
+  color: var(--warning);
+  font-size: 0.66rem;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.uitleg-noot {
+  font-size: 0.84rem;
+  color: var(--text-secondary);
+  margin: 8px 0 0;
+}
+
+.uitleg-voet {
+  margin: 20px 0 0;
+  padding-top: 14px;
+  border-top: 1px solid var(--border);
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+/* ── Geavanceerde instellingen: uitklapbaar ───────────────────────────────── */
+
+details.uitklap > summary {
+  list-style: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding: 16px 22px;
+}
+
+details.uitklap > summary::-webkit-details-marker {
+  display: none;
+}
+
+details.uitklap > summary::before {
+  content: "▸";
+  color: var(--ac);
+  margin-right: 10px;
+  transition: transform 0.15s;
+}
+
+details.uitklap[open] > summary::before {
+  transform: rotate(90deg);
+}
+
+details.uitklap[open] > summary {
+  border-bottom: 1px solid var(--border);
+}
+
+.summary-tekst {
+  display: flex;
+  align-items: baseline;
+  gap: 12px;
+  flex: 1;
+}
+
+.summary-tekst h2 {
+  font-size: 1.05rem;
+}
+
+.summary-tekst span {
+  font-size: 0.82rem;
+  color: var(--text-secondary);
+}
+
+.getal-veld.klein input {
+  font-size: 0.95rem;
+  padding: 7px 0;
+}
+
+.getal-veld.eenheid-voor {
+  flex-direction: row;
+}
+
+/* ── Instellingen bewaren ─────────────────────────────────────────────────── */
+
+.bewaren {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 18px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.bewaren-kop {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.bewaren-kop h2 {
+  font-size: 1.05rem;
+}
+
+.bewaren-kop p {
+  margin: 4px 0 0;
+  font-size: 0.85rem;
+  color: var(--text-secondary);
+  max-width: 62ch;
+}
+
+.bewaren-rij {
+  display: flex;
+  gap: 10px;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.bewaren-rij .getal-veld {
+  flex: 1;
+  min-width: 180px;
+}
+
+.profielen {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 6px;
+}
+
+.profiel {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  font-size: 0.9rem;
+}
+
+.profiel-naam {
+  font-weight: 600;
+  flex: 1;
+}
+
+.profiel-meta {
+  color: var(--text-muted);
+  font-size: 0.8rem;
+}
+
+.knop {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  border-radius: 6px;
+  border: 1.5px solid var(--ac);
+  background: var(--ac);
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.knop:hover:not(:disabled) {
+  background: var(--ac2);
+}
+
+.knop:disabled {
+  opacity: 0.55;
+  cursor: default;
+}
+
+.knop.licht {
+  background: transparent;
+  color: var(--ac);
+}
+
+.knop.licht:hover:not(:disabled) {
+  background: var(--acs);
+}
+
+.knop.klein {
+  padding: 4px 10px;
+  font-size: 0.78rem;
+}
+
+/* ── Methode: wat we niet weten ───────────────────────────────────────────── */
+
+.methode-lijst {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  display: grid;
+  gap: 12px;
+}
+
+.methode-lijst li {
+  padding-left: 16px;
+  position: relative;
+  font-size: 0.92rem;
+  color: var(--text-secondary);
+}
+
+.methode-lijst li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.6em;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--ac);
+}
+
+.methode-lijst b {
+  color: var(--text-primary);
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  padding: 2px 8px;
+  border-radius: 10px;
+  font-size: 0.74rem;
+  font-weight: 700;
+  white-space: nowrap;
+  margin-left: 8px;
+  vertical-align: middle;
+}
+
+.badge.goed {
+  background: #e3f1e8;
+  color: var(--good);
+}
+
+.badge.let-op {
+  background: #f7edd6;
+  color: var(--warning);
+}
+
+.badge.neutraal {
+  background: var(--grid);
+  color: var(--text-secondary);
+}
+
+@media (max-width: 640px) {
+  .balk {
+    padding: 0 14px;
+    gap: 12px;
+  }
+  .balk-meta {
+    display: none;
+  }
+  .pagina {
+    padding: 20px 14px 48px;
+  }
 }

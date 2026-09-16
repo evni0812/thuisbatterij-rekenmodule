@@ -15,13 +15,19 @@
  * en die twee helften gaan zich straks heel verschillend gedragen.
  */
 
+import { useState, type ReactNode } from "react";
 import type { MonthTotals } from "../lib/model/analysis";
-import { euro, getal } from "../lib/format";
-import { Figure } from "./chart-parts";
+import { centPerKwh, euro, getal } from "../lib/format";
+import { Figure, Grafiek, Trefvlak, useTip } from "./chart-parts";
 
 const MAANDEN = [
   "jan", "feb", "mrt", "apr", "mei", "jun",
   "jul", "aug", "sep", "okt", "nov", "dec",
+];
+
+const VOLUIT = [
+  "januari", "februari", "maart", "april", "mei", "juni",
+  "juli", "augustus", "september", "oktober", "november", "december",
 ];
 
 /** April tot en met september; dezelfde grens als het nettarief vanaf 2029. */
@@ -34,14 +40,22 @@ const HOOGTE = 190;
 const LINKS = 52;
 const RECHTS = 16;
 const ONDER = 46;
+/**
+ * Ruimte boven de plot voor het bedrag dat bij elke staaf staat. Zonder die
+ * marge liep het label van de hoogste maand buiten de viewBox en knipte de
+ * browser hem af — precies het getal waar het om gaat.
+ */
+const BOVEN = 24;
 
-export function MaandVerloop({ maanden }: { maanden: MonthTotals[] }) {
+export function MaandVerloop({ maanden, actie }: { maanden: MonthTotals[]; actie?: ReactNode }) {
+  const { kader, tip, toon, wis } = useTip();
+  const [aangewezen, setAangewezen] = useState<number | null>(null);
   if (maanden.length < 2) return null;
 
   const hoogste = Math.max(...maanden.map((m) => m.savingEur), 0.01);
   const laagste = Math.min(...maanden.map((m) => m.savingEur), 0);
   const span = hoogste - laagste;
-  const y = (v: number) => (1 - (v - laagste) / span) * HOOGTE;
+  const y = (v: number) => BOVEN + (1 - (v - laagste) / span) * HOOGTE;
   const breedte = (B - LINKS - RECHTS) / maanden.length;
   const staaf = Math.min(46, breedte * 0.62);
 
@@ -53,6 +67,7 @@ export function MaandVerloop({ maanden }: { maanden: MonthTotals[] }) {
 
   return (
     <Figure
+      actie={actie}
       titel={
         som(zomer) > som(winter)
           ? "De batterij verdient zijn geld in de zomer"
@@ -67,9 +82,16 @@ export function MaandVerloop({ maanden }: { maanden: MonthTotals[] }) {
         </>
       }
     >
-      <div className="chart-wrap">
+      <Grafiek
+        kader={kader}
+        tip={tip}
+        onWis={wis}
+        label={`Besparing per maand, van ${euro(slechtste.savingEur)} in ${
+          MAANDEN[slechtste.month - 1]
+        } tot ${euro(beste.savingEur)} in ${MAANDEN[beste.month - 1]}`}
+      >
       <svg
-        viewBox={`0 0 ${B} ${HOOGTE + ONDER}`}
+        viewBox={`0 0 ${B} ${BOVEN + HOOGTE + ONDER}`}
         className="chart"
         role="img"
         aria-label={`Besparing per maand, van ${euro(slechtste.savingEur)} in ${
@@ -85,12 +107,24 @@ export function MaandVerloop({ maanden }: { maanden: MonthTotals[] }) {
               x={LINKS + i * breedte}
               y={0}
               width={breedte}
-              height={HOOGTE}
+              height={BOVEN + HOOGTE}
               fill="var(--series-4)"
               opacity={0.07}
             />
           ) : null,
         )}
+
+        {/* De maand die je aanwijst, gemarkeerd achter de staven. */}
+        {aangewezen !== null ? (
+          <rect
+            className="aangewezen"
+            x={LINKS + aangewezen * breedte}
+            y={0}
+            width={breedte}
+            height={BOVEN + HOOGTE}
+            opacity={0.85}
+          />
+        ) : null}
 
         <line x1={LINKS} x2={B - RECHTS} y1={y(0)} y2={y(0)} stroke="var(--axis)" />
         <text x={LINKS - 10} y={y(0)} textAnchor="end" dominantBaseline="middle" className="as-label">
@@ -124,14 +158,56 @@ export function MaandVerloop({ maanden }: { maanden: MonthTotals[] }) {
               >
                 {getal(m.savingEur, 0)}
               </text>
-              <text x={cx} y={HOOGTE + 18} textAnchor="middle" className="as-label">
+              <text x={cx} y={BOVEN + HOOGTE + 18} textAnchor="middle" className="as-label">
                 {MAANDEN[m.month - 1]}
               </text>
             </g>
           );
         })}
+
+        {/* De trefvlakken bovenop: een hele maandkolom is te raken, niet alleen
+            de staaf. */}
+        {maanden.map((m, i) => (
+          <Trefvlak
+            key={`t${m.month}`}
+            x={LINKS + i * breedte}
+            y={0}
+            breedte={breedte}
+            hoogte={BOVEN + HOOGTE}
+            onWijs={(punt) => {
+              setAangewezen(i);
+              toon(punt, {
+                titel: VOLUIT[m.month - 1]!,
+                regels: [
+                  {
+                    kleur: m.savingEur >= 0 ? "var(--series-3)" : "var(--critical)",
+                    label: "Besparing",
+                    waarde: euro(m.savingEur),
+                    uitkomst: true,
+                  },
+                  { label: "Laadbeurten", waarde: getal(m.cycles, 0) },
+                  {
+                    label: "Prijsverschil per dag",
+                    waarde: centPerKwh(m.priceSpreadEurPerKwh),
+                  },
+                  {
+                    label: "Van het net",
+                    waarde: `${getal(m.gridImportBatteryKwh, 0)} kWh`,
+                  },
+                ],
+                noot: isZomer(m.month)
+                  ? "Zomer: de batterij vangt vooral zonoverschot af."
+                  : "Winter: de batterij leeft van het verschil tussen nacht en avond.",
+              });
+            }}
+            onWis={() => {
+              setAangewezen(null);
+              wis();
+            }}
+          />
+        ))}
       </svg>
-      </div>
+      </Grafiek>
 
       <dl className="kerncijfers">
         <div>

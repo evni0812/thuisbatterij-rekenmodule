@@ -2,8 +2,6 @@ import { describe, expect, it } from "vitest";
 import { buildQuarterAxis, LocalTimeIndex } from "../lib/data/timeaxis";
 import {
   equivalentCycles,
-  marginalWearCostPerKwh,
-  WEAR_ONDERGRENS_DEEL,
   remainingCapacityFraction,
   roundTripEfficiency,
   usableCapacityKwh,
@@ -32,7 +30,6 @@ function spec(over: Partial<BatterySpec> = {}): BatterySpec {
     maxChargeKw: 3.6,
     maxDischargeKw: 3.6,
     efficiency: Math.sqrt(0.92),
-    standbyWatt: 0,
     wearCostEurPerKwh: 0,
     ...over,
   };
@@ -79,19 +76,15 @@ function saving(
 }
 
 describe("energiebalans", () => {
-  it("sluit per kwartier voor beide strategieën, ook met standby", () => {
+  it("sluit per kwartier voor beide strategieën", () => {
     const w = makeWindow(7);
-    // Alle presets hebben 7 tot 25 W standby; de balans moet dat meenemen.
-    for (const standbyWatt of [0, 15]) {
-      const s = spec({ standbyWatt });
-      const standby = (standbyWatt / 1000) * HOURS_PER_STEP;
-      for (const fn of [dispatchOptimal, dispatchRolling]) {
-        const r = fn(w, s, TARIFF);
-        for (let i = 0; i < w.residualKwh.length; i++) {
-          const links = w.residualKwh[i]! + standby + r.chargeKwh[i]! - r.dischargeKwh[i]!;
-          const rechts = r.gridImportKwh[i]! - r.gridExportKwh[i]! - r.curtailedKwh[i]!;
-          expect(Math.abs(links - rechts)).toBeLessThan(1e-9);
-        }
+    const s = spec();
+    for (const fn of [dispatchOptimal, dispatchRolling]) {
+      const r = fn(w, s, TARIFF);
+      for (let i = 0; i < w.residualKwh.length; i++) {
+        const links = w.residualKwh[i]! + r.chargeKwh[i]! - r.dischargeKwh[i]!;
+        const rechts = r.gridImportKwh[i]! - r.gridExportKwh[i]! - r.curtailedKwh[i]!;
+        expect(Math.abs(links - rechts)).toBeLessThan(1e-9);
       }
     }
   });
@@ -437,92 +430,76 @@ describe("de regelaar volgt zijn eigen plan", () => {
 
 describe("slijtage als schaduwprijs", () => {
   /**
-   * Een batterij gaat kapot aan het eerste van twee dingen: ouderdom of
-   * doorzet. Maakt hij zijn laadbeurten niet op binnen zijn kalenderlevensduur,
-   * dan kost een extra beurt niets — hij was toch al afgeschreven op tijd.
+   * De regel is simpel: is de slijtage hoger dan wat de handel oplevert, dan
+   * handelen we niet. De planner rekent daarom met de volle slijtageprijs per
+   * geleverde kWh, dezelfde die als zichtbare post naast de besparing staat.
    *
-   * De drempel stond eerder altijd op de volle aanschafprijs per beurt. Voor een
-   * FoxESS S22 was dat 11,3 ct/kWh, waardoor hij 251 beurten per jaar draaide en
-   * na vijftien jaar stierf met 40% van zijn 6.000 beurten ongebruikt. Dat kostte
-   * 12 euro per jaar aan besparing die er gewoon lag.
+   * Er zat eerder een marginale drempel tussen (20% van de prijs zolang de
+   * beurten binnen de kalenderlevensduur niet schaars waren). Die liet de
+   * batterij handelen op dagen waar de beurt méér aan slijtage kostte dan hij
+   * opleverde: op 18 december 2025 € 0,07 opbrengst tegen € 0,12 slijtage.
    */
-  it("rekent de ondergrens aan als de laadbeurten niet opraken", () => {
-    /**
-     * Eerder was dit nul: raakt de batterij zijn beurten niet op, dan kost een
-     * extra beurt niets. Dat botste met de rest van het model, want
-     * remainingCapacityFraction rekent 20% capaciteitsverlies over de
-     * cycluslevensduur, ongeacht schaarste. De businesscase boekte een beurt
-     * dus wél en de dispatch niet.
-     */
+  function vlakMetAvondpiek(nachtPrijs: number, avondPrijs: number): Window {
+    const startMs = buildQuarterAxis("2025-01-01", "2025-01-08");
+    const n = startMs.length;
+    const residual = new Float64Array(n).fill(0.3);
+    const market = new Float64Array(n);
+    for (let i = 0; i < n; i++) {
+      const uur = (i % 96) / 4;
+      market[i] = uur >= 17 && uur < 21 ? avondPrijs : nachtPrijs;
+    }
+    return { startMs, residualKwh: residual, prices: buildPriceSeries(market, TARIFF) };
+  }
+
+  it("laat de batterij stilstaan als de marge de slijtage niet dekt", () => {
     const s = spec({ capacityKwh: 2.1, depthOfCharge: 0.9 });
-    // 250 beurten per jaar, 15 jaar: 3.750 van de 6.000. Niet schaars.
     const vol = wearCostPerKwh(1199, 6000, s);
-    expect(marginalWearCostPerKwh(1199, 6000, s, 250, 15)).toBeCloseTo(
-      vol * WEAR_ONDERGRENS_DEEL,
-      12,
-    );
+    // Ruwweg 11 ct per geleverde kWh. Een marge van 6 cent dekt dat niet, ook
+    // niet vóór het omzettingsverlies.
+    expect(vol).toBeGreaterThan(0.06);
+    const w = vlakMetAvondpiek(0.1, 0.16);
+    const res = dispatchRolling(w, { ...s, wearCostEurPerKwh: vol }, TARIFF);
+    expect(res.equivalentCycles).toBe(0);
+    // Tegen 20% van de prijs — de oude ondergrens — had hij wél gehandeld.
+    const oud = dispatchRolling(w, { ...s, wearCostEurPerKwh: vol * 0.2 }, TARIFF);
+    expect(oud.equivalentCycles).toBeGreaterThan(1);
   });
 
-  it("laat de analyseperiode het gedrag van de batterij niet sturen", () => {
-    /**
-     * De kalenderlevensduur hoort bij de accu, de analyseperiode bij de
-     * gebruiker. Eerder werd hier `analysisYears` ingevuld: zette je de
-     * doorrekening op tien jaar, dan zakte de drempel naar nul en ging de
-     * batterij vrijer handelen — een financiële schuif die het fysieke gedrag
-     * veranderde, en daarmee de getoonde besparing.
-     *
-     * Deze test bewaakt alleen de vorm: dezelfde batterij met dezelfde
-     * kalenderlevensduur geeft dezelfde drempel. Dat de aanroepers die
-     * levensduur uit de preset halen en niet uit de instellingen, is te zien
-     * aan het ontbreken van `analysisYears` bij elke aanroep.
-     */
+  it("handelt wél als de marge de slijtage ruim dekt", () => {
     const s = spec({ capacityKwh: 2.1, depthOfCharge: 0.9 });
-    const a = marginalWearCostPerKwh(1199, 6000, s, 500, 15);
-    const b = marginalWearCostPerKwh(1199, 6000, s, 500, 15);
-    expect(a).toBe(b);
-    // Een kortere kalenderlevensduur maakt beurten mínder schaars, dus goedkoper.
-    expect(marginalWearCostPerKwh(1199, 6000, s, 500, 10)).toBeLessThan(a);
-  });
-
-  it("rekent wél af zodra de beurten schaars worden", () => {
-    const s = spec({ capacityKwh: 2.1, depthOfCharge: 0.9 });
-    // 600 beurten per jaar, 15 jaar: 9.000 van de 6.000. Ruim over.
-    const schaars = marginalWearCostPerKwh(1199, 6000, s, 600, 15);
-    expect(schaars).toBeGreaterThan(0);
-    // En nooit meer dan de volledige prijs per beurt.
-    expect(schaars).toBeLessThanOrEqual(wearCostPerKwh(1199, 6000, s));
-  });
-
-  it("rekent strenger naarmate de beurten schaarser zijn", () => {
-    const s = spec({ capacityKwh: 2.1, depthOfCharge: 0.9 });
-    const matig = marginalWearCostPerKwh(1199, 6000, s, 500, 15);
-    const nijpend = marginalWearCostPerKwh(1199, 6000, s, 900, 15);
-    expect(nijpend).toBeGreaterThan(matig);
-  });
-
-  it("loopt continu op vanaf de grens, zonder sprong", () => {
-    /**
-     * De verwachting van het aantal beurten komt uit een proefrun. Een sprong
-     * op de grens zou de dispatch bij een minieme wijziging in capaciteit of
-     * vermogen abrupt van gedrag laten wisselen. Eerder sprong de drempel hier
-     * van 0,00 naar 5,60 ct/kWh tussen 400 en 401 beurten per jaar.
-     */
-    const s = spec({ capacityKwh: 2.1, depthOfCharge: 0.9 });
-    const opDeGrens = marginalWearCostPerKwh(1199, 6000, s, 400, 15);
-    const netErover = marginalWearCostPerKwh(1199, 6000, s, 401, 15);
     const vol = wearCostPerKwh(1199, 6000, s);
-    // Beide op de ondergrens: de schaarste is daar nog kleiner dan die 20%.
-    expect(opDeGrens).toBeCloseTo(vol * WEAR_ONDERGRENS_DEEL, 12);
-    expect(netErover).toBeCloseTo(vol * WEAR_ONDERGRENS_DEEL, 12);
-    // En de aanloop is nog steeds continu: bij echte schaarste loopt hij op.
-    expect(marginalWearCostPerKwh(1199, 6000, s, 500, 15)).toBeGreaterThan(opDeGrens);
-    // En bij twee keer zoveel beurten als er zijn, de volle prijs.
-    expect(marginalWearCostPerKwh(1199, 6000, s, 800, 15)).toBeCloseTo(vol, 9);
+    const w = vlakMetAvondpiek(0.1, 0.4);
+    const res = dispatchRolling(w, { ...s, wearCostEurPerKwh: vol }, TARIFF);
+    expect(res.equivalentCycles).toBeGreaterThan(1);
   });
 
-  it("laat een batterij die niets kostte vrij cyclen", () => {
-    const s = spec();
-    expect(marginalWearCostPerKwh(0, 6000, s, 5000, 15)).toBe(0);
+  it("rekent in de doorrekening met dezelfde prijs als hij toont", () => {
+    // De slijtage per jaar die het resultaat toont, is precies geleverd ×
+    // slijtageprijs; en die prijs is de drempel waarmee de planner rekende.
+    const w = makeWindow(30, 9);
+    const s = spec({ capacityKwh: 5, maxChargeKw: 2.5, maxDischargeKw: 2.5 });
+    const res = runAnalysis({
+      windows: [
+        { year: 2025, firstDay: "2025-01-01", lastDay: "2025-01-30", isFullYear: true, window: w },
+      ],
+      battery: s,
+      tariff: TARIFF,
+      investmentEur: 2500,
+      cycleLife: 6000,
+      calendarLifeYears: 15,
+      years: 15,
+      priceEscalation: 0.02,
+      discountRate: 0.03,
+      calendarFadePerYear: 0.015,
+      residualValueEur: 0,
+    });
+    const vol = wearCostPerKwh(2500, 6000, s);
+    expect(res.stats.wearCostEurPerKwh).toBe(vol);
+    const basis = dispatchBaseline(w, TARIFF);
+    const zelf = dispatchRolling(w, { ...s, wearCostEurPerKwh: vol }, TARIFF);
+    expect(res.perYear[0]!.realisticSavingEur).toBeCloseTo(basis.totalCostEur - zelf.totalCostEur, 9);
+    const geleverd = zelf.dischargeKwh.reduce((a, b) => a + b, 0);
+    expect(res.perYear[0]!.wearCostEur).toBeCloseTo(geleverd * vol, 9);
   });
 });
 
@@ -636,22 +613,9 @@ describe("de verliesboekhouding sluit", () => {
     expect(Math.abs(som - v.chargedKwh) / v.chargedKwh).toBeLessThan(0.02);
   });
 
-  it("telt standby los van de omzetting, evenredig met de tijd", () => {
-    const w = makeWindow(20, 4);
-    const s = spec({ standbyWatt: 12 });
-    const v = energyLosses(w, dispatchRolling(w, s, TARIFF), s);
-
-    // 12 W over 20 dagen is 5,76 kWh, ongeacht wat de batterij doet.
-    expect(v.standbyKwh).toBeCloseTo((12 / 1000) * 24 * 20, 6);
-    expect(v.totalKwh).toBeCloseTo(
-      v.chargeLossKwh + v.dischargeLossKwh + v.standbyKwh,
-      9,
-    );
-  });
-
   it("geeft geen verlies bij een verliesvrije batterij die stilstaat", () => {
     const w = makeWindow(10, 5);
-    const s = spec({ efficiency: 1, standbyWatt: 0 });
+    const s = spec({ efficiency: 1 });
     const v = energyLosses(w, dispatchRolling(w, s, TARIFF), s);
     expect(v.totalKwh).toBeCloseTo(0, 9);
     expect(v.totalEur).toBeCloseTo(0, 9);
@@ -911,9 +875,9 @@ describe("financiële instellingen raken de natuurkunde niet", () => {
    *
    * Deze test staat er omdat de vraag gesteld werd of de jaaropbrengst
    * meeverandert met de rente. Op het model doet hij dat niet, en dat blijft zo.
-   * De kalenderlevensduur is bewust géén onderdeel van deze lijst: die hoort bij
-   * de accu en stuurt de slijtagedrempel wél — dat is precies waarom hij uit de
-   * preset komt en niet uit de instellingen.
+   * De kalenderlevensduur stuurt de dispatch evenmin: de drempel is de volle
+   * slijtageprijs per beurt, en die hangt alleen af van aanschaf, beurten en
+   * capaciteit.
    */
   function invoer(over: Record<string, unknown> = {}) {
     const w = makeWindow(30, 9);
@@ -952,18 +916,23 @@ describe("financiële instellingen raken de natuurkunde niet", () => {
     expect(tien.stats.cyclesPerYear).toBe(vijftien.stats.cyclesPerYear);
   });
 
-  it("laat een kortere kalenderlevensduur de batterij wél anders sturen", () => {
-    // De tegenhanger: dit ís een eigenschap van de accu en mag doorwerken.
-    //
-    // Met een korte cycluslevensduur worden de beurten in dit venster echt
-    // schaars, en dan telt de kalenderlevensduur mee. Bij de 6.000 beurten van
-    // een echte preset raakt dit venster van dertig dagen die grens niet en
-    // blijven beide op de ondergrens staan — ook een correcte uitkomst, maar
-    // dan toetst deze test niets.
-    // Een goedkope accu met weinig beurten: dan is de drempel klein genoeg dat
-    // er nog gehandeld wordt, en groot genoeg dat schaarste verschil maakt.
+  it("laat de strategie wél sturen: een lager slijtagedeel geeft meer beurten", () => {
+    const zuinig = runAnalysis(invoer({ wearFraction: 1 }));
+    const maximaal = runAnalysis(invoer({ wearFraction: 0.2 }));
+    expect(maximaal.stats.cyclesPerYear).toBeGreaterThan(zuinig.stats.cyclesPerYear);
+    // De zichtbare slijtageprijs verandert niet mee: die is wat een kWh van de
+    // aanschaf opsoupeert, ongeacht hoe streng de planner erover is.
+    expect(maximaal.stats.wearCostEurPerKwh).toBe(zuinig.stats.wearCostEurPerKwh);
+    // Zonder opgave geldt de volle prijs.
+    expect(runAnalysis(invoer()).stats.cyclesPerYear).toBe(zuinig.stats.cyclesPerYear);
+  });
+
+  it("laat de kalenderlevensduur de batterij niet anders sturen", () => {
+    // Eerder wel: een korte kalenderlevensduur maakte de beurten schaarser en
+    // de drempel hoger. Nu is de drempel de volle slijtageprijs per beurt, en
+    // die kent de kalender niet.
     const lang = runAnalysis(invoer({ investmentEur: 60, cycleLife: 200, calendarLifeYears: 15 }));
     const kort = runAnalysis(invoer({ investmentEur: 60, cycleLife: 200, calendarLifeYears: 5 }));
-    expect(kort.averageSavingEur).not.toBe(lang.averageSavingEur);
+    expect(kort.averageSavingEur).toBe(lang.averageSavingEur);
   });
 });

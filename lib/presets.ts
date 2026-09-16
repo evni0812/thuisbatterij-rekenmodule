@@ -25,11 +25,13 @@
  * (de een noemt de celcapaciteit, de ander wat eruit komt), dus een uniforme
  * aanname vergelijkt eerlijker dan de opgaves door elkaar gebruiken.
  *
- * STANDBY — het eigen verbruik van de omvormer stond niet in de profielen van
- * het Streamlit-prototype, maar telt bij een klein systeem zwaar mee: 15 W
- * continu is 131 kWh per jaar, en bij een batterij van 2 kWh eet dat een flink
- * deel van de opbrengst op. Waar een test een getal noemt, staat dat getal er;
- * anders een schatting die past bij de omvormerklasse.
+ * STANDBY — het eigen verbruik van de omvormer zit bewust NIET in het model.
+ * Dit model gaat over wat de handel oplevert. Standby (7 tot 25 W bij deze
+ * modellen, 60 tot 220 kWh per jaar) is een vaste post van het bezit, net als
+ * de aanschaf, en loopt door of de batterij nu handelt of niet; hij hoort dus
+ * naast de businesscase en niet in de dagcijfers. Eerder zat hij er wél in en
+ * trok hij elke dag een paar cent van het resultaat af, waardoor een dag met een
+ * winstgevende handel op nul uitkwam en als "slijtage voor niets" las.
  */
 
 import type { BatterySpec } from "./model/types";
@@ -61,7 +63,6 @@ function spec(
   vermogenKw: number,
   rendementRondgang: number,
   dod: number,
-  standbyWatt: number,
 ): Omit<BatterySpec, "wearCostEurPerKwh"> {
   return {
     capacityKwh: capaciteitKwh,
@@ -70,7 +71,6 @@ function spec(
     maxDischargeKw: vermogenKw,
     // Eenrichtingsrendement is de wortel van de rondgang.
     efficiency: Math.sqrt(rendementRondgang),
-    standbyWatt,
   };
 }
 
@@ -81,9 +81,9 @@ export const PRESETS: BatteryPreset[] = [
     merk: "Zendure",
     capaciteitKwh: 1.92,
     vermogenKw: 0.8,
-    prijsEur: 819,
-    prijsNoot: "789 euro plus de P1-meter van 30",
-    spec: spec(1.92, 0.8, 0.88, 0.9, 12),
+    prijsEur: 699,
+    prijsNoot: "compleet in de ANWB-webwinkel, met de P1-meter erbij",
+    spec: spec(1.92, 0.8, 0.88, 0.9),
     cycleLife: 6000,
     kalenderLevensduurJaren: 15,
   },
@@ -96,7 +96,7 @@ export const PRESETS: BatteryPreset[] = [
     prijsEur: 1220,
     prijsNoot: "1.195 euro plus de P1-meter van 25",
     // 85% is het midden van wat gebruikers meten; het datasheet claimt 92%.
-    spec: spec(2.7, 0.8, 0.85, 0.9, 10),
+    spec: spec(2.7, 0.8, 0.85, 0.9),
     cycleLife: 6000,
     kalenderLevensduurJaren: 15,
   },
@@ -110,7 +110,7 @@ export const PRESETS: BatteryPreset[] = [
     prijsNoot: "1.099 euro plus de P1-meter van 35",
     // Laadt tot 1.200 W maar levert 800 W terug; het model rekent met de
     // laagste van de twee, want die bepaalt hoeveel er 's avonds uit kan.
-    spec: spec(2.69, 0.8, 0.8, 0.9, 12),
+    spec: spec(2.69, 0.8, 0.8, 0.9),
     cycleLife: 6000,
     kalenderLevensduurJaren: 15,
   },
@@ -122,7 +122,7 @@ export const PRESETS: BatteryPreset[] = [
     vermogenKw: 2.4,
     prijsEur: 879,
     prijsNoot: "849 euro plus de P1-meter van 30",
-    spec: spec(2.4, 2.4, 0.88, 0.9, 15),
+    spec: spec(2.4, 2.4, 0.88, 0.9),
     cycleLife: 6000,
     kalenderLevensduurJaren: 15,
   },
@@ -134,8 +134,7 @@ export const PRESETS: BatteryPreset[] = [
     vermogenKw: 2.5,
     prijsEur: 1199,
     prijsNoot: "1.199 euro, P1-meter zit erbij",
-    // 7 W standby is gemeten met een slimme stekker; laag voor deze klasse.
-    spec: spec(5.12, 2.5, 0.83, 0.9, 7),
+    spec: spec(5.12, 2.5, 0.83, 0.9),
     cycleLife: 6000,
     kalenderLevensduurJaren: 15,
   },
@@ -147,7 +146,7 @@ export const PRESETS: BatteryPreset[] = [
     vermogenKw: 3.5,
     prijsEur: 2134,
     prijsNoot: "2.099 euro plus de P1-meter van 35",
-    spec: spec(7, 3.5, 0.85, 0.9, 20),
+    spec: spec(7, 3.5, 0.85, 0.9),
     cycleLife: 6000,
     kalenderLevensduurJaren: 15,
   },
@@ -159,7 +158,7 @@ export const PRESETS: BatteryPreset[] = [
     vermogenKw: 2.5,
     prijsEur: 3750,
     prijsNoot: "inclusief omvormer en installatie",
-    spec: spec(5, 2.5, 0.9, 0.95, 20),
+    spec: spec(5, 2.5, 0.9, 0.95),
     cycleLife: 6000,
     kalenderLevensduurJaren: 15,
   },
@@ -171,7 +170,7 @@ export const PRESETS: BatteryPreset[] = [
     vermogenKw: 3.6,
     prijsEur: 5750,
     prijsNoot: "inclusief omvormer en installatie",
-    spec: spec(10, 3.6, 0.9, 0.95, 25),
+    spec: spec(10, 3.6, 0.9, 0.95),
     cycleLife: 6000,
     kalenderLevensduurJaren: 15,
   },
@@ -193,6 +192,32 @@ export const PRESETS: BatteryPreset[] = [
 export const STANDAARD_PRESET_ID = "zendure-800pro2";
 
 /** Peildatum van de prijzen hierboven, voor wie ze wil narekenen. */
+/**
+ * Welk deel van zijn eigen opwek een huishouden zónder batterij direct zelf
+ * gebruikt: het overlapdeel van de zonnecurve en de verbruikscurve.
+ *
+ * Nodig omdat de twee interessantste percentages — welk deel van je zon je
+ * zelf gebruikt, en welk deel van je verbruik je zelf dekt — het BRUTO getal
+ * vragen, en je jaarafrekening alleen het netto getal kent: wat er door de
+ * meter ging. Zonder een aanname hierover bleven beide cijfers leeg, en dat is
+ * precies waar een thuisbatterij over gaat.
+ *
+ * 30% is de gangbare Nederlandse vuistregel voor een huishouden met panelen en
+ * zonder batterij (praktijkcijfers lopen van 25 tot 35%, afhankelijk van hoe
+ * groot de installatie is ten opzichte van het verbruik). De schatting wordt
+ * alleen gebruikt als de bezoeker zijn eigen jaaropwek niet invult, en staat
+ * dan als schatting in beeld.
+ */
+export const DIRECT_EIGEN_VERBRUIK_ZONDER_BATTERIJ = 0.3;
+
+/**
+ * Jaaropwek geschat uit de teruglevering: alles wat niet direct zelf is
+ * gebruikt, ging het net op.
+ */
+export function geschatteOpwekKwh(terugleveringKwh: number): number {
+  return terugleveringKwh / (1 - DIRECT_EIGEN_VERBRUIK_ZONDER_BATTERIJ);
+}
+
 export const PRIJSPEILDATUM = "september 2026";
 
 /**
@@ -205,5 +230,17 @@ export const STANDAARD_TERUGLEVERING_KWH = 2000;
 
 export const STANDAARD_ANALYSEJAREN = 15;
 export const STANDAARD_DISCONTOVOET = 0.03;
-export const STANDAARD_PRIJSSTIJGING = 0.02;
+/**
+ * Geen structurele prijsstijging als uitgangspunt.
+ *
+ * De 2% die hier eerder stond was de inflatiedoelstelling, geen energieprijs-
+ * verwachting. Wat een batterij verdient is het gat tussen afname en
+ * teruglevering: energiebelasting plus opslag plus het prijsverschil over de
+ * dag. De energiebelasting op stroom daalt juist (2025 → 2026) en staat voor
+ * 2026 en 2027 vast op 11,1 ct incl. btw, als onderdeel van de verschuiving
+ * van de lasten van stroom naar gas; PBL noemt de prijsontwikkeling tot 2030
+ * "zeer onzeker" en geeft alleen bandbreedtes. Nul is dan het eerlijke
+ * uitgangspunt; de schuif staat er voor wie anders verwacht.
+ */
+export const STANDAARD_PRIJSSTIJGING = 0;
 export const STANDAARD_KALENDERDEGRADATIE = 0.015;

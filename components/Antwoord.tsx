@@ -6,8 +6,18 @@
  * Eén zin met het bedrag en de terugverdientijd, en de onzekerheid er direct
  * naast in plaats van eronder verstopt. Wie verder niets leest, heeft hier het
  * antwoord.
+ *
+ * ── Terugkijken en vooruitkijken in één zin ─────────────────────────────────
+ * Het bedrag is gemeten: dit hád een batterij opgeleverd op de prijzen en het
+ * verbruik zoals ze werkelijk waren. De terugverdientijd is dat bedrag
+ * doorgetrokken naar de toekomst, en dat is iets anders — een aanname, geen
+ * meting. Die overgang staat daarom in de zin zelf ("blijft dat zo, dan…") en
+ * niet alleen in de dialoog erachter. Kort houden: één voorwaardelijke bijzin
+ * en één regel eronder. Wie het bedrag vertrouwt moet weten waar het meten
+ * ophoudt, maar niet worden bedolven onder voorbehouden.
  */
 
+import type { ReactNode } from "react";
 import type { AnalysisResult } from "../lib/model/analysis";
 import { euro, jaren } from "../lib/format";
 
@@ -17,6 +27,7 @@ export function Antwoord({
   investeringEur,
   bezig,
   heffingVanNu = false,
+  actie,
 }: {
   result: AnalysisResult;
   /**
@@ -34,6 +45,8 @@ export function Antwoord({
    * één-op-één mee.
    */
   heffingVanNu?: boolean;
+  /** De knop "Hoe is dit berekend?" rechtsboven. */
+  actie?: ReactNode;
 }) {
   const { averageSavingEur, minSavingEur, maxSavingEur, finance } = result;
   const spreiding = maxSavingEur - minSavingEur > 1;
@@ -42,11 +55,14 @@ export function Antwoord({
 
   return (
     <section className={bezig ? "antwoord bezig" : "antwoord"} aria-live="polite">
-      <p className="antwoord-aanhef">
-        {heffingVanNu
-          ? "Zonder saldering, met de energiebelasting van nu, had deze batterij je"
-          : "Zonder saldering had deze batterij je"}
-      </p>
+      <div className="antwoord-kop">
+        <p className="antwoord-aanhef">
+          {heffingVanNu
+            ? "Zonder saldering, met de energiebelasting van nu, had deze batterij je"
+            : "Zonder saldering had deze batterij je"}
+        </p>
+        {actie}
+      </div>
       <p className="antwoord-bedrag">
         {euro(averageSavingEur)}
         <span className="antwoord-eenheid">per jaar</span>
@@ -63,15 +79,22 @@ export function Antwoord({
         .{" "}
         {terugverdient ? (
           <>
-            De aanschaf van {euro(investeringEur)} is dan{" "}
-            <strong>terugverdiend na {jaren(finance.paybackYears)}</strong>.
+            Blijven de komende jaren hierop lijken, dan is de aanschaf van{" "}
+            {euro(investeringEur)} <strong>terugverdiend na{" "}
+            {jaren(finance.paybackYears)}</strong>.
           </>
         ) : (
           <>
-            De aanschaf van {euro(investeringEur)} verdient zichzelf binnen de
-            levensduur <strong>niet terug</strong>.
+            Zelfs als de komende jaren hierop blijven lijken, verdient de
+            aanschaf van {euro(investeringEur)} zichzelf binnen de levensduur{" "}
+            <strong>niet terug</strong>.
           </>
         )}
+      </p>
+      <p className="antwoord-grondslag">
+        Gemeten op {jaarBereik > 1 ? `${jaarBereik} volledige jaren` : "een jaar"}{" "}
+        echte prijzen en je eigen verbruik. De terugverdientijd trekt dat door
+        naar de toekomst; dat is een aanname, geen voorspelling.
       </p>
       <p className={scenario ? "antwoord-scenario" : "antwoord-scenario plaatshouder"}>
         {scenario ? (

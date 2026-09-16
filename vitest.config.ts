@@ -19,6 +19,9 @@ export default defineConfig({
     environmentMatchGlobs: [
       ["tests/components.test.tsx", "jsdom"],
       ["tests/layout.test.tsx", "jsdom"],
+      ["tests/tabs-uitleg.test.tsx", "jsdom"],
+      ["tests/opslag.test.ts", "jsdom"],
+      ["tests/strategie.test.tsx", "jsdom"],
     ],
   },
   esbuild: {

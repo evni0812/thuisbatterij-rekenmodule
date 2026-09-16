@@ -34,7 +34,7 @@ import { useCallback, useEffect, useState, type ReactNode } from "react";
 import type { SampleDay } from "../lib/model/analysis";
 import { addDays } from "../lib/data/timeaxis";
 import { centPerKwh, datum, euroPrecies, getal, procent } from "../lib/format";
-import { Figure, kiesTicks } from "./chart-parts";
+import { Figure, Grafiek, kiesTicks, useTip, type TipInhoud } from "./chart-parts";
 
 const B = 860;
 
@@ -221,6 +221,7 @@ export function Dagprofiel({
   laatsteDag,
   onVraagDag,
   onWisDag,
+  actie,
 }: {
   voorbeelden: SampleDay[];
   losseDag: SampleDay | null;
@@ -231,9 +232,12 @@ export function Dagprofiel({
   laatsteDag: string;
   onVraagDag: (datum: string) => void;
   onWisDag: () => void;
+  /** De knop "Hoe is dit berekend?" in de kop. */
+  actie?: ReactNode;
 }) {
   const [gekozen, setGekozen] = useState(0);
   const [cursor, setCursor] = useState<number | null>(null);
+  const { kader, tip, toon, wis } = useTip();
 
   const dag = losseDag ?? voorbeelden[gekozen];
   const huidigeDatum = dag?.date ?? "";
@@ -371,6 +375,7 @@ export function Dagprofiel({
       }
       actie={
         <div className="dagkiezer">
+          {actie}
           {voorbeelden.length > 1 ? (
             <div className="segment" role="tablist" aria-label="Kies een dag">
               {voorbeelden.map((d, k) => (
@@ -450,23 +455,33 @@ export function Dagprofiel({
 
       <DagCijfers dag={dag} />
 
-      <div
-        className="chart-wrap"
-        tabIndex={0}
-        role="group"
-        aria-label="Grafiek, horizontaal scrollbaar"
+      <Grafiek
+        kader={kader}
+        tip={tip}
+        onWis={() => {
+          setCursor(null);
+          wis();
+        }}
+        klasse="dagprofiel-wrap"
+        label={`Prijs, lading en netuitwisseling op ${datum(dag.date)}`}
       >
         <svg
           viewBox={`0 0 ${B} ${H_TOTAAL}`}
           className="chart dagprofiel-svg"
           role="img"
           aria-label={`Prijs, lading en netuitwisseling op ${datum(dag.date)}`}
-          onMouseLeave={() => setCursor(null)}
+          onMouseLeave={() => {
+            setCursor(null);
+            wis();
+          }}
           onMouseMove={(e) => {
             const rect = e.currentTarget.getBoundingClientRect();
             const rel = ((e.clientX - rect.left) / rect.width) * B;
             const k = Math.round(((rel - PLOT_LINKS) / PLOT_BREEDTE) * (n - 1));
-            setCursor(k >= 0 && k < n ? k : null);
+            const geldig = k >= 0 && k < n;
+            setCursor(geldig ? k : null);
+            if (geldig) toon(e, momentTip(dag, k));
+            else wis();
           }}
           onTouchMove={(e) => {
             const t = e.touches[0];
@@ -474,7 +489,10 @@ export function Dagprofiel({
             const rect = e.currentTarget.getBoundingClientRect();
             const rel = ((t.clientX - rect.left) / rect.width) * B;
             const k = Math.round(((rel - PLOT_LINKS) / PLOT_BREEDTE) * (n - 1));
-            setCursor(k >= 0 && k < n ? k : null);
+            const geldig = k >= 0 && k < n;
+            setCursor(geldig ? k : null);
+            if (geldig) toon(t, momentTip(dag, k));
+            else wis();
           }}
         >
           {/* ══ Paneel 1: prijs ══ */}
@@ -906,7 +924,7 @@ export function Dagprofiel({
             </g>
           ) : null}
         </svg>
-      </div>
+      </Grafiek>
 
       <Uitlezing dag={dag} i={i} />
     </Figure>
@@ -951,6 +969,20 @@ function DagCijfers({ dag }: { dag: SampleDay }) {
           {euroPrecies(s.batteryCostEur)} met
         </span>
       </div>
+
+      {/* Slijtage staat ernaast, niet erin: die post zit al in de aanschafprijs.
+          Maar wie een beurt ziet, hoort te zien wat die van de accu kostte. */}
+      {s.deliveredKwh > 0.01 ? (
+        <div className="dagcijfer">
+          <span className="dagcijfer-waarde">{euroPrecies(s.wearCostEur)}</span>
+          <span className="dagcijfer-label">slijtage van deze dag</span>
+          <span className="dagcijfer-noot">
+            wat {getal(s.deliveredKwh, 1)} kWh leveren van de aanschafprijs
+            opsoupeert. Niet van het dagbedrag afgetrokken; na slijtage blijft{" "}
+            {euroPrecies(s.savingEur - s.wearCostEur)} over.
+          </span>
+        </div>
+      ) : null}
 
       {/*
        * De dagrand krijgt een eigen tegel zodra er lading over de middernacht
@@ -1048,6 +1080,44 @@ function DagCijfers({ dag }: { dag: SampleDay }) {
       ) : null}
     </div>
   );
+}
+
+/**
+ * De kaart die de muis volgt: de vier getallen van dit kwartier.
+ *
+ * Korter dan de balk eronder, want die blijft staan en kan uitweiden; deze
+ * moet in één oogopslag te lezen zijn terwijl je over de grafiek beweegt.
+ */
+function momentTip(dag: SampleDay, i: number): TipInhoud {
+  const tijd = new Date(dag.startMs[i]!).toLocaleTimeString("nl-NL", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Europe/Amsterdam",
+  });
+  const netKw = dag.netKwh[i]! * KWH_NAAR_KW;
+  const laden = dag.chargeKwh[i]! * KWH_NAAR_KW;
+  const ontladen = dag.dischargeKwh[i]! * KWH_NAAR_KW;
+  const batterij =
+    laden > 0.02
+      ? `laadt ${getal(laden, 1)} kW`
+      : ontladen > 0.02
+        ? `levert ${getal(ontladen, 1)} kW`
+        : "staat stil";
+  return {
+    titel: tijd,
+    regels: [
+      { kleur: "var(--series-1)", label: "Je betaalt", waarde: centPerKwh(dag.importPrice[i]!) },
+      { kleur: "var(--series-2)", label: "Je krijgt", waarde: centPerKwh(dag.exportPrice[i]!) },
+      { kleur: "var(--series-3)", label: "De batterij", waarde: batterij },
+      { label: "Lading", waarde: `${getal(dag.socKwh[i]!, 1)} kWh` },
+      {
+        kleur: "var(--series-4)",
+        label: netKw >= 0 ? "Van het net" : "Naar het net",
+        waarde: `${getal(Math.abs(netKw), 1)} kW`,
+        uitkomst: true,
+      },
+    ],
+  };
 }
 
 /**

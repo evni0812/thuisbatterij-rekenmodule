@@ -55,6 +55,8 @@ describe("het vooruitgerekende antwoord", () => {
     expect(r.perYear.length).toBeGreaterThan(1);
     expect(r.sampleDays.length).toBe(2);
     expect(r.stats).toBeDefined();
+    // De piekuurstatistiek is nieuw in versie 10; zonder loopt de tegel stuk.
+    expect(r.stats.peakHourImportBaselineKwh).toBeGreaterThan(0);
     expect(r.losses).toBeDefined();
     expect(r.priceGap).toBeDefined();
     expect(r.curve.length).toBeGreaterThan(1);

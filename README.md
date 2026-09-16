@@ -33,22 +33,114 @@ te maken, is de webpack-compile gesmoord door geheugendruk — kijk naar
 `vm.swapusage`. `npx next build --turbopack` doet hetzelfde werk in een fractie
 van het geheugen en levert dezelfde export op.
 
-## De pagina is een verhaal in vier delen
+## De pagina: vijf tabbladen, één verhaal
 
-In de volgorde van een gesprek, met een zichtbare deelkop boven elk deel:
+De pagina volgt de volgorde van een gesprek, in vijf tabbladen in de balk
+bovenaan. Het open tabblad staat in de URL (`?tab=waarom`), de panelen blijven
+gemount zodat het dagprofiel zijn gekozen dag houdt.
 
-| Deel | Vraag | Secties |
+| Tab | Vraag | Secties |
 |---|---|---|
-| **Het antwoord** | Wat had het opgeleverd? | invoer, antwoord (nu én met het nettarief vanaf 2029), de cijfers op een rij |
+| **Start** | Wat had het opgeleverd? | invoer (drie velden), antwoord (nu én met het nettarief vanaf 2029), de cijfers op een rij, de uitklapbare geavanceerde instellingen, instellingen bewaren |
 | **Waarom** | Waar komt de besparing vandaan? | prijskloof, uitsplitsing, verliezen |
-| **Wanneer** | Wanneer gebeurt het? | van jaar tot jaar, door het jaar heen, één dag van dichtbij |
+| **Wanneer** | Wanneer gebeurt het? | van jaar tot jaar, door het jaar heen, de gemiddelde dag in winter en zomer, één dag van dichtbij |
 | **Wat als** | En als het anders was? | het nettarief, een andere maat, over de looptijd |
+| **Methode** | Waar komen de cijfers vandaan? | verantwoording, controlegegevens, "wat we niet weten" |
 
-Daarna de instellingen — onderaan, met een sprong ernaartoe vanaf de invoer en
-terug — en de verantwoording. Beschrijving en wat-als staan zo niet meer door
-elkaar, de tijdschaal loopt van grof naar fijn, en het inzicht dat de
-businesscase omgooit staat in het antwoordblok in plaats van acht secties lager
-achter een knop.
+**De kerncijfers leiden met percentages.** Eigen verbruik, onafhankelijkheid
+van het net en afname in de piekuren staan vooraan, elk met de verandering
+eronder in procentpunten — van 26% naar 35% is negen procentpunt, niet "35%
+meer". De eerste twee vragen de **bruto** jaaropwek, en die staat niet op een
+jaarafrekening: daar staat alleen wat er door de meter ging. Vult de bezoeker
+hem niet in, dan schat `geschatteOpwekKwh()` hem uit de teruglevering met de
+gangbare vuistregel van 30% direct eigen verbruik zonder batterij, en zegt de
+noot eronder dat het een schatting is en hoe je hem vervangt. Eerder bleven die
+twee cijfers leeg tot je zelf iets invulde; dan mist de pagina precies de twee
+getallen waar een thuisbatterij over gaat.
+
+**Geen wat-als over een heffing op teruglevering.** Die stond er als schakelaar
+en is eruit: het voorstel beprijst uitsluitend afname, er ís geen
+terugleverheffing, en de tool rekent met een dynamisch contract zonder. Een
+schakelaar voor iets wat niet bestaat kost de lezer meer dan hij oplevert.
+
+**Slijtage staat er, maar niet vooraan.** In het verloop per week, maand of jaar
+was ze eerst een grijs blokje onder elke staaf én een getal in de kop. Dat geeft
+haar een gewicht dat ze niet heeft: het is afschrijving op een investering die
+al gedaan is, geen kostenpost van die week. Ze staat nu als één zacht gezet
+getal onder de grafiek.
+
+**Cijfers en uitleg noemen hetzelfde jaar.** Losse jaarcijfers verwijzen naar
+`referentieJaar()` uit `lib/model/analysis.ts`: het meest recente volledige
+profieljaar. Eén definitie, gedeeld door de pagina en door `lib/uitleg.tsx` —
+toen de pagina het eerste volledige jaar pakte en de uitleg het laatste, stond
+er onder de grafiek € 89 over 2024 en in de dialoog ernaast € 100,25 over 2025.
+
+**Uiterlijk en patronen komen van de Energiecontract Monitor**
+(`~/code/energiecontract-monitor`): IBM Plex, één diep-teal accent, witte
+kaarten op een grijsgroene ondergrond, KPI-tegels met een gekleurde bovenrand,
+titels als stellingen. Eén thema, geen donkere modus. De twee tools horen er als
+familie uit te zien.
+
+**Elke grafiek leest af bij aanwijzen.** Wijs een maand, een uur, een jaar of
+een vakje aan en er verschijnt een kaart met de getallen erachter; de kolom die
+je aanwijst licht op. De bouwstenen staan in `components/chart-parts.tsx`
+(`useTip`, `Grafiek`, `Trefvlak`, `TipLaag`). Drie regels die overal gelden: het
+trefvlak is ruimer dan de mark zelf, want aanwijzen mag niet om precisie vragen;
+de kaart staat náást de cursor en klapt om bij de rand, zodat hij het
+aangewezen punt nooit afdekt; en de trefvlakken zijn `aria-hidden`, want de svg
+eromheen draagt een samenvattende `aria-label` en een focusbaar kind daarbinnen
+zou wel met tab bereikbaar zijn maar niet worden aangekondigd. Alles wat in een
+kaart staat, staat daarom ook als tekst onder de figuur.
+
+**Elke figuur heeft zijn eigen vorm.** Niet als versiering: twee grafieken met
+dezelfde vorm onder elkaar lezen als één grafiek die zichzelf herhaalt. De
+prijskloof vergelijkt twee prijzen (twee balken, met het gat ertussen
+gemarkeerd), de uitsplitsing telt posten op tot een totaal (een waterval), de
+verliezen zetten twee ongelijksoortige verliezen apart (twee blokken met elk hun
+eigen kengetal), en het nettarief is een gewone grafiek met een as in centen in
+plaats van een raster waarin kleur het bedrag moest dragen.
+
+**"Hoe is dit berekend?"** Elke sectie en elke tegel heeft een knop die een
+native `<dialog>` opent met een vaste opbouw: wat zie je, waar de getallen
+vandaan komen, stap voor stap, jouw getallen, waar je op moet letten. De teksten
+staan in `lib/uitleg.tsx` als functies van de doorrekening: het voorbeeld rekent
+met de echte getallen van de gebruiker, niet met een vast voorbeeldhuishouden.
+De component in `components/Uitleg.tsx` is het patroon van de monitor: `showModal()`
+geeft focus-trap, inerte achtergrond en Esc gratis; een klik op de achtergrond
+sluit.
+
+**Geavanceerde instellingen** staan op Start in een `<details>`, geordend op wat
+ze veranderen (jouw situatie, de batterij, je contract, hoe je ernaar kijkt) en
+met het invoertype dat bij het getal past: bedragen, kilowatturen en percentages
+tik je in, alleen de spreidingsfactor is een schuif. Het blok klapt vanzelf open
+als er afwijkingen zijn.
+
+**Instellingen bewaren** (`lib/opslag.ts`, `components/Bewaren.tsx`) werkt in
+twee lagen in localStorage: "Onthoud mijn instellingen" bewaart de laatste set,
+die bij een volgend bezoek zonder URL-parameters vanzelf laadt (met een melding
+en een knop terug naar de standaard); daarnaast hoogstens acht profielen met een
+naam om te laden of te verwijderen. Een URL met parameters wint altijd van de
+bewaarde set, zodat een gedeelde link laat zien wat de afzender zag. Een set van
+vóór een nieuw veld wordt aangevuld met de standaard.
+
+**Week, maand en jaar.** Boven het dagprofiel staat het verloop over een
+periode (`components/Verloop.tsx`): een week per uur, een maand per dag, een
+jaar per week, met bladeren naar de vorige of volgende periode. Dezelfde
+dispatch als het dagprofiel, opgeteld in wandkloktijd door
+`lib/model/periode.ts`; de worker levert het op aanvraag uit de bewaarde
+jaardispatch (bericht `periode`). Per vak staat de besparing en, onder de
+nullijn, de slijtage van de laadbeurten. Een klik op een dag opent die dag in
+het dagprofiel.
+
+**Slijtage staat ernaast, niet erin.** Elke geleverde kilowattuur gebruikt een
+stukje van de levensduur; tegen de aanschafprijs is dat `investering ÷
+(cycli × bruikbaar × rendement)` per kWh (`wearCostPerKwh`). Die post zit al in
+de aanschafprijs die de terugverdientijd rekent en wordt daarom niet van de
+besparing afgetrokken, maar hij is overal zichtbaar: als tegel bij de cijfers
+(`KeyStats.wearCostPerYearEur`), per jaar (`YearAnalysis.wearCostEur`), per dag
+(`SampleDayStats.wearCostEur`) en per vak in het periodeverloop. De planner
+rekent met dezelfde prijs als drempel: is de slijtage hoger dan wat een beurt
+oplevert, dan handelt de batterij niet.
 
 **Twee workers.** Scenario en raster draaien automatisch, zonder knop. Samen
 kosten ze een seconde of vijfentwintig; in één worker zou de dagkiezer al die
@@ -100,7 +192,7 @@ Python-scripts nodig — zie [Data verversen](#data-verversen).
 
 | Wat | Bron | Periode |
 |---|---|---|
-| Verbruik en teruglevering per kwartier | MFFBAS/EDSN **DYNAMIC** profielfracties, categorie E1A, afnametype AMI | vanaf 2023-04-01 |
+| Verbruik en teruglevering per kwartier | MFFBAS/EDSN **DYNAMIC** profielfracties, categorie E1A, afnametype AMI (met zonnepanelen) en AZI (zonder) | vanaf 2023-04-01 |
 | Uurtarieven | ANWB Energie, marktprijs en all-in, incl. btw | vanaf 2021 |
 
 Beide via de `energiedata-nl` skill.
@@ -110,6 +202,21 @@ herberekend uit echte meetdata en bevat dus het werkelijke weer. Richting E17 is
 wat een huishouden van het net haalt, E18 wat het erop zet — samen precies de
 residual load waar de batterij op opereert. Er hoeft daardoor niets aangenomen te
 worden over oriëntatie, instraling of zelfconsumptiegraad.
+
+**Met of zonder zonnepanelen.** MFFBAS levert het E1A-profiel voor twee soorten
+aansluiting: mét invoeding (AMI, huishoudens met zonnepanelen; de standaard) en
+zónder invoeding (AZI). De keuze bovenaan de invoer wisselt tussen die twee
+gemeten profielen (`Instellingen.zonnepanelen`, URL `zon`,
+`Configuration.afnametype`). Zonder panelen staat de teruglevering op nul en de
+opwek ook; de batterij verdient dan alleen aan het prijsverschil over de dag.
+De vorm verschilt echt: het AZI-profiel heeft geen middagdip (Liander 2025: 4,7%
+van het dagvolume om 12 uur tegen 2,6% bij huishoudens met panelen) en een
+lagere nacht. Beide zijn metingen, geen model; `tests/zonnepanelen.test.ts`
+bewaakt dat verschil. `scripts/build_assets.py` schrijft de AZI-reeksen als
+`profile-<gebied>-<jaar>-azi.bin` en zet ze in het manifest onder
+`profielen_zonder`. Andere verbruiksscenario's (warmtepomp, elektrische auto)
+zijn bewust niet gebouwd: daar bestaat geen gemeten profiel voor en een model
+zou als echt verbruik gelezen worden.
 
 **Waarom E1A en niet E1B.** E1A is het enkeltariefprofiel, passend bij een
 dynamisch contract. E1B is dubbeltarief en sommeert over een jaar op ongeveer 2
@@ -155,8 +262,8 @@ aan de voorzichtige kant.
 **Waarom meer vermogen soms minder oplevert.** In het raster van batterijmaten
 zakt de besparing op de kleinste maten iets als het vermogen omhooggaat: bij
 1 kWh van € 47,43 bij 0,8 kW naar € 46,49 bij 5 kW, twee procent. Dat is geen
-rekenfout en ook geen slijtagedrempel — die is over de hele rij gelijk (1,68
-ct/kWh). Het is de voorspelfout, uitvergroot door vermogen. Dezelfde rij met een
+rekenfout en ook geen slijtagedrempel — die is over de hele rij gelijk. Het is
+de voorspelfout, uitvergroot door vermogen. Dezelfde rij met een
 perfecte verbruiksvoorspelling loopt netjes op:
 
 | 1 kWh | 0,5 kW | 0,8 kW | 1,5 kW | 2,5 kW | 3,6 kW | 5 kW |
@@ -173,10 +280,12 @@ wordt naarmate hij onzekerder is, zou deze dip niet hebben. Onze regelaar hedget
 niet en voert zijn plan op vol vermogen uit; de tool rekent daarmee aan de
 voorzichtige kant.
 
-**Standby is geen detail.** Bij de Zendure van 1,92 kWh kost 12 W continu
-€ 22,47 per jaar, tegenover een besparing van € 101. Dat is ook de verklaring
-voor dagen met een negatieve besparing: op een dag zonder prijsverschil verdient
-de batterij niets en blijft het eigen verbruik staan.
+**Standby zit niet in het model.** Het eigen verbruik van de omvormer (7 tot
+25 W bij de modellen in de catalogus, bij de Zendure ruim € 20 per jaar) loopt
+door of de batterij nu handelt of niet. Het is een vaste post van het bezit,
+zoals de aanschaf, en hoort daarom naast de businesscase en niet in de
+dagcijfers. Eerder zat het er wél in, en dan trok het elke dag een paar cent van
+het resultaat af, ook op dagen waarop de handel winst maakte.
 
 **Waar dat gat vandaan komt.** Twee dingen weet een echte batterij niet: de
 prijzen van morgen vóór de publicatie om 13:00, en hoeveel zon en verbruik
@@ -222,29 +331,62 @@ Round-trip is dus η². Symmetrisch in beide richtingen.
 **Cycli** worden alleen over de ontlading geteld: één volledige laad-ontlaadgang
 is precies één cyclus.
 
-**Wat een laadbeurt kost.** De dispatch rekent met een schaduwprijs per kWh
-doorzet: is deze beurt de marge waard? Die prijs loopt op met de schaarste van de
-laadbeurten, maar zakt nooit onder **20% van de volle slijtageprijs**. Die
-ondergrens sluit aan op wat het financieringsmodel al doet — `remainingCapacityFraction`
-rekent 20% capaciteitsverlies over de cycluslevensduur, ongeacht schaarste — en
-zonder die grens noemde de dispatch een beurt gratis terwijl de businesscase hem
-wél boekte.
+**Wat een laadbeurt kost.** De dispatch rekent met een schaduwprijs per geleverde
+kWh: de volle slijtageprijs `investering ÷ (cycli × bruikbaar × rendement)`
+(`wearCostPerKwh`). Een beurt gaat alleen door als de marge na het
+omzettingsverlies groter is dan die slijtage. Is de slijtage hoger dan wat de
+handel oplevert, dan handelt de batterij niet — dat is de hele regel.
 
-De kalenderlevensduur komt uit de **batterij**, niet uit de analyseperiode. Eerder
-stond daar `analysisYears`: zette je de doorrekening op tien jaar, dan zakte de
-drempel naar nul en ging de accu vrijer handelen. Een financiële schuif stuurde zo
-het fysieke gedrag.
+**De strategie** (`Instellingen.slijtageDeel`, URL `slt`, `Configuration.wearFraction`)
+bepaalt welk deel van die prijs de planner meerekent. Drie standen in
+`lib/strategie.ts`: **Zuinig** (100%: elke beurt verdient zijn eigen slijtage
+terug), **Gebalanceerd** (50%) en **Maximaal rendement** (20%: alleen het
+capaciteitsverlies dat er over de levensduur toch komt). Een schuif laat elke
+waarde ertussen toe. De zichtbare slijtagepost blijft altijd de volle prijs; de
+strategie verandert alleen hoe de planner beslist.
 
-Gemeten over 2025, netgebied Liander, 2.500/2.000 kWh:
+Waarom dit een keuze is en geen vaste regel: een thuisbatterij sterft vaak
+eerder aan ouderdom dan aan doorzet. De Zendure draait zuinig 279 beurten per
+jaar, in vijftien jaar 4.200 van zijn 6.000; ook op de maximale stand (362 per
+jaar, 5.400) raakt hij ze niet op. Een extra beurt kost dan in werkelijkheid
+minder dan de volle prijs, en de literatuur is het erover eens dat de juiste
+drempel de *marginale* slijtage is — wat één beurt extra echt aan levensduur
+kost (Xu e.a., *Factoring the cycle aging cost of batteries participating in
+electricity markets*, 2018; Schade, *Battery degradation: impact on economic
+dispatch*, 2024; The Mobility House over hun optimizer). Die marginale prijs
+hangt af van de vraag of de beurten vóór de kalender opraken, en dat weet je pas
+achteraf; daarom kiest de gebruiker, en laat het financieringsmodel via
+`remainingCapacityFraction` (de zwaarste van kalender- en cyclusslijtage) zien
+wat de keuze doet met de terugverdientijd. Op de maximale stand is de
+terugverdientijd van de Zendure korter (5,5 tegen 5,9 jaar), omdat hij aan zijn
+kalender sterft en de extra beurten gratis waren; bij een batterij die wél aan
+zijn beurten sterft, slaat dat om.
 
-| | Zendure 1,92 kWh | Thuisaccu 10 kWh |
-|---|---|---|
-| Drempel voor → na | 0,49 → 1,68 ct/kWh | 0,00 → 2,37 ct/kWh |
-| Besparing | € 101,48 → € 100,32 | € 298,07 → € 289,85 |
-| Laadbeurten per jaar | 406 → 362 | 266 → 230 |
+**De figuur "Laadbeurten over de levensduur"** (`components/Laadbeurten.tsx`, in
+het tabblad Wat als vóór de cashflow) maakt die afweging zichtbaar: de
+opgetelde beurten uit `finance.cashflows` tegenover de cycluslevensduur
+(horizontale streep) en de kalenderlevensduur (verticale streep). Waar de lijn
+het eerst tegenaan loopt, daaraan sterft de batterij. De kerncijfers noemen de
+drempel van de planner in centen en het minimale prijsverschil dat daaruit
+volgt: om 1 kWh te leveren koop je 1/η² kWh in, dus bij inkoop tegen 20 ct moet
+de verkoopprijs minstens `20/η² + drempel` zijn. De uitleg achter de knop legt
+in vier stappen uit wat de drempel is, hoe de planner hem gebruikt, waarom je
+hem wilt en waarom hij een keuze is.
 
-Elf procent minder beurten voor ruim één procent minder besparing. De Zendure blijft
-daarmee onder zijn 6.000 beurten in vijftien jaar, waar hij er eerst overheen ging.
+Tot september 2026 zat er een vaste marginale drempel in: 20% zolang de beurten
+niet schaars waren, oplopend bij schaarste, met een proefrun om dat te bepalen.
+Die liet de batterij handelen op dagen waar de beurt méér aan slijtage kostte
+dan hij opleverde (18 december 2025: € 0,07 opbrengst tegen € 0,12 slijtage)
+zonder dat de gebruiker daar iets over te zeggen had. Dat is nu de expliciete
+stand "Maximaal rendement", met de zuinige stand als standaard.
+
+**Het seizoensprofiel** (`seasonProfiles` in het resultaat) is de gemiddelde dag
+van winter en zomer: per uur van de dag hoeveel er van het net kwam en hoeveel
+er op ging, zonder en met batterij. Sommen per uur worden over de volledige
+jaren opgeteld en pas daarna gedeeld door het aantal dagen, anders weegt een jaar
+met minder dagen even zwaar. De seizoensgrens is dezelfde als die van het
+nettarief: zomer is april tot en met september. Uren in lokale tijd — een
+avondpiek is een wandklokbegrip.
 
 **De dagweergave toont vier panelen**: de prijs, wat de batterij deed, hoe vol
 hij werd, en wat het opgeteld kostte met en zonder batterij. Dat laatste paneel
@@ -267,13 +409,23 @@ weinig om het omzettingsverlies en het eigen verbruik te dekken. Dat is precies
 de reden om naar het tijdsafhankelijke nettarief te kijken, want dat legt zijn
 piek juist in de winteravond.
 
-**Waarom de batterij handelt op een dag die niets oplevert.** Op 18 december 2025
-koopt de Zendure 's nachts 1,8 kWh in, levert er 1,6 aan het huis, en komt uit op een
-dagbesparing van nul. Dat lijkt slijtage voor niets. Het is het tegenovergestelde:
-zonder te handelen kost die dag **€ 0,066**, want het eigen verbruik van de omvormer
-loopt door of hij nu werkt of niet. De handel verdient precies dat terug. Standby
-kost de Zendure € 22 per jaar op een besparing van € 100; op een dag met weinig
-prijsverschil is dat het hele resultaat.
+**Waarom de batterij een dag met een kleine marge laat liggen.** Op 18 december 2025
+kocht de Zendure 's nachts 1,8 kWh in bij 19 cent en leverde er 1,6 aan het huis
+bij 26 cent. Na het omzettingsverlies bleef er **€ 0,067** over, terwijl de
+slijtage van die beurt € 0,12 was tegen de volle aanschafprijs per kWh. Toen het
+standby-verbruik nog in het model zat, kwam de dag op € 0,00 uit en las hij als
+slijtage voor niets; dat was de reden om standby eruit te halen en de slijtage
+apart te tonen. En het was de reden om de planner met de volle slijtageprijs te
+laten rekenen: sinds die wijziging laat hij zo'n dag voorbijgaan.
+
+**Geen prijsstijging als uitgangspunt.** De standaard voor de jaarlijkse
+prijsstijging staat op 0% (was 2%, de inflatiedoelstelling, geen energieprijs-
+verwachting). Wat een batterij verdient is het gat tussen afname en
+teruglevering: energiebelasting plus opslag plus het prijsverschil over de dag.
+De energiebelasting op stroom daalt van 2025 op 2026 en staat voor 2026 en 2027
+vast op 11,1 ct/kWh incl. btw, als onderdeel van de lastenverschuiving van
+stroom naar gas; PBL noemt de prijsontwikkeling tot 2030 "zeer onzeker" en geeft
+alleen bandbreedtes. De schuif blijft voor wie anders verwacht.
 
 **Financiële instellingen raken de natuurkunde niet.** Discontovoet, prijsstijging en
 looptijd veranderen de contante waarde, niet de jaaropbrengst en niet het aantal
@@ -336,46 +488,65 @@ omvormer nodig hebben.
 
 ### Het nettarief dat er vanaf 2029 aankomt
 
-Per 1 januari 2029 wordt een groot deel van de netkosten volume- en
-tijdsafhankelijk: het voorstel van de netbeheerders ligt sinds 4 mei 2026 bij de
-ACM, die naar verwachting voor eind 2026 beslist. Circa een derde blijft vast,
-de rest gaat afhangen van wanneer en hoeveel je gebruikt. Vier prijsniveaus,
-vijf tijdsblokken, twee seizoenen.
+Het model rekent standaard met de netbeheerkosten zoals ze nu zijn: los van je
+gedrag, en dus buiten de besparing. Dat gaat veranderen. Het transporttarief wordt
+tijdsafhankelijk: het codewijzigingsvoorstel van de netbeheerders ligt sinds
+1 mei 2026 bij de ACM, die naar verwachting voor eind 2026 beslist. Een derde van
+het transporttarief wordt een capaciteitscomponent op de doorlaatwaarde van de
+aansluiting; de rest gaat afhangen van wanneer en hoeveel je gebruikt. Vijf
+tijdsblokken per dag, vijf tariefhoogten in totaal en hoogstens vier per dag, twee
+seizoenen (zomer april tot en met september), geen onderscheid tussen weekdag en
+weekend. Invoering is in beginsel 1 januari 2029, met drie uitwijkgronden naar
+1 januari 2030.
 
-**De bedragen zijn nog niet gepubliceerd**; het voorstel toont alleen relatieve
-niveaus. `lib/nettarief.ts` bevat daarom een prognose: CE Delft, geprognosticeerde
-nettarieven 2030, op basis van Netbeheer Nederland (2026b, 2026c). Vijf niveaus,
-per uur en per maand:
+**Wat vaststaat zijn de wegingsfactoren**, bijlage 5 van het voorstel: per uur en
+per seizoen een factor uit {0; 0,3; 0,5; 0,7; 1,0}. **Wat niet vaststaat is het
+basistarief.** `lib/nettarief.ts` neemt de factoren letterlijk over en zet er een
+prognose van CE Delft onder (Beheersbare energiekosten voor huishoudens in 2030,
+september 2026, op basis van Netbeheer Nederland 2026b en 2026c): EUR 0,191 per
+kWh in 2030, inclusief btw, geijkt op een huishouden van 3.000 kWh met EUR 335
+aan volume- en tijdsafhankelijk transporttarief. CE rekent met 7,5% stijging per
+jaar; het scenario rekent met het niveau van 2029 (EUR 0,178), de beoogde
+invoeringsdatum. De interface liet je hier eerst tussen 2029 en 2030 kiezen; dat
+is eruit. Het was een keuze over een aanname in een scenario dat zelf al een
+aanname is, en wie wil weten wat een batterij oplevert, wil niet eerst beslissen
+welk prognosejaar hij aanhoudt. 2030 blijft in `BASISTARIEF` staan: het is de
+uitwijkdatum uit het voorstel en de basis waaruit 2029 volgt. Figuur 4 van het rapport is precies factor × basistarief,
+afgerond op centen:
 
-| Uur | 0 | 1–6 | 7–9 | 10–16 | 17–18 | 19–22 | 23 |
-|---|---|---|---|---|---|---|---|
-| **okt–mrt** | 0,13 | 0,10 | 0,13 | 0,10 (10–15), 0,19 (16) | 0,19 | 0,19 | 0,13 |
-| **apr–sep** | 0,10 | 0,10 (1–2), 0,06 (3–6) | 0,06 | 0,00 | 0,06 | 0,13 | 0,13 |
+| Uur | 0 | 1–6 | 7–9 | 10–15 | 16 | 17–18 | 19–22 | 23 |
+|---|---|---|---|---|---|---|---|---|
+| **okt–mrt** | 0,7 | 0,5 | 0,7 | 0,5 | 1,0 | 1,0 | 1,0 | 0,7 |
+| **apr–sep** | 0,5 (0–2), 0,3 (3–6) | | 0,3 | 0,0 | 0,0 | 0,3 | 0,7 | 0,7 |
 
 De winterpiek loopt van 16:00 tot en met 22:00; in de zomer begint de piek pas om
 19:00 en loopt hij door tot en met 23:00, terwijl de middag van 10:00 tot en met
-16:00 gratis is. `tests/nettarief.test.ts` vergelijkt beide rijen cel voor cel met
-Figuur 4.
+16:00 gratis is. `tests/nettarief.test.ts` vergelijkt de factoren met het
+voorstel en de bedragen van 2030, op centen afgerond, cel voor cel met Figuur 4.
+
+**De heffing in het scenario.** Het nettarief komt bovenop de energiebelasting en
+de inkoopopslag. Op de historische prijzen staat de heffing van toen, 13 tot 17
+cent; in 2029 en 2030 ligt de energiebelasting volgens CE Delft op EUR 0,075
+respectievelijk 0,076 per kWh exclusief btw. Het scenario rekent daarom met de
+heffing van het scenariojaar (energiebelasting van dat jaar plus de opslag zoals
+die in 2026 in de data zit, ongeveer 11,2 ct in 2029) in plaats van die van toen.
+Anders stapelt het een nettarief van 2030 op een belasting van 2024, en de
+besparing schaalt bijna één-op-één met de heffing. `scenarioConfiguratie` in
+`lib/nettarief.ts` is de ene plek waar het scenario wordt afgeleid, voor de
+hoofdpagina, de build van het standaardantwoord en de vergelijker; anders zou de
+cachesleutel op drie plekken net anders uitkomen.
 
 Dat verandert de businesscase ingrijpend, want de piek valt op de uren waarop een
-batterij levert en het nultarief op de uren waarop hij laadt. Gemeten op Liander
-2024–2025, 2.500/2.000 kWh:
+batterij levert en het nultarief op de uren waarop hij laadt. De winst zit vooral
+in de winter, precies het seizoen waarin de accu nu bijna stilstaat.
 
-| | Zendure 1,92 kWh | Thuisaccu 10 kWh |
-|---|---|---|
-| Nu | € 94,71, terugverdiend in 8,5 jaar | € 269,72, verdient zich niet terug |
-| Met nettarief | € 158,42, in 5,1 jaar | € 407,25, in 13,2 jaar |
-| Waarvan winter | € 22 → € 51 | € 65 → € 134 |
-
-De prognose is geijkt op een huishouden van 3.000 kWh per jaar: € 335 aan
-volume- en tijdsafhankelijk transporttarief, wat volgens de ACM-rekenmethodiek
-uitkomt op ongeveer € 0,19/kWh als bovenste trede. Het vaste deel — € 167
-vastrecht plus € 135 periodieke aansluitvergoeding — blijft buiten de
-berekening, want dat is met en zonder batterij gelijk.
-
-De winst zit vooral in de winter, precies het seizoen waarin de accu nu bijna
-stilstaat. Of teruglevering ook wordt beprijsd staat niet in het voorstel; dat is
-een schakelaar die standaard uit staat.
+Het vaste deel — de capaciteitscomponent (EUR 167 in de CE-doorrekening) plus
+aansluitvergoeding en meetdienst (EUR 135) — blijft buiten de berekening, want
+dat is met en zonder batterij gelijk. Het voorstel beprijst uitsluitend afname;
+een tarief op invoeding zou een nieuw voorstel vergen. De schakelaar om het
+tarief ook op teruglevering te heffen is dus een wat-als en staat standaard uit.
+De prognose is gedragsonafhankelijk: als veel huishoudens de piek mijden, herijken
+de netbeheerders blokken en factoren jaarlijks, en dat zit hier niet in.
 
 Het variabele deel telt in dit scenario dus wél mee in de besparing, anders dan
 de vaste netbeheerkosten hieronder. Dat is geen inconsistentie maar het hele
@@ -384,7 +555,7 @@ zonder batterij.
 
 ### Wat er niet in zit
 
-- Vastrecht, de belastingvermindering en het vaste deel van de netbeheerkosten.
+- Het vaste deel van de netbeheerkosten en de belastingvermindering.
   Die zijn met en zonder batterij gelijk en beïnvloeden de besparing niet; de
   getoonde bedragen zijn de variabele stroomkosten. Het tijdsafhankelijke deel
   van het nettarief is daar vanaf 2029 de uitzondering op — zie hierboven.
@@ -447,10 +618,10 @@ de laatste maanden opnieuw.
 
 Prestaties: ongeveer 450 ms voor de realistische strategie en 270 ms voor het
 optimum per profieljaar; vier jaar met beide strategieën, de besparingscurve en
-de ontleding van het gat met het optimum in ruim drie en een halve seconde. De proefrun die bepaalt of laadbeurten schaars zijn, draait
-op volle resolutie en wordt hergebruikt als de drempel nul blijkt — bij vrijwel
-elke preset. Het raster van batterijmaten doet hetzelfde per punt en kost
-daardoor in de regel één doorrekening per punt in plaats van twee.
+de ontleding van het gat met het optimum in ruim drie en een halve seconde. Er
+is geen proefrun meer om de slijtagedrempel te bepalen: die is de volle prijs en
+staat vooraf vast, zodat elk jaar en elk rasterpunt precies één realistische
+doorrekening kost.
 
 De binnenste lus van de solver is bewust niet verder geoptimaliseerd: delingen
 vervangen door vermenigvuldigingen gaf tot 30% winst maar veranderde het antwoord

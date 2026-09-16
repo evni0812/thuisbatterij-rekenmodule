@@ -8,16 +8,18 @@
  * kennis in had gezeten. Het verschil is zelf een resultaat.
  */
 
+import type { ReactNode } from "react";
 import { useState } from "react";
 import type { YearAnalysis } from "../lib/model/analysis";
-import { euro, periode } from "../lib/format";
-import { Figure, Legenda, Raster, kiesTicks } from "./chart-parts";
+import { euro, getal, periode, procent } from "../lib/format";
+import { Figure, Grafiek, Legenda, Raster, Trefvlak, kiesTicks, useTip } from "./chart-parts";
 
 const H = 260;
 const MARGE = { boven: 16, rechts: 16, onder: 40, links: 56 };
 
-export function BesparingPerJaar({ jaren }: { jaren: YearAnalysis[] }) {
+export function BesparingPerJaar({ jaren, actie }: { jaren: YearAnalysis[]; actie?: ReactNode }) {
   const [actief, setActief] = useState<number | null>(null);
+  const { kader, tip, toon, wis } = useTip();
   if (jaren.length === 0) return null;
 
   const breedte = Math.max(320, jaren.length * 130);
@@ -34,6 +36,7 @@ export function BesparingPerJaar({ jaren }: { jaren: YearAnalysis[] }) {
 
   return (
     <Figure
+      actie={actie}
       titel="Van jaar tot jaar: elk jaar levert iets op, maar niet evenveel"
       toelichting={
         <>
@@ -43,11 +46,14 @@ export function BesparingPerJaar({ jaren }: { jaren: YearAnalysis[] }) {
         </>
       }
     >
-      <div
-        className="chart-wrap"
-        tabIndex={0}
-        role="group"
-        aria-label="Grafiek, horizontaal scrollbaar"
+      <Grafiek
+        kader={kader}
+        tip={tip}
+        onWis={() => {
+          setActief(null);
+          wis();
+        }}
+        label="Besparing per profieljaar"
       >
         <svg
           viewBox={`0 0 ${breedte} ${H}`}
@@ -73,19 +79,17 @@ export function BesparingPerJaar({ jaren }: { jaren: YearAnalysis[] }) {
             const isActief = actief === i;
 
             return (
-              <g
-                key={j.year}
-                onMouseEnter={() => setActief(i)}
-                onMouseLeave={() => setActief(null)}
-              >
-                {/* Ruime trefzone: groter dan de marks zelf. */}
-                <rect
-                  x={MARGE.links + groepB * i}
-                  y={MARGE.boven}
-                  width={groepB}
-                  height={plotH}
-                  fill={isActief ? "var(--surface-2)" : "transparent"}
-                />
+              <g key={j.year}>
+                {/* De markering van wat je aanwijst, achter de marks. */}
+                {isActief ? (
+                  <rect
+                    className="aangewezen"
+                    x={MARGE.links + groepB * i}
+                    y={MARGE.boven}
+                    width={groepB}
+                    height={plotH}
+                  />
+                ) : null}
                 <rect
                   x={xOpt}
                   y={y(j.optimalSavingEur)}
@@ -133,8 +137,47 @@ export function BesparingPerJaar({ jaren }: { jaren: YearAnalysis[] }) {
               </g>
             );
           })}
+
+          {/* De trefvlakken bovenop: een hele jaarkolom is te raken. */}
+          {jaren.map((j, i) => (
+            <Trefvlak
+              key={`t${j.year}`}
+              x={MARGE.links + groepB * i}
+              y={MARGE.boven}
+              breedte={groepB}
+              hoogte={plotH}
+              onWijs={(punt) => {
+                setActief(i);
+                toon(punt, {
+                  titel: periode(j.firstDay, j.lastDay),
+                  regels: [
+                    {
+                      kleur: "var(--series-3)",
+                      label: "Werkelijk haalbaar",
+                      waarde: euro(j.realisticSavingEur),
+                      uitkomst: true,
+                    },
+                    {
+                      kleur: "color-mix(in srgb, var(--series-3) 35%, transparent)",
+                      label: "Met perfecte kennis",
+                      waarde: euro(j.optimalSavingEur),
+                    },
+                    { label: "Daarvan gehaald", waarde: procent(j.captureRate) },
+                    { label: "Laadbeurten", waarde: getal(j.cyclesPerYear, 0) },
+                  ],
+                  noot: j.isFullYear
+                    ? undefined
+                    : "Deel van een jaar: telt niet mee in het gemiddelde.",
+                });
+              }}
+              onWis={() => {
+                setActief(null);
+                wis();
+              }}
+            />
+          ))}
         </svg>
-      </div>
+      </Grafiek>
 
       <Legenda
         items={[

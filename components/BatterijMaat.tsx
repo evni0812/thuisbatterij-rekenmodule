@@ -26,7 +26,7 @@ import { useState, type ReactNode } from "react";
 import type { GridState } from "../lib/useAnalysis";
 import type { GridPoint } from "../lib/worker/protocol";
 import { euro, euroPrecies, getal } from "../lib/format";
-import { Figure } from "./chart-parts";
+import { Figure, TipLaag, useTip, type TipInhoud } from "./chart-parts";
 
 type Weergave = "perKwh" | "perKw" | "totaal";
 
@@ -91,6 +91,29 @@ const MODI: Record<Weergave, Modus> = {
   },
 };
 
+/** Wat er in de kaart staat als je een vakje aanwijst. */
+function tipVoor(
+  punt: GridPoint,
+  modus: Modus,
+  isBeste: boolean,
+  isHuidig: boolean,
+): TipInhoud {
+  return {
+    titel: `${getal(punt.capacityKwh, 1)} kWh bij ${getal(punt.powerKw, 1)} kW`,
+    regels: [
+      { label: "Besparing per jaar", waarde: euro(punt.savingEur), uitkomst: true },
+      { label: "Per kWh capaciteit", waarde: euroPrecies(punt.savingEur / Math.max(0.01, punt.capacityKwh)) },
+      { label: "Per kW vermogen", waarde: euroPrecies(punt.savingEur / Math.max(0.01, punt.powerKw)) },
+      { label: "Laadbeurten per jaar", waarde: String(Math.round(punt.cyclesPerYear)) },
+    ],
+    noot: isHuidig
+      ? "Dit is de batterij die je nu hebt ingesteld."
+      : isBeste
+        ? `De hoogste ${modus.eenheid} in dit raster. Klik om hiermee door te rekenen.`
+        : "Klik om met deze maat door te rekenen.",
+  };
+}
+
 /** Het beste punt volgens de gekozen grootheid. */
 function besteVan(punten: GridPoint[], modus: Modus): GridPoint | null {
   return punten.reduce<GridPoint | null>(
@@ -104,15 +127,19 @@ export function BatterijMaat({
   huidigeCapaciteit,
   huidigVermogen,
   onKies,
+  actie,
 }: {
   /** Null zolang het raster nog wordt doorgerekend in de achtergrond. */
   grid: GridState | null;
   huidigeCapaciteit: number;
   huidigVermogen: number;
   onKies: (capaciteit: number, vermogen: number) => void;
+  /** De knop "Hoe is dit berekend?" in de kop. */
+  actie?: ReactNode;
 }) {
   const [gehoverd, setGehoverd] = useState<{ r: number; k: number } | null>(null);
   const [weergave, setWeergave] = useState<Weergave>("perKwh");
+  const { kader, tip, toon, wis } = useTip();
 
   if (!grid) {
     // Het raster draait automatisch in de achtergrond zodra het hoofdantwoord
@@ -121,6 +148,7 @@ export function BatterijMaat({
     // andere maat beter was geweest.
     return (
       <Figure
+      actie={actie}
         titel="Welke maat batterij loont eigenlijk?"
         toelichting={
           <>
@@ -234,21 +262,32 @@ export function BatterijMaat({
         </>
       }
       actie={
-        <div className="segment" role="group" aria-label="Wat het raster toont">
-          {(Object.keys(MODI) as Weergave[]).map((id) => (
-            <button
-              key={id}
-              type="button"
-              aria-pressed={weergave === id}
-              className={weergave === id ? "segment-knop actief" : "segment-knop"}
-              onClick={() => setWeergave(id)}
-            >
-              {MODI[id].knop}
-            </button>
-          ))}
+        <div className="figure-acties">
+          <div className="segment" role="group" aria-label="Wat het raster toont">
+            {(Object.keys(MODI) as Weergave[]).map((id) => (
+              <button
+                key={id}
+                type="button"
+                aria-pressed={weergave === id}
+                className={weergave === id ? "segment-knop actief" : "segment-knop"}
+                onClick={() => setWeergave(id)}
+              >
+                {MODI[id].knop}
+              </button>
+            ))}
+          </div>
+          {actie}
         </div>
       }
     >
+      <div
+        className="chart-hover"
+        ref={kader}
+        onMouseLeave={() => {
+          setGehoverd(null);
+          wis();
+        }}
+      >
       <div className="heat-wrap">
         <table className="heat">
           <caption className="heat-caption">
@@ -288,10 +327,29 @@ export function BatterijMaat({
                           ]
                             .filter(Boolean)
                             .join(" ")}
-                          onMouseEnter={() => setGehoverd({ r, k })}
-                          onMouseLeave={() => setGehoverd(null)}
-                          onFocus={() => setGehoverd({ r, k })}
-                          onBlur={() => setGehoverd(null)}
+                          onMouseEnter={(e) => {
+                            setGehoverd({ r, k });
+                            toon(e, tipVoor(punt, modus, punt === beste, isHuidig));
+                          }}
+                          onMouseMove={(e) =>
+                            toon(e, tipVoor(punt, modus, punt === beste, isHuidig))
+                          }
+                          onMouseLeave={() => {
+                            setGehoverd(null);
+                            wis();
+                          }}
+                          onFocus={(e) => {
+                            setGehoverd({ r, k });
+                            const box = e.currentTarget.getBoundingClientRect();
+                            toon(
+                              { clientX: box.left + box.width / 2, clientY: box.top + box.height / 2 },
+                              tipVoor(punt, modus, punt === beste, isHuidig),
+                            );
+                          }}
+                          onBlur={() => {
+                            setGehoverd(null);
+                            wis();
+                          }}
                           onClick={() => onKies(cap, kw)}
                           aria-label={`${cap} kWh bij ${kw} kW: ${modus.bedrag(
                             modus.waarde(punt),
@@ -311,6 +369,8 @@ export function BatterijMaat({
             ))}
           </tbody>
         </table>
+      </div>
+        <TipLaag tip={tip} />
       </div>
 
       <div className="heat-voet">

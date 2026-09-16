@@ -21,6 +21,8 @@ export interface Bundel {
   result: AnalysisResult;
   scenario?: AnalysisResult;
   scenarioOpTeruglevering?: boolean;
+  /** Voor welk jaar het basistarief in het scenario gold; ontbreekt = 2029. */
+  scenarioJaar?: number;
   grid?: GridPoint[][];
 }
 
@@ -33,6 +35,27 @@ export interface Bundel {
  * antwoord van versie 6 mist die velden, en de dagweergave liep daarop stuk met
  * "Cannot read properties of undefined". Een nieuw veld is dus net zo goed een
  * reden om deze teller te verhogen als een nieuw getal.
+ *
+ * Versie 12: het standby-verbruik van de omvormer is uit het model. Het trok
+ * elke dag een paar cent van het resultaat af, ongeacht of de batterij
+ * handelde; dat hoort bij het bezit en niet bij de handel. Alle bedragen,
+ * ook die in het scenario en het raster, veranderen erdoor.
+ *
+ * Versie 11: het resultaat bevat `seasonProfiles` — het gemiddelde dagprofiel
+ * van winter en zomer, zonder en met batterij. Een bewaard antwoord van versie
+ * 10 mist dat veld, en de sectie die de verschuiving tekent loopt daarop stuk.
+ *
+ * Versie 10: de piekuurstatistiek — netafname in de piekuren van het nettarief,
+ * zonder en met batterij — kwam in `KeyStats`, `YearAnalysis` en `MonthTotals`;
+ * een bewaard antwoord van versie 9 mist die velden. En het nettariefscenario
+ * rekent met wegingsfactoren maal een basistarief per jaar in plaats van
+ * afgeronde centen, en met de heffing van het scenariojaar in plaats van die
+ * van toen; dat verandert de bedragen van het scenario in de bundel.
+ *
+ * Versie 13: de planner rekent standaard met de volle slijtageprijs als
+ * drempel, en het deel dat hij meerekent is een instelling (de strategie). De
+ * marginale drempel met 20%-ondergrens en proefrun is weg; de batterij handelt
+ * minder en de bedragen veranderen.
  *
  * Versie 9: het bewaarde resultaat is een bundel — hoofdresultaat, het
  * nettariefscenario en het raster van maten — zodat een terugkerende bezoeker
@@ -47,7 +70,7 @@ export interface Bundel {
  * heffing per uur in plaats van een jaarconstante, en de uitvoerder die bewuste
  * verkoop aan het net doorlaat. Alle drie veranderen de bedragen.
  */
-export const MODEL_VERSIE = 9;
+export const MODEL_VERSIE = 13;
 
 const SLEUTEL_PREFIX = "tbat:v" + MODEL_VERSIE + ":";
 /** Hoeveel doorrekeningen we bewaren voordat de oudste eruit gaat. */
@@ -74,8 +97,8 @@ export function leesCache(config: Configuration): Bundel | null {
   try {
     const ruw = window.localStorage.getItem(configSleutel(config));
     if (!ruw) return null;
-    const { result, scenario, scenarioOpTeruglevering, grid } = JSON.parse(ruw) as Bewaard;
-    return { result, scenario, scenarioOpTeruglevering, grid };
+    const { result, scenario, scenarioOpTeruglevering, scenarioJaar, grid } = JSON.parse(ruw) as Bewaard;
+    return { result, scenario, scenarioOpTeruglevering, scenarioJaar, grid };
   } catch {
     // Een volle of geblokkeerde opslag mag de tool nooit stukmaken; dan rekenen
     // we gewoon opnieuw.

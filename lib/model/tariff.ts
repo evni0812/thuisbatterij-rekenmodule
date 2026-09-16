@@ -33,7 +33,7 @@ export function buildPriceSeries(
    * Tijdsafhankelijk nettarief per kwartier, EUR/kWh. Optioneel: alleen het
    * scenario voor 2029 vult dit. Komt bovenop de afnameprijs, en wordt van de
    * terugleververgoeding afgetrokken als het ook op invoeding wordt geheven —
-   * of dat gebeurt is in het voorstel nog niet vastgelegd.
+   * het voorstel sluit dat expliciet uit, dus dat is een wat-als.
    */
   netTariffPerStep?: Float64Array,
   netTariffOnExport = false,

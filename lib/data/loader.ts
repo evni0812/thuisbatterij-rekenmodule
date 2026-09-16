@@ -20,7 +20,7 @@
  */
 
 import { buildQuarterAxis, addDays, localMidnightUtcMs, MS_PER_HOUR } from "./timeaxis";
-import type { Manifest } from "./manifest";
+import { profielenVan, type Afnametype, type Manifest } from "./manifest";
 
 const MAGIC = 0x54414254; // "TBAT" little-endian gelezen als uint32
 
@@ -116,13 +116,15 @@ export async function loadProfileYear(
   year: number,
   base = "/data",
   haal: Ophaler = fetch,
+  afnametype: Afnametype = "AMI",
 ): Promise<ProfileYear> {
-  const info = manifest.profielen[domain]?.[String(year)];
+  const info = profielenVan(manifest, afnametype)[domain]?.[String(year)];
   if (!info) {
-    throw new Error(`geen profiel voor netgebied ${domain} in ${year}`);
+    throw new Error(`geen profiel (${afnametype}) voor netgebied ${domain} in ${year}`);
   }
+  const achtervoegsel = afnametype === "AZI" ? "-azi" : "";
   const { length, series } = decodeBinary(
-    await fetchBuffer(`${base}/profile-${domain}-${year}.bin`, haal),
+    await fetchBuffer(`${base}/profile-${domain}-${year}${achtervoegsel}.bin`, haal),
   );
   const startMs = buildQuarterAxis(info.eerste_dag, addDays(info.laatste_dag, 1));
   if (startMs.length !== length) {

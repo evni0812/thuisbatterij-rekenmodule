@@ -26,7 +26,13 @@ import { configSleutel, leesCache, schrijfCache } from "./cache";
 import type { AnalysisResult } from "./model/analysis";
 import type { Manifest } from "./data/manifest";
 import type { SampleDay } from "./model/analysis";
+import type { PeriodeReeks, Resolutie } from "./model/periode";
 import { RASTER_CAPACITEITEN, RASTER_VERMOGENS } from "./model/raster";
+import {
+  NETTARIEF_JAAR,
+  scenarioConfiguratie,
+  type NettariefJaar,
+} from "./nettarief";
 import type {
   Configuration,
   GridPoint,
@@ -79,12 +85,19 @@ export interface AnalysisState {
   /** Vraag het batterijgedrag van één kalenderdag op. */
   vraagDag: (datum: string) => void;
   wisDag: () => void;
+  /** Het resultaat over een periode, per uur, dag of week; null zolang er geen is. */
+  periode: PeriodeReeks | null;
+  periodeBezig: boolean;
+  vraagPeriode: (van: string, tot: string, resolutie: Resolutie) => void;
   /** Uitkomst van het nettariefscenario, of null zolang het nog loopt. */
   scenario: AnalysisResult | null;
   /** Of het scenario ook op teruglevering heft. */
   scenarioOpTeruglevering: boolean;
   /** Reken het scenario opnieuw met of zonder heffing op teruglevering. */
   zetScenarioOpTeruglevering: (opTeruglevering: boolean) => void;
+  /** Voor welk jaar het basistarief van het scenario geldt. */
+  scenarioJaar: NettariefJaar;
+  zetScenarioJaar: (jaar: NettariefJaar) => void;
 }
 
 /**
@@ -147,7 +160,7 @@ function volRaster(rows: GridPoint[][]): GridState {
 
 type InterneState = Omit<
   AnalysisState,
-  "vraagDag" | "wisDag" | "herbereken" | "zetScenarioOpTeruglevering"
+  "vraagDag" | "wisDag" | "herbereken" | "zetScenarioOpTeruglevering" | "zetScenarioJaar" | "vraagPeriode"
 >;
 
 export function useAnalysis(config: Configuration | null): AnalysisState {
@@ -169,8 +182,11 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
     dag: null,
     dagBezig: false,
     dagOntbreekt: null,
+    periode: null,
+    periodeBezig: false,
     scenario: null,
     scenarioOpTeruglevering: false,
+    scenarioJaar: NETTARIEF_JAAR,
   });
   /** De configuratie waar het getoonde resultaat bij hoort. */
   const getoondVoor = useRef<string | null>(null);
@@ -178,8 +194,10 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
   const laatsteConfig = useRef<Configuration | null>(null);
   const gridId = useRef(0);
   const dagId = useRef(0);
+  const periodeId = useRef(0);
   const scenarioId = useRef(0);
   const opTerugleveringRef = useRef(false);
+  const jaarRef = useRef<NettariefJaar>(NETTARIEF_JAAR);
 
   /**
    * Start scenario en raster in de achtergrondworker voor een configuratie,
@@ -197,11 +215,10 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
         worker.postMessage({
           type: "scenario",
           id,
-          config: {
-            ...cfg,
-            netTariff: true,
-            netTariffOnExport: opTerugleveringRef.current,
-          },
+          config: scenarioConfiguratie(cfg, {
+            jaar: jaarRef.current,
+            opTeruglevering: opTerugleveringRef.current,
+          }),
         } satisfies WorkerRequest);
       }
       if (al.grid) {
@@ -264,6 +281,11 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
         }
         return;
       }
+      if (msg.type === "periode") {
+        if (msg.id !== periodeId.current) return;
+        setState((s) => ({ ...s, periode: msg.periode, periodeBezig: false }));
+        return;
+      }
       if (msg.type === "day") {
         if (msg.id !== dagId.current) return;
         setState((s) => ({
@@ -291,6 +313,7 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
             result: state.result ?? msg.result,
             scenario: msg.result,
             scenarioOpTeruglevering: opTerugleveringRef.current,
+            scenarioJaar: jaarRef.current,
           });
         }
         return;
@@ -387,19 +410,58 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
     setState((s) => ({ ...s, dag: null, dagBezig: false, dagOntbreekt: null }));
   }, []);
 
-  const zetScenarioOpTeruglevering = useCallback((opTeruglevering: boolean) => {
-    opTerugleveringRef.current = opTeruglevering;
+  const vraagPeriode = useCallback(
+    (van: string, tot: string, resolutie: Resolutie) => {
+      const worker = hoofdRef.current;
+      if (!worker || !config) return;
+      const id = ++periodeId.current;
+      setState((s) => ({ ...s, periodeBezig: true }));
+      worker.postMessage({
+        type: "periode",
+        id,
+        config,
+        van,
+        tot,
+        resolutie,
+      } satisfies WorkerRequest);
+    },
+    [config],
+  );
+
+  /** Reken het scenario opnieuw met de huidige schakelaars. */
+  const herstartScenario = useCallback(() => {
     const worker = achtergrondRef.current;
     const cfg = laatsteConfig.current;
-    setState((s) => ({ ...s, scenarioOpTeruglevering: opTeruglevering, scenario: null }));
+    setState((s) => ({ ...s, scenario: null }));
     if (!worker || !cfg) return;
     const id = ++scenarioId.current;
     worker.postMessage({
       type: "scenario",
       id,
-      config: { ...cfg, netTariff: true, netTariffOnExport: opTeruglevering },
+      config: scenarioConfiguratie(cfg, {
+        jaar: jaarRef.current,
+        opTeruglevering: opTerugleveringRef.current,
+      }),
     } satisfies WorkerRequest);
   }, []);
+
+  const zetScenarioOpTeruglevering = useCallback(
+    (opTeruglevering: boolean) => {
+      opTerugleveringRef.current = opTeruglevering;
+      setState((s) => ({ ...s, scenarioOpTeruglevering: opTeruglevering }));
+      herstartScenario();
+    },
+    [herstartScenario],
+  );
+
+  const zetScenarioJaar = useCallback(
+    (jaar: NettariefJaar) => {
+      jaarRef.current = jaar;
+      setState((s) => ({ ...s, scenarioJaar: jaar }));
+      herstartScenario();
+    },
+    [herstartScenario],
+  );
 
   // Een wijziging in de invoer maakt raster, scenario en een opgehaalde dag
   // achterhaald: die hoorden bij de vorige doorrekening. Lopend achtergrondwerk
@@ -407,11 +469,12 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
   // alsnog binnenvalt.
   useEffect(() => {
     dagId.current++;
+    periodeId.current++;
     gridId.current++;
     scenarioId.current++;
     setState((s) =>
-      s.grid || s.dag || s.dagBezig || s.scenario
-        ? { ...s, grid: null, dag: null, dagBezig: false, dagOntbreekt: null, scenario: null }
+      s.grid || s.dag || s.dagBezig || s.scenario || s.periode || s.periodeBezig
+        ? { ...s, grid: null, dag: null, dagBezig: false, dagOntbreekt: null, scenario: null, periode: null, periodeBezig: false }
         : s,
     );
     const achtergrond = achtergrondRef.current;
@@ -443,7 +506,8 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
       // Wat er bewaard is, tonen we; wat ontbreekt, rekent de achtergrond bij.
       const scenarioPast =
         bewaard.scenario !== undefined &&
-        (bewaard.scenarioOpTeruglevering ?? false) === opTerugleveringRef.current;
+        (bewaard.scenarioOpTeruglevering ?? false) === opTerugleveringRef.current &&
+        (bewaard.scenarioJaar ?? NETTARIEF_JAAR) === jaarRef.current;
       startAchtergrond(config, {
         scenario: scenarioPast ? bewaard.scenario : undefined,
         grid: bewaard.grid,
@@ -468,6 +532,7 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
             result: vooruit.result,
             scenario: vooruit.scenario,
             scenarioOpTeruglevering: false,
+            scenarioJaar: NETTARIEF_JAAR,
             grid: vooruit.grid,
           });
           setState((s) => ({
@@ -480,7 +545,10 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
             verouderd: false,
           }));
           startAchtergrond(config, {
-            scenario: opTerugleveringRef.current ? undefined : vooruit.scenario,
+            scenario:
+              opTerugleveringRef.current || jaarRef.current !== NETTARIEF_JAAR
+                ? undefined
+                : vooruit.scenario,
             grid: vooruit.grid,
           });
           return;
@@ -498,5 +566,5 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
     // manier om op inhoud te vergelijken in plaats van op referentie.
   }, [JSON.stringify(config), state.manifest, state.result, send, startAchtergrond]);
 
-  return { ...state, vraagDag, wisDag, herbereken, zetScenarioOpTeruglevering };
+  return { ...state, vraagDag, wisDag, vraagPeriode, herbereken, zetScenarioOpTeruglevering, zetScenarioJaar };
 }

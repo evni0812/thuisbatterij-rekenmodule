@@ -8,15 +8,12 @@
 
 import { Invoerbron } from "../data/invoer";
 import type { Manifest } from "../data/manifest";
-import {
-  marginalWearCostPerKwh,
-  wearCostPerKwh,
-  WEAR_ONDERGRENS_DEEL,
-} from "../model/battery";
+import { wearCostPerKwh } from "../model/battery";
 import { prijsPerKwhVan, rasterJaar, rasterPunt } from "../model/raster";
 import { dispatchBaseline } from "../model/dispatch-baseline";
 import { dispatchOptimal } from "../model/dispatch-optimal";
 import { dispatchRolling } from "../model/dispatch-rolling";
+import { periodeReeks, voegReeksenSamen, type PeriodeReeks } from "../model/periode";
 import {
   findDay,
   runAnalysis,
@@ -80,7 +77,7 @@ async function runGrid(
         kw,
         prijsPerKwh,
         config.cycleLife,
-        config.calendarLifeYears,
+        config.wearFraction ?? 1,
       ),
     );
     post({ type: "grid-row", id, row: r, points, done: r === capacities.length - 1 });
@@ -128,47 +125,24 @@ function configSleutel(config: Configuration): string {
  * Zorg dat er dispatches zijn die bij deze configuratie horen.
  *
  * Bij een treffer verandert er niets. Anders wordt de invoer opnieuw opgebouwd
- * en de slijtagedrempel opnieuw bepaald, op dezelfde manier als in
- * `runAnalysis` — anders zou de dagweergave een andere batterij tonen dan de
- * cijfers erboven.
+ * met dezelfde slijtageprijs als drempel als in `runAnalysis` — anders zou de
+ * dagweergave een andere batterij tonen dan de cijfers erboven.
  */
 async function zorgVoorInvoer(config: Configuration): Promise<NonNullable<typeof laatste>> {
   const sleutel = configSleutel(config);
   if (laatste && laatste.sleutel === sleutel) return laatste;
 
   const invoer = await buildInput(config);
-  const ondergrens =
-    wearCostPerKwh(invoer.investmentEur, invoer.cycleLife, invoer.battery) *
-    WEAR_ONDERGRENS_DEEL;
-  const metOndergrens: BatterySpec = {
-    ...invoer.battery,
-    wearCostEurPerKwh: ondergrens,
-  };
-  const proef = invoer.windows.find((w) => w.isFullYear) ?? invoer.windows[0];
-  let verwachteCycli = 0;
-  const dispatches = new Map<number, DispatchResult>();
-  if (proef) {
-    const p = dispatchRolling(proef.window, metOndergrens, invoer.tariff);
-    verwachteCycli = p.equivalentCycles;
-    // Blijft de drempel op de ondergrens, dan ís deze run de realistische
-    // dispatch van dat jaar en hoeft hij niet opnieuw.
-    const idx = invoer.windows.indexOf(proef);
-    dispatches.set(idx, p);
-  }
-  const wear = marginalWearCostPerKwh(
-    invoer.investmentEur,
-    invoer.cycleLife,
-    invoer.battery,
-    verwachteCycli,
-    invoer.calendarLifeYears,
-  );
-  if (wear > ondergrens + 1e-12) dispatches.clear();
-
   laatste = {
     sleutel,
     invoer,
-    spec: { ...invoer.battery, wearCostEurPerKwh: wear },
-    dispatches,
+    spec: {
+      ...invoer.battery,
+      wearCostEurPerKwh:
+        wearCostPerKwh(invoer.investmentEur, invoer.cycleLife, invoer.battery) *
+        (invoer.wearFraction ?? 1),
+    },
+    dispatches: new Map(),
     optimaal: new Map(),
   };
   return laatste;
@@ -202,10 +176,37 @@ function haalDag(
       staat.invoer.tariff,
       isoDate,
       opt,
+      wearCostPerKwh(staat.invoer.investmentEur, staat.invoer.cycleLife, staat.invoer.battery),
     );
     if (dag) return dag;
   }
   return null;
+}
+
+/**
+ * Tel de dispatch op over een periode. Alleen de jaren die de periode raken
+ * worden (zo nodig) doorgerekend; een week over een jaargrens komt uit twee.
+ */
+function haalPeriode(
+  staat: NonNullable<typeof laatste>,
+  van: string,
+  tot: string,
+  resolutie: Parameters<typeof periodeReeks>[7],
+): PeriodeReeks {
+  const wear = wearCostPerKwh(staat.invoer.investmentEur, staat.invoer.cycleLife, staat.invoer.battery);
+  const delen: PeriodeReeks[] = [];
+  for (let i = 0; i < staat.invoer.windows.length; i++) {
+    const entry = staat.invoer.windows[i]!;
+    if (entry.lastDay < van || entry.firstDay > tot) continue;
+    let real = staat.dispatches.get(i);
+    if (!real) {
+      real = dispatchRolling(entry.window, staat.spec, staat.invoer.tariff);
+      staat.dispatches.set(i, real);
+    }
+    const base = dispatchBaseline(entry.window, staat.invoer.tariff);
+    delen.push(periodeReeks(entry.window, base, real, staat.spec, wear, van, tot, resolutie));
+  }
+  return voegReeksenSamen(delen, resolutie, van, tot);
 }
 
 self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
@@ -233,6 +234,12 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       post({ type: "day", id: msg.id, day: haalDag(staat, msg.date), date: msg.date });
       return;
     }
+    if (msg.type === "periode") {
+      if (!manifest) throw new Error("worker is nog niet geïnitialiseerd");
+      const staat = await zorgVoorInvoer(msg.config);
+      post({ type: "periode", id: msg.id, periode: haalPeriode(staat, msg.van, msg.tot, msg.resolutie) });
+      return;
+    }
     if (msg.type === "analyse") {
       if (!manifest) throw new Error("worker is nog niet geïnitialiseerd");
       const t0 = performance.now();
@@ -247,19 +254,14 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       });
 
       // De dagkiezer moet dezelfde drempel gebruiken als de doorrekening zelf.
-      const laatsteCycli = result.stats.cyclesPerYear;
       laatste = {
         sleutel: configSleutel(msg.config),
         invoer,
         spec: {
           ...invoer.battery,
-          wearCostEurPerKwh: marginalWearCostPerKwh(
-            invoer.investmentEur,
-            invoer.cycleLife,
-            invoer.battery,
-            laatsteCycli,
-            invoer.calendarLifeYears,
-          ),
+          wearCostEurPerKwh:
+            wearCostPerKwh(invoer.investmentEur, invoer.cycleLife, invoer.battery) *
+            (invoer.wearFraction ?? 1),
         },
         dispatches: new Map(dispatches.map((d, i) => [i, d])),
         optimaal: new Map(optimaal.map((d, i) => [i, d])),
@@ -280,7 +282,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
     post({
       type: "error",
       id:
-        msg.type === "analyse" || msg.type === "grid" || msg.type === "day"
+        msg.type === "analyse" || msg.type === "grid" || msg.type === "day" || msg.type === "periode"
           ? msg.id
           : null,
       message: err instanceof Error ? err.message : String(err),

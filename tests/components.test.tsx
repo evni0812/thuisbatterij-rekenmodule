@@ -21,6 +21,9 @@ import { Statistieken } from "../components/Statistieken";
 import { Uitsplitsing } from "../components/Uitsplitsing";
 import { Verantwoording } from "../components/Verantwoording";
 import { Verliezen } from "../components/Verliezen";
+import { Verschuiving } from "../components/Verschuiving";
+import { Nettarief } from "../components/Nettarief";
+import { Tariefblad } from "../components/Tariefblad";
 import { controleerInvoer } from "../components/Invoer";
 import { expandPricesToQuarters, loadManifest, loadPriceYear, loadProfileYear } from "../lib/data/loader";
 import type { Manifest } from "../lib/data/manifest";
@@ -38,12 +41,21 @@ afterEach(cleanup);
 const DOMAIN = "871685900000056162";
 
 /** Minimale instellingen voor het instellingenpaneel. */
+/**
+ * Een volledige set instellingen voor de componenten die er een vragen.
+ *
+ * De waarden die een standaard hébben komen uit `STANDAARD`, niet uit een
+ * kopie hier: anders meldt het instellingenpaneel "1 instelling wijkt af"
+ * zodra iemand een standaardwaarde verandert, en faalt een test op iets wat
+ * niet stuk is.
+ */
 const LEGE_INSTELLINGEN = {
   afnameKwh: 2500, terugleveringKwh: 2000, presetId: "marstek-venus-e3", heffing: "toen" as const,
   domein: DOMAIN, van: "", tot: "", spreiding: 1, terugleverkostenCt: 0,
-  curtailment: true, analysejaren: 15, discontovoet: 0.03, prijsstijging: 0.02,
+  curtailment: true, analysejaren: 15, discontovoet: 0.03,
+  prijsstijging: STANDAARD.prijsstijging, slijtageDeel: STANDAARD.slijtageDeel,
   degradatie: 0.015, prijsEur: null, capaciteitKwh: null, vermogenKw: null,
-  opwekKwh: null,
+  opwekKwh: null, zonnepanelen: true,
 };
 let manifest: Manifest;
 let result: AnalysisResult;
@@ -120,6 +132,20 @@ describe("de pagina toont het antwoord", () => {
     expect(document.body.textContent).toMatch(/terugverdiend|niet terug/);
   });
 
+  it("zegt erbij dat de terugverdientijd het verleden doortrekt", () => {
+    /**
+     * Het bedrag is gemeten, de terugverdientijd is dat bedrag doorgetrokken
+     * naar de toekomst. Die overgang hoort in de zin zelf te staan en niet
+     * alleen in de dialoog erachter: wie alleen de kop leest, leest anders een
+     * belofte waar een doorrekening staat.
+     */
+    render(<Antwoord result={result} scenario={null} investeringEur={699} bezig={false} />);
+    const tekst = document.body.textContent ?? "";
+    expect(tekst).toMatch(/had deze batterij je/);
+    expect(tekst).toMatch(/Blijven de komende jaren hierop lijken|blijven lijken/);
+    expect(tekst).toMatch(/aanname, geen voorspelling/);
+  });
+
   it("legt de prijskloof uit met beide gewogen prijzen", () => {
     render(
       <Prijskloof gap={result.priceGap} afnameKwh={2500} terugleveringKwh={2000} />,
@@ -131,14 +157,30 @@ describe("de pagina toont het antwoord", () => {
   });
 
   it("splitst de besparing uit en telt op tot het totaal", () => {
-    const b = result.perYear[0]!.breakdown;
+    const b = result.breakdown;
     render(<Uitsplitsing breakdown={b} periodeLabel="2025" />);
-    expect(screen.getByText("Samen bespaard")).toBeDefined();
+    // De waterval sluit af met de som van de posten ervoor.
+    expect(screen.getAllByText("Samen bespaard").length).toBeGreaterThan(0);
     // Slijtage hoort hier niet tussen: dat is de aanschafprijs, geen extra kost.
     // Het omzettingsverlies staat naast de optelling, met uitleg waarom.
     expect(document.body.textContent).toMatch(/ging.*verloren/);
     expect(document.body.textContent).toMatch(/Slijtage staat er evenmin tussen/);
-    expect(screen.getByText(/Zelf verbruiken/)).toBeDefined();
+    expect(screen.getAllByText(/Zelf verbruiken/).length).toBeGreaterThan(0);
+  });
+
+  it("zet de posten van de waterval op elkaar, eindigend op het totaal", () => {
+    /**
+     * De verbindingslijnen dragen de belofte dat het een optelling is: de ene
+     * post begint waar de vorige eindigt. Klopt die optelling niet met het
+     * totaal, dan liegt de grafiek en is dat aan niets te zien.
+     */
+    const b = result.breakdown;
+    expect(
+      b.selfConsumptionEur + b.arbitrageEur + b.avoidedNegativeExportEur,
+    ).toBeCloseTo(b.totalEur, 6);
+    // En het totaal is hetzelfde getal als het antwoord bovenaan de pagina:
+    // dezelfde grondslag, het gemiddelde over de volledige jaren.
+    expect(b.totalEur).toBeCloseTo(result.averageSavingEur, 6);
   });
 
   it("tekent het dagprofiel met beide voorbeelddagen én een datumkiezer", () => {
@@ -367,7 +409,7 @@ describe("invoervalidatie denkt mee", () => {
 
 describe("kerncijfers en herberekenen", () => {
   it("toont elk cijfer met zijn verandering, niet als los getal", () => {
-    render(<Statistieken stats={result.stats} opwekBekend={false} />);
+    render(<Statistieken stats={result.stats} opwekBekend={false} geschatteOpwek={2800} />);
     const tekst = document.body.textContent ?? "";
     // Het verschil is het verhaal: "van X naar Y" zegt wat een batterij doet,
     // een kaal eindgetal niet.
@@ -378,13 +420,54 @@ describe("kerncijfers en herberekenen", () => {
     expect(screen.getAllByLabelText("wordt").length).toBeGreaterThanOrEqual(2);
   });
 
-  it("laat zelfconsumptie en autarkie weg zolang de opwek onbekend is", () => {
-    render(<Statistieken stats={result.stats} opwekBekend={false} />);
+  it("zegt erbij dat eigen verbruik en onafhankelijkheid op een schatting rusten", () => {
+    render(<Statistieken stats={result.stats} opwekBekend={false} geschatteOpwek={2800} />);
     const tekst = document.body.textContent ?? "";
-    // Ze zijn niet uit meterstanden af te leiden; een geraden getal zou erger
-    // zijn dan geen getal.
-    expect(tekst).not.toMatch(/Zelfconsumptie/);
-    expect(tekst).toMatch(/hoeveel je panelen per jaar opwekken/);
+    // De twee percentages vragen de bruto opwek, en die staat niet op je
+    // jaarafrekening. Ze worden wél getoond — ze zijn het interessantst — maar
+    // nooit zonder erbij te zeggen waar het vertrekpunt vandaan komt.
+    expect(tekst).toMatch(/rusten op een schatting/);
+    expect(tekst).toMatch(/30%/);
+    expect(tekst).toMatch(/2\.800 kWh/);
+    expect(tekst).toMatch(/je echte jaaropwek in/);
+  });
+
+  it("toont eigen verbruik, onafhankelijkheid en piekuren als percentage met hun verandering", () => {
+    const metOpwek = {
+      ...result.stats,
+      selfConsumptionBaseline: 0.3,
+      selfConsumptionBattery: 0.62,
+      selfSufficiencyBaseline: 0.256,
+      selfSufficiencyBattery: 0.35,
+    };
+    render(<Statistieken stats={metOpwek} opwekBekend geschatteOpwek={2877} />);
+    const tekst = document.body.textContent ?? "";
+    expect(tekst).toMatch(/Eigen verbruik/);
+    expect(tekst).toMatch(/Onafhankelijk van het net/);
+    expect(tekst).toMatch(/Afname in de piekuren/);
+    // Het verschil staat erbij, in procentpunten — niet als percentage van een
+    // percentage, want dat getal klopt wel en zegt niets.
+    expect(tekst).toMatch(/\+32 procentpunt/);
+    expect(tekst).toMatch(/\+9,4 procentpunt/);
+    expect(tekst).not.toMatch(/rusten op een schatting/);
+  });
+
+  it("drukt de afname in de piekuren uit als aandeel, zonder en met batterij en onder het nettarief", () => {
+    const scenarioStats = {
+      ...result.stats,
+      peakHourImportBatteryKwh: result.stats.peakHourImportBatteryKwh * 0.5,
+    };
+    render(<Statistieken stats={result.stats} scenarioStats={scenarioStats} opwekBekend={false} geschatteOpwek={2800} />);
+    const tegel = screen.getByText("Afname in de piekuren").closest(".stat")!;
+    const tekst = tegel.textContent ?? "";
+    // Drie percentages: zonder batterij, met batterij, en onder het scenario.
+    expect(tekst.match(/\d+%/g)?.length).toBeGreaterThanOrEqual(3);
+    expect(tekst).toMatch(/Met het nettarief van 2029/);
+    // Zonder batterij valt een groter deel in de piek dan met.
+    const basis = result.stats.peakHourImportBaselineKwh / result.stats.gridImportBaselineKwh;
+    const met = result.stats.peakHourImportBatteryKwh / result.stats.gridImportBatteryKwh;
+    expect(basis).toBeGreaterThan(0);
+    expect(met).toBeLessThan(basis);
   });
 
   it("vraagt om een opdracht in plaats van vanzelf te rekenen", () => {
@@ -414,13 +497,15 @@ describe("kerncijfers en herberekenen", () => {
 });
 
 describe("de verliezensectie", () => {
-  it("noemt alle drie de posten met kilowatturen en een bedrag", () => {
+  it("noemt beide omzettingsposten met kilowatturen en een bedrag", () => {
     render(<Verliezen losses={result.losses} afnameKwh={2500} besparingEur={result.averageSavingEur} />);
     const tekst = document.body.textContent ?? "";
     expect(tekst).toMatch(/Verlies bij het laden/);
     expect(tekst).toMatch(/Verlies bij het ontladen/);
-    expect(tekst).toMatch(/Stroom voor de batterij zelf/);
     expect(tekst).toMatch(/Samen verloren/);
+    // Het sluipverbruik hoort hier niet meer bij: het zit niet in het model,
+    // want het loopt door of de batterij nu handelt of niet.
+    expect(tekst).not.toMatch(/Stroom voor de batterij zelf/);
     expect(tekst).toMatch(/kWh/);
     expect(tekst).toMatch(/€/);
     // Geen Engelse decimaalpunt in getallen.
@@ -429,13 +514,8 @@ describe("de verliezensectie", () => {
 
   it("toont in de kop een conclusie die bij de cijfers past", () => {
     render(<Verliezen losses={result.losses} afnameKwh={2500} besparingEur={result.averageSavingEur} />);
-    const l = result.losses;
     const kop = screen.getByRole("heading", { level: 3 }).textContent ?? "";
-    if (l.standbyKwh > l.chargeLossKwh + l.dischargeLossKwh) {
-      expect(kop).toMatch(/niet in de omzetting/);
-    } else {
-      expect(kop).toMatch(/komt er \d+ weer uit/);
-    }
+    expect(kop).toMatch(/komt er \d+ weer uit/);
   });
 
   it("laat de balken binnen hun schaal blijven", () => {
@@ -502,7 +582,7 @@ describe("labels in het dagprofiel botsen niet", () => {
         gridExportBaselineKwh: 6, gridExportBatteryKwh: 3, chargedKwh: 3,
         deliveredKwh: 2.6, chargedFromSolarKwh: 2.5, chargedFromGridKwh: 0.5,
         cycles: 0.6, socMaxKwh: 4.2, socStartKwh: 0, socEndKwh: 0.4,
-        curtailedKwh: 0, priceMinEurPerKwh: 0.12, priceMaxEurPerKwh: 0.34,
+        curtailedKwh: 0, wearCostEur: 0.05, priceMinEurPerKwh: 0.12, priceMaxEurPerKwh: 0.34,
         meterImportKwh: 4, meterExportKwh: 6,
       },
     };
@@ -690,6 +770,147 @@ describe("het geldpaneel sluit aan op de dagcijfers", () => {
   });
 });
 
+describe("het nettarief van 2029", () => {
+  it("zet winter en zomer in twee panelen, met het bedrag in elk blok", () => {
+    const { container } = render(<Tariefblad markeerPiek />);
+    const tekst = document.body.textContent ?? "";
+    // Twee panelen, elk met hun eigen kop: niet samengeperst in één beeld.
+    expect(tekst).toMatch(/Winter · oktober tot en met maart/);
+    expect(tekst).toMatch(/Zomer · april tot en met september/);
+    // De prijs staat als getal in het blok, niet alleen als kleur.
+    expect(tekst).toMatch(/17,8 ct/);
+    expect(tekst).toMatch(/0 ct/);
+    expect(tekst).toMatch(/piek/);
+    expect(tekst).toMatch(/gratis/);
+    // Waar je vandaan komt: nul per kilowattuur, als nulpunt van de as.
+    expect(tekst).toMatch(/nu 0/);
+    expect(tekst).toMatch(/vast bedrag per jaar/);
+    // Vijf of zes blokken per seizoen, niet vierentwintig staafjes.
+    const vlakken = [...container.querySelectorAll("rect")].filter(
+      (r) => r.getAttribute("fill")?.startsWith("var(--seq"),
+    );
+    expect(vlakken.length).toBeLessThanOrEqual(12);
+    expect(vlakken.length).toBeGreaterThanOrEqual(10);
+  });
+
+  it("legt uit dat je van een vast bedrag naar volume en moment gaat", () => {
+    render(
+      <Nettarief huidig={result} scenario={result} />,
+    );
+    const tekst = document.body.textContent ?? "";
+    expect(tekst).toMatch(/vast bedrag per jaar/);
+    expect(tekst).toMatch(/per kilowattuur/);
+    expect(tekst).toMatch(/het moment/);
+    // De verantwoording staat uitgeklapt, niet in de lopende tekst.
+    const uitklap = document.querySelectorAll("details.voetnoot-uitklap");
+    expect(uitklap.length).toBe(1);
+    // Geen wat-als over een heffing op teruglevering: die bestaat niet, en het
+    // voorstel beprijst uitsluitend afname.
+    expect(tekst).not.toMatch(/ook op teruglevering/);
+  });
+});
+
+describe("labels blijven binnen de grafiek", () => {
+  /**
+   * Het bedrag boven de hoogste staaf van het maandverloop viel buiten de
+   * viewBox en werd door de browser afgeknipt: precies het getal waar de
+   * grafiek om draait. Deze test kijkt niet naar de marge maar naar het
+   * gevolg — geen enkele tekst mag buiten het kader vallen.
+   */
+  function kader(svg: SVGSVGElement) {
+    const [, , breedte, hoogte] = (svg.getAttribute("viewBox") ?? "")
+      .split(" ")
+      .map(Number);
+    return { breedte: breedte!, hoogte: hoogte! };
+  }
+
+  it("houdt elk bedrag in het maandverloop binnen de viewBox", () => {
+    const { container } = render(<MaandVerloop maanden={result.perMonth} />);
+    const svg = container.querySelector("svg")!;
+    const { breedte, hoogte } = kader(svg as SVGSVGElement);
+    const teksten = [...svg.querySelectorAll("text")];
+    expect(teksten.length).toBeGreaterThan(12);
+    for (const t of teksten) {
+      const y = Number(t.getAttribute("y"));
+      const x = Number(t.getAttribute("x"));
+      // Een regel van ruim 11px hoog: de bovenkant ligt zo'n 12 boven de baseline.
+      expect(y - 12, `"${t.textContent}" steekt boven de grafiek uit`).toBeGreaterThanOrEqual(0);
+      expect(y, `"${t.textContent}" valt onder de grafiek`).toBeLessThanOrEqual(hoogte);
+      expect(x).toBeGreaterThanOrEqual(0);
+      expect(x).toBeLessThanOrEqual(breedte);
+    }
+  });
+
+  it("houdt de waterval van de uitsplitsing binnen de viewBox", () => {
+    const { container } = render(
+      <Uitsplitsing breakdown={result.breakdown} periodeLabel="2025" />,
+    );
+    const svg = container.querySelector("svg")!;
+    const { hoogte } = kader(svg as SVGSVGElement);
+    for (const t of svg.querySelectorAll("text")) {
+      const y = Number(t.getAttribute("y"));
+      expect(y - 12).toBeGreaterThanOrEqual(0);
+      expect(y).toBeLessThanOrEqual(hoogte);
+    }
+    for (const r of svg.querySelectorAll("rect")) {
+      const y = Number(r.getAttribute("y"));
+      const h = Number(r.getAttribute("height"));
+      expect(y).toBeGreaterThanOrEqual(0);
+      expect(y + h).toBeLessThanOrEqual(hoogte + 0.001);
+    }
+  });
+});
+
+describe("de profielverschuiving", () => {
+  it("tekent beide seizoenen met hun uren en een legenda", () => {
+    render(<Verschuiving profielen={result.seasonProfiles} />);
+    const tekst = document.body.textContent ?? "";
+    expect(tekst).toMatch(/Winter — oktober tot en met maart/);
+    expect(tekst).toMatch(/Zomer — april tot en met september/);
+    expect(tekst).toMatch(/de batterij levert/);
+    // De grijze vorm heet bij naam wat hij is, niet "je profiel".
+    expect(tekst).toMatch(/zonder batterij: wat er door de meter ging/);
+    // En wat het net eraan heeft, staat als piek voor en na.
+    expect(tekst).toMatch(/piek van het net/);
+    expect(tekst).toMatch(/piek naar het net/);
+  });
+
+  it("verdwijnt als er geen profiel is", () => {
+    const { container } = render(<Verschuiving profielen={[]} />);
+    expect(container.textContent).toBe("");
+  });
+
+  it("telt op tot de jaarafname en jaarteruglevering", () => {
+    /**
+     * Het seizoensprofiel is een tweede weg naar getallen die elders al staan.
+     * Loopt de som van de uren uit de pas met de jaarcijfers, dan telt een van
+     * de twee verkeerd — en dat is aan de vorm van de grafiek niet te zien.
+     */
+    const perDagSom = (kies: (p: (typeof result.seasonProfiles)[number]) => number[]) =>
+      result.seasonProfiles.reduce(
+        (a, p) => a + kies(p).reduce((x, y) => x + y, 0) * p.days,
+        0,
+      );
+    const jaren = result.perYear.filter((j) => j.isFullYear).length || 1;
+    expect(perDagSom((p) => p.importBaseline) / jaren).toBeCloseTo(
+      result.stats.gridImportBaselineKwh,
+      0,
+    );
+    expect(perDagSom((p) => p.exportBattery) / jaren).toBeCloseTo(
+      result.stats.gridExportBatteryKwh,
+      0,
+    );
+  });
+
+  it("zet de zomer- en wintergrens op dezelfde maanden als het nettarief", () => {
+    // Zomer is april tot en met september: 183 dagen per jaar, winter 182 of 183.
+    const jaren = result.perYear.filter((j) => j.isFullYear).length || 1;
+    const zomer = result.seasonProfiles.find((p) => p.season === "zomer")!;
+    expect(zomer.days / jaren).toBeGreaterThan(180);
+    expect(zomer.days / jaren).toBeLessThan(186);
+  });
+});
+
 describe("het maandverloop", () => {
   it("toont elke maand met zijn bedrag, en scheidt zomer van winter", () => {
     render(<MaandVerloop maanden={result.perMonth} />);
@@ -726,26 +947,31 @@ describe("de pagina vertelt het verhaal in vier delen, in die volgorde", () => {
    * dan waarom, dan wanneer van grof naar fijn, dan de wat-als-vragen, en pas
    * daarna de instellingen.
    */
-  it("zet de deelkoppen en de secties in de bedoelde volgorde", () => {
+  it("zet de tabbladen en de secties in de bedoelde volgorde", () => {
     const bron = readFileSync("app/page.tsx", "utf8");
     const volgorde = [
-      "Het antwoord",
+      '<Paneel id="start"',
+      "<Invoer",
       "<Antwoord",
       "<Statistieken",
-      "Waarom",
+      "<Geavanceerd",
+      "<Bewaren",
+      '<Paneel id="waarom"',
       "<Prijskloof",
       "<Uitsplitsing",
       "<Verliezen",
-      "Wanneer",
+      '<Paneel id="wanneer"',
       "<BesparingPerJaar",
       "<MaandVerloop",
+      "<Verschuiving",
       "<Dagprofiel",
-      "Wat als",
+      '<Paneel id="wat-als"',
       "<Nettarief",
       "<BatterijMaat",
       "<Cashflow",
-      "<Geavanceerd",
+      '<Paneel id="methode"',
       "<Verantwoording",
+      "Wat we niet weten",
     ];
     let vanaf = 0;
     for (const stuk of volgorde) {

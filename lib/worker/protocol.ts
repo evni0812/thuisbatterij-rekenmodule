@@ -1,6 +1,9 @@
 /** Berichten tussen de UI en de rekenworker. */
 
 import type { AnalysisResult, SampleDay } from "../model/analysis";
+import type { PeriodeReeks, Resolutie } from "../model/periode";
+import type { Afnametype } from "../data/manifest";
+import type { NettariefJaar } from "../nettarief";
 import type { BatterySpec, HouseholdSpec, TariffSpec } from "../model/types";
 
 /** Alles wat de gebruiker instelt, in één object. */
@@ -11,20 +14,30 @@ export interface Configuration {
   from: string;
   to: string;
   household: HouseholdSpec;
+  /**
+   * Welk gemeten profiel: AMI (met zonnepanelen, standaard) of AZI (zonder).
+   * Optioneel en standaard afwezig, zodat de hash van een gewone doorrekening
+   * niet verandert.
+   */
+  afnametype?: Afnametype;
   battery: BatterySpec;
   tariff: TariffSpec;
   investmentEur: number;
   cycleLife: number;
   /**
-   * Kalenderlevensduur van de batterij in jaren; bepaalt samen met cycleLife of
-   * laadbeurten schaars zijn. Los van analysisYears, want dat is een keuze van
-   * de gebruiker over de doorrekening en geen eigenschap van de accu.
+   * Kalenderlevensduur van de batterij in jaren, uit de catalogus. Stuurt de
+   * dispatch niet; staat ter duiding in de uitleg bij de laadbeurten.
    */
   calendarLifeYears: number;
   analysisYears: number;
   priceEscalation: number;
   discountRate: number;
   calendarFadePerYear: number;
+  /**
+   * Deel van de volle slijtageprijs dat de planner per geleverde kWh rekent,
+   * 0–1; standaard 1. Zie lib/strategie.ts.
+   */
+  wearFraction?: number;
   residualValueEur: number;
   /** Bruto jaaropwek van de panelen, voor zelfconsumptie en autarkie. */
   annualProductionKwh?: number;
@@ -42,8 +55,20 @@ export interface Configuration {
    * bruikbaar. Alleen het scenario zet hem aan.
    */
   netTariff?: boolean;
-  /** Heft het nettarief ook op teruglevering. Onzeker in het voorstel. */
+  /**
+   * Heft het nettarief ook op teruglevering. Het voorstel sluit dat expliciet
+   * uit — alleen afname wordt beprijsd — dus dit is een wat-als.
+   */
   netTariffOnExport?: boolean;
+  /** Voor welk jaar het basistarief van het nettarief geldt; standaard 2029. */
+  netTariffYear?: NettariefJaar;
+  /**
+   * Vaste heffing (energiebelasting plus inkoopopslag, incl. btw) per kWh die
+   * de heffing uit de data vervangt. Het nettariefscenario zet hier de heffing
+   * van 2029 of 2030, zodat een nettarief van dan niet op een belasting van
+   * toen wordt gestapeld.
+   */
+  levyEurPerKwh?: number;
 }
 
 /** Eén doorgerekende combinatie van capaciteit en vermogen. */
@@ -92,6 +117,20 @@ export type WorkerRequest =
       id: number;
       config: Configuration;
     }
+  | {
+      /**
+       * Het resultaat over een periode, opgeteld per uur, dag of week. Net als
+       * de dag komt dit uit de bewaarde jaardispatch; de configuratie gaat mee
+       * voor het geval die er (na een cachetreffer) nog niet is.
+       */
+      type: "periode";
+      id: number;
+      config: Configuration;
+      /** Eerste en laatste kalenderdag, inclusief. */
+      van: string;
+      tot: string;
+      resolutie: Resolutie;
+    }
   | { type: "cancel" };
 
 export type WorkerResponse =
@@ -107,4 +146,5 @@ export type WorkerResponse =
     }
   | { type: "day"; id: number; day: SampleDay | null; date: string }
   | { type: "scenario"; id: number; result: AnalysisResult }
+  | { type: "periode"; id: number; periode: PeriodeReeks }
   | { type: "error"; id: number | null; message: string };

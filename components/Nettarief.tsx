@@ -18,37 +18,30 @@
  * van CE Delft voor 2030, en dat staat er ook bij.
  */
 
+import type { ReactNode } from "react";
 import type { AnalysisResult } from "../lib/model/analysis";
 import {
+  BASISTARIEF,
   NETTARIEF_BRON,
   NETTARIEF_INGANG,
-  profielVoorMaand,
+  NETTARIEF_JAAR,
+  scenarioHeffing,
 } from "../lib/nettarief";
-import { euro, getal, jaren, procent } from "../lib/format";
+import { centPerKwh, euro, getal, jaren, procent } from "../lib/format";
 import { Figure } from "./chart-parts";
-
-const UREN = Array.from({ length: 24 }, (_, u) => u);
-
-/** Kleur per niveau: donkerder is duurder. De schaal is sequentieel, één hue. */
-function tint(tarief: number): string {
-  if (tarief <= 0) return "var(--seq-100)";
-  if (tarief <= 0.06) return "var(--seq-200)";
-  if (tarief <= 0.1) return "var(--seq-300)";
-  if (tarief <= 0.13) return "var(--seq-500)";
-  return "var(--seq-700)";
-}
+import { piekAandeel } from "./Statistieken";
+import { Tariefblad } from "./Tariefblad";
 
 export function Nettarief({
   huidig,
   scenario,
-  opTeruglevering,
-  onOpTeruglevering,
+  actie,
 }: {
   huidig: AnalysisResult;
   /** Null zolang het scenario nog wordt doorgerekend in de achtergrond. */
   scenario: AnalysisResult | null;
-  opTeruglevering: boolean;
-  onOpTeruglevering: (opTeruglevering: boolean) => void;
+  /** De knop "Hoe is dit berekend?" in de kop. */
+  actie?: ReactNode;
 }) {
   const verschil = scenario
     ? scenario.averageSavingEur - huidig.averageSavingEur
@@ -60,6 +53,7 @@ export function Nettarief({
 
   return (
     <Figure
+      actie={actie}
       titel={
         scenario
           ? verschil > 0
@@ -69,52 +63,20 @@ export function Nettarief({
       }
       toelichting={
         <>
-          Vanaf {NETTARIEF_INGANG} hangt een groot deel van je netkosten af van
-          wannéér je stroom gebruikt. De winteravond wordt duur, de zomermiddag
-          gratis — precies de uren waarop een batterij levert en laadt.
+          Vandaag betaal je je netkosten als een vast bedrag per jaar: je
+          doorlaatwaarde maal een tarief, hoeveel je ook gebruikt en wanneer ook.
+          Vanaf {NETTARIEF_INGANG} gaat dat om. Twee derde van het
+          transporttarief wordt dan <b>per kilowattuur</b> in rekening gebracht,
+          en die prijs hangt af van <b>het moment</b>: de winteravond wordt duur,
+          de zomermiddag gratis. Precies de uren waarop een batterij levert en
+          laadt.
         </>
       }
     >
-      {/* Het tariefblad zelf, want zonder dat is elk bedrag hieronder een
-          black box. Twee profielen van 24 uur; dat past en het is te controleren
-          tegen de bron. */}
-      <div className="tariefblad">
-        <div className="tariefblad-rij">
-          <span className="tariefblad-naam">winter</span>
-          {UREN.map((u) => (
-            <span
-              key={`w${u}`}
-              className="tariefblad-cel"
-              style={{ background: tint(profielVoorMaand(1)[u]!) }}
-              title={`${u}:00 — ${getal(profielVoorMaand(1)[u]! * 100, 0)} ct/kWh`}
-            />
-          ))}
-        </div>
-        <div className="tariefblad-rij">
-          <span className="tariefblad-naam">zomer</span>
-          {UREN.map((u) => (
-            <span
-              key={`z${u}`}
-              className="tariefblad-cel"
-              style={{ background: tint(profielVoorMaand(6)[u]!) }}
-              title={`${u}:00 — ${getal(profielVoorMaand(6)[u]! * 100, 0)} ct/kWh`}
-            />
-          ))}
-        </div>
-        <div className="tariefblad-rij tariefblad-as">
-          <span className="tariefblad-naam" />
-          {UREN.map((u) => (
-            <span key={`u${u}`} className="tariefblad-cel">
-              {u % 6 === 0 ? u : ""}
-            </span>
-          ))}
-        </div>
-      </div>
-      <p className="tariefblad-legenda">
-        Van links naar rechts 00:00 tot 23:00. Lichter is goedkoper: 0 ct in de
-        zomermiddag van 10:00 tot en met 16:00, 19 ct in de winteravond van 16:00
-        tot en met 22:00. Winter is oktober tot en met maart.
-      </p>
+      {/* Het tarievenblad zelf, want zonder dat is elk bedrag hieronder een
+          black box. Winter en zomer als twee aparte panelen, met de nul van
+          vandaag als nulpunt van de as. */}
+      <Tariefblad markeerPiek />
 
       {scenario ? (
         <dl className="kerncijfers">
@@ -150,6 +112,27 @@ export function Nettarief({
               </span>
             </dd>
           </div>
+          <div>
+            <dt>Afname in de piekuren</dt>
+            <dd>
+              {procent(
+                piekAandeel(
+                  scenario.stats.peakHourImportBatteryKwh,
+                  scenario.stats.gridImportBatteryKwh,
+                ),
+              )}
+              <span className="dd-noot">
+                nu{" "}
+                {procent(
+                  piekAandeel(huidig.stats.peakHourImportBatteryKwh, huidig.stats.gridImportBatteryKwh),
+                )}
+                , zonder batterij{" "}
+                {procent(
+                  piekAandeel(huidig.stats.peakHourImportBaselineKwh, huidig.stats.gridImportBaselineKwh),
+                )}
+              </span>
+            </dd>
+          </div>
         </dl>
       ) : (
         <p className="scenario-wacht">
@@ -158,31 +141,38 @@ export function Nettarief({
         </p>
       )}
 
-      <div className="instelling">
-        <label className="schakel">
-          <input
-            type="checkbox"
-            checked={opTeruglevering}
-            onChange={(e) => onOpTeruglevering(e.target.checked)}
-          />
-          <span>Ook heffen op teruglevering</span>
-        </label>
-        <p className="instelling-uitleg">
-          Of teruglevering ook wordt beprijsd staat niet in het voorstel. Zet je
-          dit aan, dan gaat hetzelfde tarief van je terugleververgoeding af.
+      <details className="voetnoot-uitklap">
+        <summary>Hoe hard is dit scenario?</summary>
+        <p>
+          De structuur staat in het codewijzigingsvoorstel dat de netbeheerders
+          op 1 mei 2026 bij de ACM indienden: vijf tijdsblokken, vijf
+          tariefhoogten en hoogstens vier per dag, twee seizoenen, en de
+          wegingsfactoren per uur. De ACM besluit naar verwachting voor eind
+          2026; invoering is in beginsel {NETTARIEF_INGANG}, met uitwijk naar
+          2030. Het tarief geldt alleen voor wat je van het net haalt: op
+          teruglevering staat geen heffing, en deze doorrekening rekent er dus
+          ook geen.
         </p>
-      </div>
+        <p>
+          De tool rekent met {NETTARIEF_JAAR}, de beoogde invoeringsdatum. De
+          energiebelasting van dat jaar hoort erbij en gaat mee:{" "}
+          {centPerKwh(scenarioHeffing(NETTARIEF_JAAR))} inclusief opslag, tegen
+          12,9 ct nu. Anders zou een nettarief van straks op een belasting van
+          toen worden gestapeld, en de besparing schaalt daar bijna
+          één-op-één mee.
+        </p>
+        <p>
+          Het basistarief staat er niet in. Wat hier staat is {NETTARIEF_BRON},
+          geijkt op een huishouden van 3.000 kWh per jaar; het hoogste blok komt
+          daarmee op {centPerKwh(BASISTARIEF[NETTARIEF_JAAR])} uit. Het vaste deel — een
+          capaciteitscomponent van een derde van het transporttarief plus
+          aansluitvergoeding en meetdienst, samen ruim € 300 per jaar — valt
+          buiten deze berekening: dat is met en zonder batterij gelijk. De
+          prognose is gedragsonafhankelijk, en het voorstel herijkt blokken en
+          factoren jaarlijks.
+        </p>
+      </details>
 
-      <p className="controle-noot">
-        Scenario, geen tariefblad. De structuur van vijf tijdsblokken en twee
-        seizoenen komt uit het codewijzigingsvoorstel dat de netbeheerders op
-        4 mei 2026 bij de ACM indienden; de ACM besluit naar verwachting voor
-        eind 2026. De bedragen zijn nog niet gepubliceerd — het voorstel toont
-        alleen relatieve niveaus. Wat hier staat is {NETTARIEF_BRON}, geijkt op
-        een huishouden van 3.000 kWh per jaar. Het vaste deel — vastrecht en
-        aansluitvergoeding, samen ruim € 300 per jaar — valt buiten deze
-        berekening, net als nu: dat is met en zonder batterij gelijk.
-      </p>
     </Figure>
   );
 }

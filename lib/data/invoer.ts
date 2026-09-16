@@ -21,7 +21,7 @@ import {
   type ProfileYear,
 } from "./loader";
 import { addDays, localMidnightUtcMs } from "./timeaxis";
-import type { Manifest } from "./manifest";
+import { profielenVan, type Afnametype, type Manifest } from "./manifest";
 import type { AnalysisInput } from "../model/analysis";
 import {
   buildResidualParts,
@@ -40,11 +40,13 @@ export function yearsInRange(
   domain: string,
   from: string,
   to: string,
+  afnametype: Afnametype = "AMI",
 ): number[] {
-  const beschikbaar = Object.keys(m.profielen[domain] ?? {}).map(Number);
+  const profielen = profielenVan(m, afnametype);
+  const beschikbaar = Object.keys(profielen[domain] ?? {}).map(Number);
   return beschikbaar
     .filter((y) => {
-      const info = m.profielen[domain]![String(y)]!;
+      const info = profielen[domain]![String(y)]!;
       // Overlap tussen [eerste_dag, laatste_dag] en [from, to].
       return info.eerste_dag <= to && info.laatste_dag >= from;
     })
@@ -132,8 +134,12 @@ export class Invoerbron {
     return this.manifest;
   }
 
-  async profiel(domain: string, year: number): Promise<ProfileYear> {
-    const key = `${domain}:${year}`;
+  async profiel(
+    domain: string,
+    year: number,
+    afnametype: Afnametype = "AMI",
+  ): Promise<ProfileYear> {
+    const key = `${domain}:${year}:${afnametype}`;
     const hit = this.profielen.get(key);
     if (hit) return hit;
     const geladen = await loadProfileYear(
@@ -142,6 +148,7 @@ export class Invoerbron {
       year,
       this.baseUrl,
       this.haal,
+      afnametype,
     );
     this.profielen.set(key, geladen);
     return geladen;
@@ -164,11 +171,12 @@ export class Invoerbron {
   private async schaling(config: Configuration): Promise<NettingScale> {
     const m = this.gegevens;
     const hh = config.household;
-    const key = `${config.domain}:${hh.annualGridImportKwh}:${hh.annualGridExportKwh}`;
+    const type = config.afnametype ?? "AMI";
+    const key = `${config.domain}:${type}:${hh.annualGridImportKwh}:${hh.annualGridExportKwh}`;
     const hit = this.schalingen.get(key);
     if (hit) return hit;
 
-    const jaren = Object.entries(m.profielen[config.domain] ?? {})
+    const jaren = Object.entries(profielenVan(m, type)[config.domain] ?? {})
       .filter(([, info]) => info.volledig_jaar)
       .map(([y]) => Number(y))
       .sort((a, b) => b - a);
@@ -176,7 +184,7 @@ export class Invoerbron {
     // reeks ongeschaald en komen de volumes onder de meterstanden uit.
     if (jaren.length === 0) return GEEN_SCHALING;
 
-    const prof = await this.profiel(config.domain, jaren[0]!);
+    const prof = await this.profiel(config.domain, jaren[0]!, type);
     const scale = solveNettingScale(prof.importFraction, prof.exportFraction, hh);
     this.schalingen.set(key, scale);
     return scale;
@@ -184,10 +192,11 @@ export class Invoerbron {
 
   async bouwInvoer(config: Configuration): Promise<AnalysisInput> {
     const m = this.gegevens;
-    const jaren = yearsInRange(m, config.domain, config.from, config.to);
+    const type: Afnametype = config.afnametype ?? "AMI";
+    const jaren = yearsInRange(m, config.domain, config.from, config.to, type);
     if (jaren.length === 0) {
       throw new Error(
-        `geen profieldata voor netgebied ${config.domain} tussen ${config.from} en ${config.to}`,
+        `geen profieldata (${type}) voor netgebied ${config.domain} tussen ${config.from} en ${config.to}`,
       );
     }
 
@@ -206,7 +215,7 @@ export class Invoerbron {
 
     const windows: AnalysisInput["windows"] = [];
     for (const year of jaren) {
-      const prof = await this.profiel(config.domain, year);
+      const prof = await this.profiel(config.domain, year, type);
       const price = await this.prijs(year);
       const { start, end, firstDay, lastDay } = sliceRange(
         prof,
@@ -228,7 +237,10 @@ export class Invoerbron {
       // wat had deze batterij opgeleverd op de prijzen van toen, maar met de
       // belasting en opslag van vandaag. Dat is wat een koper wil weten.
       let heffing: Float64Array;
-      if (config.useHistoricalLevy) {
+      if (config.levyEurPerKwh !== undefined) {
+        // Het scenario: de heffing van het scenariojaar, over alle jaren.
+        heffing = new Float64Array(market.length).fill(config.levyEurPerKwh);
+      } else if (config.useHistoricalLevy) {
         const allIn = expandPricesToQuarters(startMs, price, "allIn");
         heffing = new Float64Array(market.length);
         for (let i = 0; i < heffing.length; i++) {
@@ -269,6 +281,7 @@ export class Invoerbron {
             ? nettariefPerStap(
                 startMs,
                 new LocalTimeIndex(startMs[0]!, startMs[startMs.length - 1]!),
+                config.netTariffYear,
               )
             : undefined,
           config.netTariffOnExport ?? false,
@@ -288,6 +301,7 @@ export class Invoerbron {
       priceEscalation: config.priceEscalation,
       discountRate: config.discountRate,
       calendarFadePerYear: config.calendarFadePerYear,
+      wearFraction: config.wearFraction,
       residualValueEur: config.residualValueEur,
       annualProductionKwh: config.annualProductionKwh,
     };

@@ -25,6 +25,7 @@ import { standaardConfiguratie } from "../../lib/configuratie";
 import { Invoerbron } from "../../lib/data/invoer";
 import type { Ophaler } from "../../lib/data/loader";
 import { runAnalysis } from "../../lib/model/analysis";
+import { scenarioConfiguratie } from "../../lib/nettarief";
 
 export const dynamic = "force-static";
 
@@ -57,7 +58,9 @@ export async function GET(): Promise<Response> {
   // de eerste poging liep daar drie keer op stuk en brak de hele build af. En de
   // winst zou klein zijn: het raster staat ver onder de vouw en wordt in de
   // achtergrondworker berekend terwijl je de rest van de pagina leest.
-  const scenario = runAnalysis(await bron.bouwInvoer({ ...config, netTariff: true }));
+  // Dezelfde afleiding als in de browser (lib/nettarief.ts), anders past het
+  // bewaarde scenario nooit bij wat de pagina vraagt.
+  const scenario = runAnalysis(await bron.bouwInvoer(scenarioConfiguratie(config)));
 
   return Response.json({
     versie: MODEL_VERSIE,

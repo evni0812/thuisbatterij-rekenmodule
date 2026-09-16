@@ -35,92 +35,6 @@ export function maxDischargeKwhPerStep(spec: BatterySpec, hours = HOURS_PER_STEP
   return spec.maxDischargeKw * hours;
 }
 
-/** Standby-verbruik per kwartier, kWh. */
-export function standbyKwhPerStep(spec: BatterySpec, hours = HOURS_PER_STEP): number {
-  return (spec.standbyWatt / 1000) * hours;
-}
-
-/**
- * Het deel van de volle slijtageprijs dat een laadbeurt altijd kost.
- *
- * remainingCapacityFraction() rekent 20% capaciteitsverlies over de
- * cycluslevensduur. Die 20% is er ook als de beurten niet schaars zijn, dus de
- * dispatch hoort hem net zo goed te betalen als de businesscase.
- */
-export const WEAR_ONDERGRENS_DEEL = 0.2;
-
-/**
- * De MARGINALE slijtagekost per geleverde kWh.
- *
- * Dit is de schaduwprijs die de dispatch stuurt: is deze laadbeurt de moeite
- * waard? Het antwoord hangt af van de vraag of laadbeurten schaars zijn.
- *
- * Een batterij gaat kapot aan het eerste van twee dingen: ouderdom of
- * doorzet. Maakt hij zijn laadbeurten niet op binnen zijn kalenderlevensduur,
- * dan kost een extra beurt niets — de batterij was toch al afgeschreven op
- * tijd, niet op gebruik. Pas als de beurten wél opraken, vervroegt elke extra
- * beurt de vervanging, en dán is de aanschafprijs per beurt de juiste prijs.
- *
- * Gemeten voor een FoxESS S22 (2,1 kWh, 6000 beurten, 15 jaar): zonder drempel
- * draait hij 394 beurten per jaar, precies 5.910 over vijftien jaar. De
- * beurten zijn dus net niet schaars. Met de volle drempel van 11,3 ct zakt dat
- * naar 251 per jaar — hij sterft dan aan ouderdom met 40% van zijn beurten
- * ongebruikt, en dat kost 12 euro per jaar aan gemiste besparing.
- *
- * ── Waarom er een ondergrens onder zit ──────────────────────────────────────
- * Bovenstaande redenering klopt alleen als een laadbeurt écht niets kost zolang
- * de beurten niet opraken. Dat is niet wat de rest van het model doet:
- * remainingCapacityFraction() hieronder rekent lineair 20% capaciteitsverlies
- * over cycleLife beurten, ongeacht schaarste. De businesscase boekt een beurt
- * dus wél als kostenpost, terwijl de dispatch hem gratis noemde.
- *
- * Dat gat was zichtbaar op de echte data. Op 18 december 2025 kocht de Zendure
- * 's nachts 1,8 kWh in, leverde er 1,6 van terug aan het huis, en kwam op een
- * dagbesparing van nul: de marge dekte precies het omzettingsverlies en het
- * eigen verbruik. Een hele laadbeurt weg, niets verdiend. De drempel stond daar
- * op 0,23 ct/kWh, want de batterij zat maar 2,75% over zijn beurtenbudget.
- *
- * De ondergrens sluit aan op de degradatie die het financieringsmodel al
- * rekent: 20% capaciteitsverlies over de levensduur, dus minstens 20% van de
- * volle slijtageprijs. Voor de Zendure is dat 1,7 ct/kWh — genoeg om een
- * nuldag te stoppen, ruim onder de marge van een echte arbitragedag.
- *
- * @param expectedCyclesPerYear  verwacht aantal beurten per jaar zonder drempel
- * @param calendarYears          kalenderlevensduur van de BATTERIJ, in jaren.
- *   Niet de analyseperiode: die is een keuze van de gebruiker over hoe ver hij
- *   vooruit wil kijken, en mag het fysieke gedrag van de accu niet sturen. Met
- *   de analyseperiode erin ging de batterij vrijer handelen zodra je de looptijd
- *   op tien jaar zette, en steeg de getoonde besparing daardoor.
- */
-export function marginalWearCostPerKwh(
-  investmentEur: number,
-  cycleLife: number,
-  spec: BatterySpec,
-  expectedCyclesPerYear: number,
-  calendarYears: number,
-): number {
-  const vol = wearCostPerKwh(investmentEur, cycleLife, spec);
-  if (vol <= 0) return 0;
-
-  const verwachtTotaal = expectedCyclesPerYear * calendarYears;
-  if (verwachtTotaal <= cycleLife) return vol * WEAR_ONDERGRENS_DEEL;
-
-  // De beurten zijn schaars: laat de prijs lineair oplopen met de mate van
-  // schaarste, vanaf nul op de grens tot de volle prijs bij twee keer zoveel
-  // beurten als er zijn. Zo komt het gebruik vanzelf in de buurt van wat de
-  // batterij aankan.
-  //
-  // Vanaf NUL, niet vanaf de helft. De aanloop begon eerder op 0,5 × vol, en dan
-  // sprong de drempel bij de FoxESS-preset van 0,00 naar 5,60 ct/kWh tussen 400
-  // en 401 verwachte beurten per jaar. Omdat die verwachting uit een proefrun
-  // komt, wisselde de dispatch abrupt van gedrag bij een kleine wijziging in
-  // capaciteit of vermogen — een sprong die in het raster van batterijmaten als
-  // een dip zichtbaar werd.
-  return (
-    vol *
-    Math.min(1, Math.max(WEAR_ONDERGRENS_DEEL, (verwachtTotaal - cycleLife) / cycleLife))
-  );
-}
 
 /**
  * Slijtagekosten per kWh die de batterij AC-zijdig levert.
@@ -129,11 +43,23 @@ export function marginalWearCostPerKwh(
  * AC-zijde (elke cyclus haalt `usable` uit de cel, waarvan `usable * eta`
  * aankomt). De aanschafprijs wordt daarover uitgesmeerd.
  *
- * Deze grootheid stuurt de dispatch: arbitrage loont alleen als het prijsverschil
- * de slijtage dekt. Het oude model gebruikte hier de investering gedeeld door
- * (cycli x usable), dus zonder rendementscorrectie, en de optimalisatiepagina
- * zette de investering bovendien op EUR 1 waardoor slijtage effectief wegviel
- * en de batterij agressief ging netarbitreren.
+ * Deze grootheid stuurt de dispatch, als schaduwprijs per geleverde kWh: een
+ * laadbeurt gaat alleen door als de marge na het omzettingsverlies ook de
+ * slijtage dekt. Anders staat de batterij stil, want een beurt die minder
+ * oplevert dan hij van de aanschaf opsoupeert is per saldo verlies.
+ *
+ * Er zat eerder een marginale drempel tussen: 20% van deze prijs zolang de
+ * laadbeurten binnen de kalenderlevensduur niet schaars waren, met het idee dat
+ * een beurt die niet opraakt weinig kost. Dat liet de batterij handelen op dagen
+ * waar de slijtage groter was dan de marge — op 18 december 2025 leverde een
+ * volle beurt van de Zendure € 0,07 op en kostte hij € 0,12 aan slijtage. De
+ * regel is nu simpel: is de slijtage hoger dan de handel waard is, dan handelen
+ * we niet.
+ *
+ * Het oude model gebruikte hier de investering gedeeld door (cycli x usable),
+ * dus zonder rendementscorrectie, en de optimalisatiepagina zette de
+ * investering bovendien op EUR 1 waardoor slijtage effectief wegviel en de
+ * batterij agressief ging netarbitreren.
  */
 export function wearCostPerKwh(
   investmentEur: number,

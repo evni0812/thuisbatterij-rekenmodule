@@ -73,7 +73,6 @@ function battery(over: Partial<BatterySpec> = {}): BatterySpec {
     maxChargeKw: 2.5,
     maxDischargeKw: 2.5,
     efficiency: Math.sqrt(0.9),
-    standbyWatt: 0,
     wearCostEurPerKwh: 0,
     ...over,
   };

@@ -222,37 +222,43 @@ describe("de manifest-melding bij init", () => {
 
 describe("de dagovergang verklaart de negatieve dagbedragen", () => {
   /**
-   * Een batterij houdt zich niet aan de kalender. Op 19 december 2025 laadt hij
-   * 's nachts vol en ontlaadt hij pas op de 20e: de inkoop valt op de ene dag,
-   * de opbrengst op de andere. Die dag sluit daardoor negatief af, en dat is
-   * geen fout van het model — het optimum met perfecte kennis maakt dezelfde
-   * keuze en komt op hetzelfde bedrag uit.
+   * Een batterij houdt zich niet aan de kalender. Op 23 november 2025 laadt hij
+   * 's nachts en ontlaadt hij pas op de 24e: de inkoop valt op de ene dag, de
+   * opbrengst op de andere. Die dag sluit daardoor negatief af, en dat is geen
+   * fout van het model — het optimum met perfecte kennis maakt dezelfde keuze
+   * en sluit die dag ook negatief af.
    *
    * De twee dagen samen zijn positief. Wie de batterij op zulke dagen zou
    * uitschakelen, laat de opbrengst van de volgende dag liggen.
+   *
+   * Dit voorbeeld stond eerder op 19 en 20 december. Sinds de planner met de
+   * volle slijtageprijs rekent, laat hij die dagen liggen: de marge dekte de
+   * slijtage niet.
    */
   it("laat een negatieve dag zien als lading die naar de volgende dag gaat", async () => {
     const cfg = config();
-    const dag19 = (await vraagDag("2025-12-19", cfg))!;
-    const dag20 = (await vraagDag("2025-12-20", cfg))!;
+    const dag23 = (await vraagDag("2025-11-23", cfg))!;
+    const dag24 = (await vraagDag("2025-11-24", cfg))!;
 
-    // De 19e kost geld en eindigt voller dan hij begon.
-    expect(dag19.stats.savingEur).toBeLessThan(0);
-    expect(dag19.stats.socEndKwh - dag19.stats.socStartKwh).toBeGreaterThan(0.5);
-    // Op de 19e is er wel geladen maar niet ontladen.
-    expect(dag19.stats.chargedKwh).toBeGreaterThan(0.5);
-    expect(dag19.stats.deliveredKwh).toBeLessThan(0.01);
+    // De 23e kost geld en eindigt voller dan hij begon.
+    expect(dag23.stats.savingEur).toBeLessThan(0);
+    expect(dag23.stats.socEndKwh - dag23.stats.socStartKwh).toBeGreaterThan(0.5);
+    // Op de 23e is er wel geladen maar niet ontladen.
+    expect(dag23.stats.chargedKwh).toBeGreaterThan(0.5);
+    expect(dag23.stats.deliveredKwh).toBeLessThan(0.01);
 
-    // De 20e begint met die lading en levert geld op.
-    expect(dag20.stats.socStartKwh).toBeCloseTo(dag19.stats.socEndKwh, 6);
-    expect(dag20.stats.savingEur).toBeGreaterThan(0);
+    // De 24e begint met die lading en levert geld op.
+    expect(dag24.stats.socStartKwh).toBeCloseTo(dag23.stats.socEndKwh, 6);
+    expect(dag24.stats.savingEur).toBeGreaterThan(0);
 
     // Samen positief: uitschakelen op zulke dagen zou geld kosten.
-    expect(dag19.stats.savingEur + dag20.stats.savingEur).toBeGreaterThan(0);
+    expect(dag23.stats.savingEur + dag24.stats.savingEur).toBeGreaterThan(0);
 
-    // En het bewijs dat het geen misser is: perfecte kennis doet hetzelfde.
-    expect(dag19.stats.optimalSavingEur).toBeLessThan(0);
-    expect(dag19.stats.optimalSavingEur!).toBeCloseTo(dag19.stats.savingEur, 1);
+    // En het bewijs dat het geen misser is: perfecte kennis laadt ook op de
+    // 23e voor de 24e, sluit die dag ook negatief af en is over de twee dagen
+    // samen ook positief.
+    expect(dag23.stats.optimalSavingEur).toBeLessThan(0);
+    expect(dag23.stats.optimalSavingEur! + dag24.stats.optimalSavingEur!).toBeGreaterThan(0);
   }, 120_000);
 
   it("begint de eerste dag van het venster op een lege batterij", async () => {
@@ -289,4 +295,32 @@ describe("wat er van het dak kwam", () => {
       (await vraagDag("2025-06-15"))!.stats.meterExportKwh!,
     );
   }, 120_000);
+});
+
+describe("het resultaat over een periode via de worker", () => {
+  it("telt een week per uur op uit de bewaarde jaardispatch", async () => {
+    ontvangen = [];
+    await stuur({ type: "periode", id: 21, config: config(), van: "2025-12-15", tot: "2025-12-21", resolutie: "uur" });
+    const fout = ontvangen.find((m) => m.type === "error");
+    if (fout && fout.type === "error") throw new Error(fout.message);
+    const res = ontvangen.find((m) => m.type === "periode");
+    if (!res || res.type !== "periode") throw new Error("geen periode-antwoord");
+    expect(res.id).toBe(21);
+    expect(res.periode.vakken.length).toBe(168);
+    expect(res.periode.totaal.wearCostEur).toBeGreaterThan(0);
+    // De som van de uren is de som van de dagen.
+    ontvangen = [];
+    await stuur({ type: "periode", id: 22, config: config(), van: "2025-12-15", tot: "2025-12-21", resolutie: "dag" });
+    const dagen = ontvangen.find((m) => m.type === "periode");
+    if (!dagen || dagen.type !== "periode") throw new Error("geen periode-antwoord");
+    expect(dagen.periode.vakken.length).toBe(7);
+    expect(dagen.periode.totaal.savingEur).toBeCloseTo(res.periode.totaal.savingEur, 6);
+  }, 60_000);
+
+  it("geeft de slijtage van een dag mee in de dagcijfers", async () => {
+    // Een dag waarop de batterij levert: 3 december 2025 gaat hij van vol naar leeg.
+    const dag = (await vraagDag("2025-12-03"))!;
+    expect(dag.stats.wearCostEur).toBeGreaterThan(0);
+    expect(dag.stats.wearCostEur).toBeLessThan(dag.stats.deliveredKwh);
+  }, 60_000);
 });

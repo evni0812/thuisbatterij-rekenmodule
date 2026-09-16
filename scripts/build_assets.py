@@ -41,6 +41,11 @@ OUTDIR = "public/data"
 NL = ZoneInfo("Europe/Amsterdam")
 CATEGORY = "E1A"
 AFNAMETYPE = "AMI"          # aansluiting mét invoeding: huishouden met zonnepanelen
+# Aansluiting zónder invoeding: huishouden zonder zonnepanelen. Zelfde categorie,
+# zelfde bron, eigen gemeten vorm: geen middagdip, lagere nacht. Wordt als apart
+# bestand weggeschreven (profile-<gebied>-<jaar>-azi.bin) zodat het scenario
+# "zonder zonnepanelen" op echte metingen rust en niet op een model.
+AFNAMETYPE_ZONDER = "AZI"
 
 MAGIC = b"TBAT"             # herkenningspunt in de binaire bestanden
 VERSION = 1
@@ -144,13 +149,15 @@ def write_prices(year: int, data: dict[datetime, tuple[float, float]]) -> dict:
 
 
 # ── profielfracties ──────────────────────────────────────────────────────────
-def load_domain(path: str) -> dict[int, dict[str, dict[tuple[str, int], float]]]:
+def load_domain(
+    path: str, afnametype: str = AFNAMETYPE,
+) -> dict[int, dict[str, dict[tuple[str, int], float]]]:
     """Fracties per jaar, per richting, gesleuteld op (kalenderdag, positie)."""
     per_year: dict[int, dict[str, dict[tuple[str, int], float]]] = defaultdict(
         lambda: defaultdict(dict))
     with open(path, newline="") as fh:
         for row in csv.DictReader(fh):
-            if row["afnametype"] != AFNAMETYPE:
+            if row["afnametype"] != afnametype:
                 continue
             kd = row["calendar_date"]
             jaar = int(kd[:4])
@@ -163,6 +170,7 @@ def write_profile(
     year: int,
     reeksen: dict[str, dict[tuple[str, int], float]],
     factoren: dict[str, float] | None,
+    achtervoegsel: str = "",
 ) -> tuple[dict, dict[str, float]] | None:
     """Normaliseer en schrijf E17 en E18 als één bestand weg.
 
@@ -247,7 +255,7 @@ def write_profile(
         for k in range(totaal):
             w[k] = w[k] / f
 
-    path = os.path.join(OUTDIR, f"profile-{gebied}-{year}.bin")
+    path = os.path.join(OUTDIR, f"profile-{gebied}-{year}{achtervoegsel}.bin")
     with open(path, "wb") as fh:
         fh.write(MAGIC)
         fh.write(struct.pack(HEADER, VERSION, 0, 2, totaal))
@@ -269,12 +277,43 @@ def write_profile(
     return info, eigen_som
 
 
+def schrijf_jaren(
+    gebied: str,
+    per_year: dict[int, dict[str, dict[tuple[str, int], float]]],
+    achtervoegsel: str,
+) -> dict[str, dict]:
+    """Schrijf alle jaren van één netgebied en afnametype; volle jaren eerst."""
+    # Eerst de volledige kalenderjaren: die leveren de normalisatiefactor
+    # waar de rand-jaren van lenen.
+    factoren: dict[str, float] | None = None
+    resultaten: dict[str, dict] = {}
+    for jaar in sorted(per_year):
+        uitkomst = write_profile(gebied, jaar, per_year[jaar], None, achtervoegsel)
+        if uitkomst is None:
+            continue
+        info, eigen = uitkomst
+        if info["volledig_jaar"]:
+            resultaten[str(jaar)] = info
+            # De meest recente volledige jaarsom is de beste referentie.
+            factoren = eigen
+
+    for jaar in sorted(per_year):
+        if str(jaar) in resultaten:
+            continue
+        uitkomst = write_profile(gebied, jaar, per_year[jaar], factoren, achtervoegsel)
+        if uitkomst is None:
+            continue
+        resultaten[str(jaar)] = uitkomst[0]
+    return resultaten
+
+
 def main() -> None:
     os.makedirs(OUTDIR, exist_ok=True)
     manifest: dict = {
         "gegenereerd": datetime.now(timezone.utc).isoformat(),
         "categorie": CATEGORY,
         "afnametype": AFNAMETYPE,
+        "afnametype_zonder": AFNAMETYPE_ZONDER,
         "tijdzone": "Europe/Amsterdam",
         "legenda": "* achter een jaar betekent: geen volledig kalenderjaar, "
                    "genormaliseerd met de factor van een volledig jaar",
@@ -285,6 +324,8 @@ def main() -> None:
         },
         "prijzen": {},
         "profielen": {},
+        # Zelfde opbouw als "profielen", voor de aansluitingen zonder invoeding.
+        "profielen_zonder": {},
         "netgebieden": [],
     }
 
@@ -310,37 +351,19 @@ def main() -> None:
     for fn in bestanden:
         gebied = fn[:-4]
         manifest["netgebieden"].append(gebied)
-        per_year = load_domain(os.path.join(RAW_DYNAMIC, fn))
-
-        # Eerst de volledige kalenderjaren: die leveren de normalisatiefactor
-        # waar de rand-jaren van lenen.
-        factoren: dict[str, float] | None = None
-        resultaten: dict[str, dict] = {}
-        for jaar in sorted(per_year):
-            uitkomst = write_profile(gebied, jaar, per_year[jaar], None)
-            if uitkomst is None:
-                continue
-            info, eigen = uitkomst
-            if info["volledig_jaar"]:
-                resultaten[str(jaar)] = info
-                # De meest recente volledige jaarsom is de beste referentie.
-                factoren = eigen
-
-        for jaar in sorted(per_year):
-            if str(jaar) in resultaten:
-                continue
-            uitkomst = write_profile(gebied, jaar, per_year[jaar], factoren)
-            if uitkomst is None:
-                continue
-            resultaten[str(jaar)] = uitkomst[0]
-
-        if resultaten:
-            manifest["profielen"][gebied] = dict(sorted(resultaten.items()))
-        beschrijving = ", ".join(
-            f"{j}{'' if v['volledig_jaar'] else '*'}"
-            for j, v in sorted(resultaten.items()))
-        print(f"  {gebied}: {beschrijving or 'geen bruikbaar jaar'}",
-              file=sys.stderr)
+        for afnametype, sleutel, achtervoegsel in (
+            (AFNAMETYPE, "profielen", ""),
+            (AFNAMETYPE_ZONDER, "profielen_zonder", "-azi"),
+        ):
+            per_year = load_domain(os.path.join(RAW_DYNAMIC, fn), afnametype)
+            resultaten = schrijf_jaren(gebied, per_year, achtervoegsel)
+            if resultaten:
+                manifest[sleutel][gebied] = dict(sorted(resultaten.items()))
+            beschrijving = ", ".join(
+                f"{j}{'' if v['volledig_jaar'] else '*'}"
+                for j, v in sorted(resultaten.items()))
+            print(f"  {gebied} {afnametype}: {beschrijving or 'geen bruikbaar jaar'}",
+                  file=sys.stderr)
 
     with open(os.path.join(OUTDIR, "manifest.json"), "w") as fh:
         json.dump(manifest, fh, indent=2)

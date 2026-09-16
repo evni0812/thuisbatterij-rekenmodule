@@ -40,7 +40,28 @@ export interface Manifest {
   toelichting: Record<string, string>;
   prijzen: Record<string, PriceYearInfo>;
   profielen: Record<string, Record<string, ProfileYearInfo>>;
+  /**
+   * Dezelfde opbouw voor aansluitingen zónder invoeding (huishoudens zonder
+   * zonnepanelen), bestanden met achtervoegsel "-azi". Optioneel, zodat een
+   * ouder manifest blijft laden.
+   */
+  profielen_zonder?: Record<string, Record<string, ProfileYearInfo>>;
+  afnametype_zonder?: string;
   netgebieden: string[];
+}
+
+/**
+ * Welk gemeten profiel er gebruikt wordt: AMI is de aansluiting mét invoeding
+ * (huishouden met zonnepanelen), AZI die zonder.
+ */
+export type Afnametype = "AMI" | "AZI";
+
+/** De profielen van het gevraagde afnametype, of leeg als het manifest ze mist. */
+export function profielenVan(
+  m: Manifest,
+  afnametype: Afnametype = "AMI",
+): Record<string, Record<string, ProfileYearInfo>> {
+  return afnametype === "AZI" ? (m.profielen_zonder ?? {}) : m.profielen;
 }
 
 /** Netgebieden met een herkenbare naam in plaats van een EAN-code. */

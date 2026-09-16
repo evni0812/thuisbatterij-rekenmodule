@@ -1,37 +1,85 @@
 "use client";
 
 /**
- * De kerncijfers in één oogopslag.
+ * De kerncijfers in één oogopslag, als tegels met een gekleurde bovenrand.
  *
  * Elk cijfer staat met zijn verandering erbij: een zelfconsumptie van 71%
  * zegt weinig, "van 42% naar 71%" zegt alles. Dat verschil is immers wat de
- * batterij doet.
+ * batterij doet. Elke tegel heeft zijn eigen "Hoe is dit berekend?" met de
+ * getallen van deze doorrekening.
  *
  * Zelfconsumptie en autarkie vragen het bruto verbruik en de bruto opwek, en
  * die staan niet op je jaarafrekening — daar staat alleen wat er door de meter
  * ging. Ze verschijnen daarom pas als je de jaaropwek van je panelen invult.
  */
 
+import type { ReactNode } from "react";
 import type { KeyStats } from "../lib/model/analysis";
-import { getal, kwh, procent } from "../lib/format";
+import { centPerKwh, euro, getal, kwh, procent } from "../lib/format";
+import { DIRECT_EIGEN_VERBRUIK_ZONDER_BATTERIJ } from "../lib/presets";
+import { UITLEG, type UitlegContext, type UitlegId } from "../lib/uitleg";
+import { Uitleg } from "./Uitleg";
+
+/**
+ * Welk deel van de netafname in de piekuren van het nettarief valt.
+ *
+ * De tegenhanger van zelfconsumptie: die zegt welk deel van je opwek je zelf
+ * gebruikt, dit zegt welk deel van wat je afneemt op de duurste netuurtjes
+ * valt. Beide als aandeel, zodat een klein en een groot huishouden hetzelfde
+ * getal kunnen vergelijken.
+ */
+export function piekAandeel(piekKwh: number, afnameKwh: number): number {
+  return afnameKwh > 0 ? Math.min(1, piekKwh / afnameKwh) : 0;
+}
+
+/**
+ * Het verschil tussen twee percentages, in procentpunten.
+ *
+ * Bewust niet als percentage van een percentage: van 26% naar 35% is negen
+ * procentpunt, niet "35% meer". Dat tweede getal klopt rekenkundig en zegt
+ * niets.
+ */
+function procentpunt(van: number, naar: number): string {
+  const d = (naar - van) * 100;
+  const teken = d > 0 ? "+" : d < 0 ? "−" : "";
+  return `${teken}${getal(Math.abs(d), Math.abs(d) < 10 ? 1 : 0)} procentpunt`;
+}
 
 function Tegel({
   label,
   waarde,
   van,
   naar,
+  delta,
+  deltaGoed,
   uitleg,
+  extra,
+  accent,
+  knop,
 }: {
   label: string;
   waarde?: string;
   /** Bij een verandering: de waarde zonder en met batterij. */
   van?: string;
   naar?: string;
+  /** Hoeveel er veranderde, in de eenheid die bij het cijfer past. */
+  delta?: string;
+  /** Is die verandering een verbetering? Bepaalt de kleur van het chipje. */
+  deltaGoed?: boolean;
   uitleg: string;
+  /** Een derde stand, bijvoorbeeld onder het nettariefscenario. */
+  extra?: ReactNode;
+  /** Kleur van de bovenrand: de reeks waar dit cijfer bij hoort. */
+  accent: string;
+  /** De "Hoe is dit berekend?"-knop. */
+  knop?: ReactNode;
 }) {
   return (
-    <div className="stat">
-      <div className="stat-label">{label}</div>
+    <div className="stat" style={{ "--tegel-accent": accent } as React.CSSProperties}>
+      <div className="stat-kop">
+        <div className="stat-label">{label}</div>
+        {knop}
+      </div>
       {van !== undefined && naar !== undefined ? (
         <div className="stat-verloop">
           <span className="stat-van">{van}</span>
@@ -43,6 +91,10 @@ function Tegel({
       ) : (
         <div className="stat-waarde">{waarde}</div>
       )}
+      {delta ? (
+        <div className={deltaGoed ? "stat-delta goed" : "stat-delta"}>{delta}</div>
+      ) : null}
+      {extra ? <div className="stat-extra">{extra}</div> : null}
       <p className="stat-uitleg">{uitleg}</p>
     </div>
   );
@@ -50,10 +102,23 @@ function Tegel({
 
 export function Statistieken({
   stats,
+  scenarioStats = null,
   opwekBekend,
+  geschatteOpwek,
+  context = null,
 }: {
   stats: KeyStats;
+  /**
+   * De kerncijfers onder het nettarief van 2029, zodra dat scenario is
+   * doorgerekend. Alleen de piekuren gebruiken ze: dat is het cijfer dat door
+   * het nieuwe tarief wezenlijk verandert.
+   */
+  scenarioStats?: KeyStats | null;
   opwekBekend: boolean;
+  /** De jaaropwek waarmee is gerekend; alleen nodig als hij geschat is. */
+  geschatteOpwek: number;
+  /** Voor de "Hoe is dit berekend?"-knoppen; zonder context geen knoppen. */
+  context?: UitlegContext | null;
 }) {
   const importReductie =
     stats.gridImportBaselineKwh > 0
@@ -63,6 +128,15 @@ export function Statistieken({
     stats.gridExportBaselineKwh > 0
       ? 1 - stats.gridExportBatteryKwh / stats.gridExportBaselineKwh
       : 0;
+  const piekBasis = piekAandeel(stats.peakHourImportBaselineKwh, stats.gridImportBaselineKwh);
+  const piekBatterij = piekAandeel(stats.peakHourImportBatteryKwh, stats.gridImportBatteryKwh);
+  const piekScenario = scenarioStats
+    ? piekAandeel(scenarioStats.peakHourImportBatteryKwh, scenarioStats.gridImportBatteryKwh)
+    : null;
+  const piekMinderKwh = stats.peakHourImportBaselineKwh - stats.peakHourImportBatteryKwh;
+
+  const knop = (id: UitlegId) =>
+    context ? <Uitleg blok={UITLEG[id](context)} variant="icoon" /> : null;
 
   return (
     <section className="statistieken">
@@ -72,60 +146,117 @@ export function Statistieken({
       </p>
 
       <div className="stat-grid">
+        {/* Eerst de drie percentages: die zeggen iets los van hoe groot je
+            huishouden is, en ze zijn waar een batterij over gaat. De
+            kilowatturen erachter geven ze hun schaal. */}
         {stats.selfConsumptionBaseline !== null &&
         stats.selfConsumptionBattery !== null ? (
           <Tegel
-            label="Eigen zon zelf gebruikt"
+            label="Eigen verbruik"
             van={procent(stats.selfConsumptionBaseline)}
             naar={procent(stats.selfConsumptionBattery)}
-            uitleg="Welk deel van wat je panelen opwekken, je ook zelf gebruikt."
+            delta={procentpunt(stats.selfConsumptionBaseline, stats.selfConsumptionBattery)}
+            deltaGoed={stats.selfConsumptionBattery > stats.selfConsumptionBaseline}
+            uitleg={`Welk deel van wat je panelen opwekken, je ook zelf gebruikt.${
+              opwekBekend ? "" : " Op basis van een geschatte jaaropwek — zie hieronder."
+            }`}
+            accent="var(--series-5)"
+            knop={knop("zelfconsumptie")}
           />
         ) : null}
 
         {stats.selfSufficiencyBaseline !== null &&
         stats.selfSufficiencyBattery !== null ? (
           <Tegel
-            label="Zelf gedekt"
+            label="Onafhankelijk van het net"
             van={procent(stats.selfSufficiencyBaseline)}
             naar={procent(stats.selfSufficiencyBattery)}
-            uitleg="Welk deel van je verbruik je zelf dekt, zonder het net."
+            delta={procentpunt(stats.selfSufficiencyBaseline, stats.selfSufficiencyBattery)}
+            deltaGoed={stats.selfSufficiencyBattery > stats.selfSufficiencyBaseline}
+            uitleg={`Welk deel van je verbruik je zelf dekt, zonder het net.${
+              opwekBekend ? "" : " Op basis van een geschatte jaaropwek — zie hieronder."
+            }`}
+            accent="var(--series-5)"
+            knop={knop("autarkie")}
           />
         ) : null}
+
+        <Tegel
+          label="Afname in de piekuren"
+          van={procent(piekBasis)}
+          naar={procent(piekBatterij)}
+          delta={procentpunt(piekBasis, piekBatterij)}
+          deltaGoed={piekBatterij < piekBasis}
+          extra={
+            piekScenario !== null ? (
+              <>
+                Met het nettarief van 2029: <strong>{procent(piekScenario)}</strong>
+              </>
+            ) : null
+          }
+          uitleg={`Welk deel van wat je van het net haalt op de piekuren van het nettarief valt: winter 16–22 uur, zomer 19–23 uur. De batterij haalt er ${kwh(piekMinderKwh)} per jaar uit.`}
+          accent="var(--ac)"
+          knop={knop("piekuren")}
+        />
 
         <Tegel
           label="Van het net"
           van={kwh(stats.gridImportBaselineKwh)}
           naar={kwh(stats.gridImportBatteryKwh)}
-          uitleg={`Je haalt ${procent(importReductie)} minder van het net.`}
+          delta={`${procent(importReductie)} minder`}
+          deltaGoed={importReductie > 0}
+          uitleg="Wat je in een jaar van het net haalt, zonder en met batterij."
+          accent="var(--series-1)"
+          knop={knop("vanHetNet")}
         />
 
         <Tegel
           label="Naar het net"
           van={kwh(stats.gridExportBaselineKwh)}
           naar={kwh(stats.gridExportBatteryKwh)}
-          uitleg={`Je levert ${procent(exportReductie)} minder terug, en gebruikt dat zelf.`}
+          delta={`${procent(exportReductie)} minder`}
+          deltaGoed={exportReductie > 0}
+          uitleg="Wat je teruglevert in plaats van zelf gebruikt. Wat eraf gaat, blijft in huis."
+          accent="var(--series-2)"
+          knop={knop("naarHetNet")}
         />
 
         <Tegel
           label="Laadbeurten"
           waarde={`${getal(stats.cyclesPerDay, 2)} per dag`}
           uitleg={`${Math.round(stats.cyclesPerYear)} volledige beurten per jaar. Meer beurten betekent meer opbrengst, maar ook snellere slijtage.`}
+          accent="var(--series-3)"
+          knop={knop("laadbeurten")}
         />
 
         <Tegel
           label="Door de batterij"
           waarde={kwh(stats.throughputPerYearKwh)}
           uitleg="Wat de batterij per jaar aan je huis levert."
+          accent="var(--series-3)"
+          knop={knop("doorzet")}
+        />
+
+        <Tegel
+          label="Slijtage"
+          waarde={`${euro(stats.wearCostPerYearEur)} per jaar`}
+          uitleg={`Wat de laadbeurten van de aanschafprijs opsouperen: ${centPerKwh(stats.wearCostEurPerKwh)} geleverd. Zit al in de aanschaf en is niet van de besparing afgetrokken.`}
+          accent="var(--series-4)"
+          knop={knop("slijtage")}
         />
       </div>
 
       {!opwekBekend ? (
         <p className="statistieken-noot">
-          Vul <a href="#instellingen">bij de instellingen</a> in hoeveel je
-          panelen per jaar opwekken, dan kunnen we ook laten zien welk deel van
-          je eigen zon je zelf gebruikt, en welk deel van je verbruik je zelf
-          dekt. Die volgen niet uit je meterstanden: daar staat alleen wat er
-          door de meter ging, niet wat je direct zelf verbruikte.
+          <b>Eigen verbruik en onafhankelijkheid rusten op een schatting.</b> Ze
+          vragen je bruto jaaropwek, en die staat niet op je jaarafrekening: daar
+          staat alleen wat er door de meter ging, niet wat je direct zelf
+          verbruikte. We gaan uit van{" "}
+          {procent(DIRECT_EIGEN_VERBRUIK_ZONDER_BATTERIJ)} direct eigen verbruik
+          zonder batterij, de gangbare vuistregel, en komen daarmee op{" "}
+          {kwh(geschatteOpwek)} per jaar. Vul{" "}
+          <a href="#instellingen">bij de geavanceerde instellingen</a> je echte
+          jaaropwek in, dan rekenen deze twee met jouw getal.
         </p>
       ) : null}
     </section>

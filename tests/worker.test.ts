@@ -251,14 +251,11 @@ describe("voorbeelddag", () => {
     expect(verschillend).toBeGreaterThan(0);
 
     // Het verschil is precies wat de batterij doet: laden erbij, ontladen
-    // eraf, plus het eigen standby-verbruik van de omvormer, min wat er is
-    // afgeregeld — dat laatste gaat niet naar het net en komt dus ook niet
-    // door de meter.
-    const standbyKwh = (PRESETS[1]!.spec.standbyWatt / 1000) * 0.25;
+    // eraf, min wat er is afgeregeld — dat laatste gaat niet naar het net en
+    // komt dus ook niet door de meter.
     for (let i = 0; i < dag.netKwh.length; i++) {
       const batterij = dag.chargeKwh[i]! - dag.dischargeKwh[i]!;
-      const verwacht =
-        dag.residualKwh[i]! + standbyKwh + batterij + dag.curtailedKwh[i]!;
+      const verwacht = dag.residualKwh[i]! + batterij + dag.curtailedKwh[i]!;
       expect(dag.netKwh[i]!).toBeCloseTo(verwacht, 6);
     }
   });

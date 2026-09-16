@@ -4,7 +4,9 @@ import { useEffect, useMemo, useState } from "react";
 import { Antwoord } from "../components/Antwoord";
 import { BatterijMaat } from "../components/BatterijMaat";
 import { BesparingPerJaar } from "../components/BesparingPerJaar";
+import { Bewaren } from "../components/Bewaren";
 import { Cashflow } from "../components/Cashflow";
+import { Laadbeurten } from "../components/Laadbeurten";
 import { Dagprofiel } from "../components/Dagprofiel";
 import { Geavanceerd } from "../components/Geavanceerd";
 import { Invoer } from "../components/Invoer";
@@ -12,36 +14,76 @@ import { MaandVerloop } from "../components/MaandVerloop";
 import { Nettarief } from "../components/Nettarief";
 import { Prijskloof } from "../components/Prijskloof";
 import { Statistieken } from "../components/Statistieken";
+import {
+  Paneel,
+  STANDAARD_TAB,
+  TABS,
+  TabStapper,
+  Tabs,
+  isTabId,
+  type TabId,
+} from "../components/Tabs";
+import { Uitleg } from "../components/Uitleg";
 import { Uitsplitsing } from "../components/Uitsplitsing";
 import { Verantwoording } from "../components/Verantwoording";
+import { Verloop } from "../components/Verloop";
 import { Verliezen } from "../components/Verliezen";
-import { periode } from "../lib/format";
-import { PRESETS } from "../lib/presets";
-import {
-  STANDAARD,
-  kiesPreset,
-  maakConfiguratie,
-} from "../lib/configuratie";
+import { Verschuiving } from "../components/Verschuiving";
+import { datum, periode } from "../lib/format";
+import { leesLaatste, leesProfielen, type Profiel } from "../lib/opslag";
+import { PRIJSPEILDATUM, geschatteOpwekKwh } from "../lib/presets";
+import { STANDAARD, kiesPreset, maakConfiguratie } from "../lib/configuratie";
+import { UITLEG, type UitlegContext } from "../lib/uitleg";
 import { useAnalysis } from "../lib/useAnalysis";
 import { leesUrl, schrijfUrl, type Instellingen } from "../lib/url-state";
 import type { Configuration } from "../lib/worker/protocol";
 
-
+/**
+ * De pagina is een verhaal in vijf tabbladen, in de volgorde van een gesprek:
+ * wat is het antwoord (Start), waarom, wanneer gebeurt het, wat als het anders
+ * was, en waar komen de cijfers vandaan (Methode). Elke sectie heeft één plek,
+ * één vraag en één knop "Hoe is dit berekend?" met de getallen van deze
+ * doorrekening.
+ *
+ * De panelen blijven gemount; alleen het actieve is zichtbaar. Zo houdt het
+ * dagprofiel zijn gekozen dag en hoeft niets opnieuw te renderen als je heen
+ * en weer gaat.
+ */
 export default function Page() {
   const [inst, setInst] = useState<Instellingen>(STANDAARD);
   const [geladen, setGeladen] = useState(false);
+  const [tab, setTab] = useState<TabId>(STANDAARD_TAB);
   /** Zet een doorrekening in de wacht tot de nieuwe invoer is verwerkt. */
   const [rekenNa, setRekenNa] = useState(false);
+  const [profielen, setProfielen] = useState<Profiel[]>([]);
+  const [laatsteBewaard, setLaatsteBewaard] = useState<string | null>(null);
+  /** De instellingen kwamen uit de browseropslag, niet uit de URL. */
+  const [uitOpslag, setUitOpslag] = useState(false);
 
-  // De configuratie staat in de URL, zodat elke doorrekening deelbaar is.
+  // De configuratie staat in de URL, zodat elke doorrekening deelbaar is. Een
+  // URL met parameters wint van de bewaarde instellingen: een gedeelde link
+  // moet laten zien wat de afzender zag.
   useEffect(() => {
-    setInst((huidig) => ({ ...huidig, ...leesUrl() }));
+    const uitUrl = leesUrl();
+    const p = new URLSearchParams(window.location.search);
+    const tabUrl = p.get("tab");
+    if (isTabId(tabUrl)) setTab(tabUrl);
+
+    const laatste = leesLaatste();
+    if (Object.keys(uitUrl).length === 0 && laatste) {
+      setInst(laatste.inst);
+      setUitOpslag(true);
+    } else {
+      setInst((huidig) => ({ ...huidig, ...uitUrl }));
+    }
+    if (laatste) setLaatsteBewaard(laatste.bewaard);
+    setProfielen(leesProfielen());
     setGeladen(true);
   }, []);
 
   useEffect(() => {
-    if (geladen) schrijfUrl(inst, STANDAARD);
-  }, [inst, geladen]);
+    if (geladen) schrijfUrl(inst, STANDAARD, tab === STANDAARD_TAB ? {} : { tab });
+  }, [inst, geladen, tab]);
 
   const preset = kiesPreset(inst.presetId);
   const capaciteit = inst.capaciteitKwh ?? preset.capaciteitKwh;
@@ -64,11 +106,13 @@ export default function Page() {
     dag,
     dagBezig,
     scenario,
-    scenarioOpTeruglevering,
-    zetScenarioOpTeruglevering,
+    scenarioJaar,
     dagOntbreekt,
     vraagDag,
     wisDag,
+    periode: periodeReeks,
+    periodeBezig,
+    vraagPeriode,
     herbereken,
     getoondeConfig,
     verouderd,
@@ -82,7 +126,16 @@ export default function Page() {
   const toonAfname = toon?.household.annualGridImportKwh ?? inst.afnameKwh;
   const toonTeruglevering =
     toon?.household.annualGridExportKwh ?? inst.terugleveringKwh;
-  const toonOpwekBekend = toon?.annualProductionKwh !== undefined;
+  // De jaaropwek staat er altijd in: vult de bezoeker hem niet in, dan schat de
+  // configuratie hem uit de teruglevering. "Bekend" betekent hier dus: het is
+  // zijn eigen getal, niet onze schatting — en dat is aan het verschil met die
+  // schatting te zien.
+  const toonOpwekBekend = toon
+    ? Math.abs(
+        (toon.annualProductionKwh ?? 0) -
+          geschatteOpwekKwh(toon.household.annualGridExportKwh),
+      ) > 0.5
+    : false;
   const toonCapaciteit = toon?.battery.capacityKwh ?? capaciteit;
   const toonVermogen = toon?.battery.maxChargeKw ?? vermogen;
 
@@ -101,147 +154,141 @@ export default function Page() {
     herbereken();
   }, [rekenNa, herbereken]);
 
+  // De context voor "Hoe is dit berekend?": de getallen van dít resultaat.
+  const ctx: UitlegContext | null =
+    result && toon ? { result, scenario, config: toon, preset, scenarioJaar } : null;
+  const uitleg = (id: keyof typeof UITLEG) => (ctx ? <Uitleg blok={UITLEG[id](ctx)} /> : undefined);
+
+  // Alle jaarcijfers op de pagina rusten op dezelfde grondslag: het gemiddelde
+  // over de volledige profieljaren. Eén zin die dat benoemt, zodat elke sectie
+  // dezelfde periode noemt als de uitleg erachter.
+  const volledigeJaren = result?.perYear.filter((j) => j.isFullYear) ?? [];
+  const gemiddeldLabel =
+    volledigeJaren.length > 1
+      ? `een gemiddeld jaar, ${volledigeJaren[0]!.year} tot en met ${
+          volledigeJaren[volledigeJaren.length - 1]!.year
+        }`
+      : volledigeJaren.length === 1
+        ? String(volledigeJaren[0]!.year)
+        : periodeLabel;
+  const datadekking = manifest
+    ? (() => {
+        const jaren = Object.values(manifest.profielen[inst.domein] ?? {});
+        const a = jaren[0]?.eerste_dag;
+        const b = jaren[jaren.length - 1]?.laatste_dag;
+        return a && b ? `Data ${datum(a)} tot ${datum(b)}` : "";
+      })()
+    : "";
+
+  const wachtOpResultaat = !result ? (
+    <div className="notitie">
+      <p>
+        {error ? (
+          <>Er ging iets mis bij het rekenen: {error}</>
+        ) : (
+          <>De doorrekening loopt nog. Dit tabblad vult zich zodra het antwoord er is.</>
+        )}
+      </p>
+    </div>
+  ) : null;
+
   return (
-    <main className="pagina">
-      <header className="kop">
-        <h1>Wat had een thuisbatterij je opgeleverd?</h1>
-        <p className="kop-uitleg">
-          Vanaf 2027 vervalt de saldering: je krijgt voor teruglevering nog maar
-          de kale marktprijs, terwijl afname het volle tarief kost. Deze tool
-          rekent met <strong>werkelijk gemeten verbruiksprofielen</strong> en{" "}
-          <strong>werkelijke uurtarieven</strong> door wat een batterij je in die
-          situatie had bespaard.
-        </p>
+    <div className="schil">
+      <header className="balk">
+        <a className="balk-merk" href="/">
+          Thuisbatterij <span>Rekentool</span>
+        </a>
+        <Tabs actief={tab} onKies={setTab} />
+        {datadekking ? <span className="balk-meta">{datadekking}</span> : null}
       </header>
 
-      <Invoer
-        afnameKwh={inst.afnameKwh}
-        terugleveringKwh={inst.terugleveringKwh}
-        presetId={inst.presetId}
-        onAfname={(v) => setInst((s) => ({ ...s, afnameKwh: v }))}
-        onTeruglevering={(v) => setInst((s) => ({ ...s, terugleveringKwh: v }))}
-        onPreset={(id) =>
-          setInst((s) => ({
-            ...s,
-            presetId: id,
-            capaciteitKwh: null,
-            vermogenKw: null,
-            prijsEur: null,
-          }))
-        }
-        onBereken={herbereken}
-        verouderd={verouderd}
-        bezig={busy}
-      />
+      <main className="pagina">
+        {/* ── Start ──────────────────────────────────────────────────────── */}
+        <Paneel id="start" actief={tab}>
+          <div className="sectiekop">
+            <span className="eyebrow">{TABS[0].label} · {TABS[0].vraag}</span>
+            <h1>Wat had een thuisbatterij je opgeleverd?</h1>
+            <p>
+              Vanaf 2027 vervalt de saldering: je krijgt voor teruglevering nog
+              maar de kale marktprijs, terwijl afname het volle tarief kost. Deze
+              tool rekent met <strong>werkelijk gemeten verbruiksprofielen</strong>{" "}
+              en <strong>werkelijke uurtarieven</strong> door wat een batterij je
+              in die situatie had bespaard. Drie getallen van je jaarafrekening
+              zijn genoeg.
+            </p>
+          </div>
 
-      {error ? (
-        <p className="fout" role="alert">
-          Er ging iets mis bij het rekenen: {error}
-        </p>
-      ) : null}
+          {uitOpslag ? (
+            <div className="notitie" role="status">
+              <p>
+                <b>Je bewaarde instellingen zijn geladen.</b> Wil je toch met de
+                standaardwaarden beginnen? Dan kan dat hier.
+              </p>
+              <button
+                type="button"
+                className="knop licht klein"
+                onClick={() => {
+                  setInst(STANDAARD);
+                  setUitOpslag(false);
+                }}
+              >
+                Standaardwaarden
+              </button>
+            </div>
+          ) : null}
 
-      {!result && !error ? (
-        <p className="laden">De gegevens worden geladen…</p>
-      ) : null}
-
-      {result ? (
-        <>
-          {/*
-            De pagina is een verhaal in vier delen, in de volgorde van een
-            gesprek: wat is het antwoord, waarom, wanneer gebeurt het, en wat als
-            het anders was. Elke sectie heeft één plek en één vraag.
-
-            Eerder stonden beschrijving en wat-als door elkaar en sprong de
-            tijdschaal van dag naar maand naar jaar. En het belangrijkste inzicht
-            — dat het nettarief vanaf 2029 de uitkomst omgooit — stond acht
-            secties lager achter een knop.
-          */}
-          <h2 className="deel-kop" id="antwoord">
-            Het antwoord <span>wat deze batterij je had opgeleverd</span>
-          </h2>
-
-          <Antwoord
-            result={result}
-            scenario={scenario}
-            investeringEur={toonPrijs}
+          <Invoer
+            afnameKwh={inst.afnameKwh}
+            terugleveringKwh={inst.terugleveringKwh}
+            zonnepanelen={inst.zonnepanelen}
+            presetId={inst.presetId}
+            onAfname={(v) => setInst((s) => ({ ...s, afnameKwh: v }))}
+            onTeruglevering={(v) => setInst((s) => ({ ...s, terugleveringKwh: v }))}
+            onZonnepanelen={(v) => setInst((s) => ({ ...s, zonnepanelen: v }))}
+            onPreset={(id) =>
+              setInst((s) => ({
+                ...s,
+                presetId: id,
+                capaciteitKwh: null,
+                vermogenKw: null,
+                prijsEur: null,
+              }))
+            }
+            onBereken={herbereken}
+            verouderd={verouderd}
             bezig={busy}
-            heffingVanNu={toon?.useHistoricalLevy === false}
           />
 
-          <Statistieken stats={result.stats} opwekBekend={toonOpwekBekend} />
+          {error ? (
+            <p className="fout" role="alert">
+              Er ging iets mis bij het rekenen: {error}
+            </p>
+          ) : null}
 
-          <h2 className="deel-kop">
-            Waarom <span>waar de besparing vandaan komt</span>
-          </h2>
+          {!result && !error ? (
+            <p className="laden">De gegevens worden geladen…</p>
+          ) : null}
 
-          <Prijskloof
-            gap={result.priceGap}
-            afnameKwh={toonAfname}
-            terugleveringKwh={toonTeruglevering}
-          />
+          {result ? (
+            <>
+              <Antwoord
+                result={result}
+                scenario={scenario}
+                investeringEur={toonPrijs}
+                bezig={busy}
+                heffingVanNu={toon?.useHistoricalLevy === false}
+                actie={uitleg("antwoord")}
+              />
 
-          <Uitsplitsing
-            breakdown={
-              result.perYear.find((j) => j.isFullYear)?.breakdown ??
-              result.perYear[0]!.breakdown
-            }
-            periodeLabel={
-              result.perYear.find((j) => j.isFullYear)
-                ? String(result.perYear.find((j) => j.isFullYear)!.year)
-                : periodeLabel
-            }
-          />
-
-          <Verliezen
-            losses={result.losses}
-            afnameKwh={toonAfname}
-            besparingEur={result.averageSavingEur}
-          />
-
-          <h2 className="deel-kop">
-            Wanneer <span>van jaar tot dag</span>
-          </h2>
-
-          <BesparingPerJaar jaren={result.perYear} />
-
-          <MaandVerloop maanden={result.perMonth} />
-
-          <Dagprofiel
-            voorbeelden={result.sampleDays}
-            losseDag={dag}
-            ontbreekt={dagOntbreekt}
-            bezig={dagBezig}
-            eersteDag={result.perYear[0]?.firstDay ?? ""}
-            laatsteDag={result.perYear[result.perYear.length - 1]?.lastDay ?? ""}
-            onVraagDag={vraagDag}
-            onWisDag={wisDag}
-          />
-
-          <h2 className="deel-kop">
-            Wat als <span>het nettarief, een andere maat, de looptijd</span>
-          </h2>
-
-          <Nettarief
-            huidig={result}
-            scenario={scenario}
-            opTeruglevering={scenarioOpTeruglevering}
-            onOpTeruglevering={zetScenarioOpTeruglevering}
-          />
-
-          <BatterijMaat
-            grid={grid}
-            huidigeCapaciteit={toonCapaciteit}
-            huidigVermogen={toonVermogen}
-            onKies={(cap, kw) => {
-              // Een klik op een vakje is een expliciete opdracht: meteen
-              // doorrekenen. Anders kost de klik je het raster en levert hij
-              // niets op, want de rekenknop staat verderop.
-              setInst((s) => ({ ...s, capaciteitKwh: cap, vermogenKw: kw }));
-              setRekenNa(true);
-            }}
-          />
-
-          <Cashflow finance={result.finance} investeringEur={toonPrijs} />
+              <Statistieken
+                stats={result.stats}
+                scenarioStats={scenario?.stats ?? null}
+                opwekBekend={toonOpwekBekend}
+                geschatteOpwek={toon?.annualProductionKwh ?? 0}
+                context={ctx}
+              />
+            </>
+          ) : null}
 
           <Geavanceerd
             inst={inst}
@@ -257,15 +304,233 @@ export default function Page() {
             bezig={busy}
           />
 
-          {manifest ? (
-            <Verantwoording
-              manifest={manifest}
-              result={result}
-              domein={inst.domein}
-            />
+          <Bewaren
+            inst={inst}
+            profielen={profielen}
+            onProfielen={setProfielen}
+            laatsteBewaard={laatsteBewaard}
+            onLaatste={setLaatsteBewaard}
+            onLaad={(geladenInst) => {
+              setInst(geladenInst);
+              setUitOpslag(false);
+              setRekenNa(true);
+            }}
+          />
+        </Paneel>
+
+        {/* ── Waarom ─────────────────────────────────────────────────────── */}
+        <Paneel id="waarom" actief={tab}>
+          <div className="sectiekop">
+            <span className="eyebrow">Waarom · {TABS[1].vraag}</span>
+            <h2>Je betaalt veel meer voor stroom dan je ervoor terugkrijgt</h2>
+            <p>
+              Zonder saldering is het gat tussen wat afname kost en wat
+              teruglevering oplevert het hele verdienmodel van een batterij. Hier
+              staat hoe groot dat gat is, uit welke posten de besparing bestaat, en
+              wat er onderweg verloren gaat.
+            </p>
+          </div>
+          {wachtOpResultaat}
+          {result ? (
+            <>
+              <Prijskloof
+                gap={result.priceGap}
+                afnameKwh={toonAfname}
+                terugleveringKwh={toonTeruglevering}
+                actie={uitleg("prijskloof")}
+              />
+              <Uitsplitsing
+                breakdown={result.breakdown}
+                periodeLabel={gemiddeldLabel}
+                actie={uitleg("uitsplitsing")}
+              />
+              <Verliezen
+                losses={result.losses}
+                afnameKwh={toonAfname}
+                besparingEur={result.averageSavingEur}
+                actie={uitleg("verliezen")}
+              />
+            </>
           ) : null}
-        </>
-      ) : null}
-    </main>
+        </Paneel>
+
+        {/* ── Wanneer ────────────────────────────────────────────────────── */}
+        <Paneel id="wanneer" actief={tab}>
+          <div className="sectiekop">
+            <span className="eyebrow">Wanneer · {TABS[2].vraag}</span>
+            <h2>Elk jaar levert iets op, maar niet evenveel, en niet in elke maand</h2>
+            <p>
+              Van grof naar fijn: per profieljaar, door het jaar heen, over de
+              uren van een gemiddelde dag, en ten slotte één dag van dichtbij.
+              Hoe grilliger de prijzen, hoe meer een batterij verdient; en een
+              zomerdag ziet er heel anders uit dan een winterdag.
+            </p>
+          </div>
+          {wachtOpResultaat}
+          {result ? (
+            <>
+              <BesparingPerJaar jaren={result.perYear} actie={uitleg("perJaar")} />
+              <MaandVerloop maanden={result.perMonth} actie={uitleg("maandverloop")} />
+              <Verschuiving
+                profielen={result.seasonProfiles ?? []}
+                actie={uitleg("verschuiving")}
+              />
+              <Verloop
+                periode={periodeReeks}
+                bezig={periodeBezig}
+                eersteDag={result.perYear[0]?.firstDay ?? ""}
+                laatsteDag={result.perYear[result.perYear.length - 1]?.lastDay ?? ""}
+                onVraag={vraagPeriode}
+                onKiesDag={vraagDag}
+                actie={uitleg("verloop")}
+              />
+              <Dagprofiel
+                voorbeelden={result.sampleDays}
+                losseDag={dag}
+                ontbreekt={dagOntbreekt}
+                bezig={dagBezig}
+                eersteDag={result.perYear[0]?.firstDay ?? ""}
+                laatsteDag={result.perYear[result.perYear.length - 1]?.lastDay ?? ""}
+                onVraagDag={vraagDag}
+                onWisDag={wisDag}
+                actie={uitleg("dagprofiel")}
+              />
+            </>
+          ) : null}
+        </Paneel>
+
+        {/* ── Wat als ────────────────────────────────────────────────────── */}
+        <Paneel id="wat-als" actief={tab}>
+          <div className="sectiekop">
+            <span className="eyebrow">Wat als · {TABS[3].vraag}</span>
+            <h2>Het nettarief van 2029 gooit de businesscase om</h2>
+            <p>
+              Vier wat-als-vragen: wat doet het tijdsafhankelijke nettarief dat
+              vanaf 2029 gaat gelden, welke maat batterij loont eigenlijk, hoe
+              zuinig gaat hij met zijn laadbeurten om, en hoe ziet de investering
+              er over de looptijd uit.
+            </p>
+          </div>
+          {wachtOpResultaat}
+          {result ? (
+            <>
+              <Nettarief
+                huidig={result}
+                scenario={scenario}
+                actie={uitleg("nettarief")}
+              />
+              <BatterijMaat
+                grid={grid}
+                huidigeCapaciteit={toonCapaciteit}
+                huidigVermogen={toonVermogen}
+                onKies={(cap, kw) => {
+                  // Een klik op een vakje is een expliciete opdracht: meteen
+                  // doorrekenen. Anders kost de klik je het raster en levert hij
+                  // niets op, want de rekenknop staat op een ander tabblad.
+                  setInst((s) => ({ ...s, capaciteitKwh: cap, vermogenKw: kw }));
+                  setRekenNa(true);
+                }}
+                actie={uitleg("batterijmaat")}
+              />
+              {toon ? (
+                <Laadbeurten
+                  finance={result.finance}
+                  stats={result.stats}
+                  config={toon}
+                  actie={uitleg("beurten")}
+                />
+              ) : null}
+              <Cashflow finance={result.finance} investeringEur={toonPrijs} actie={uitleg("cashflow")} />
+            </>
+          ) : null}
+        </Paneel>
+
+        {/* ── Methode ────────────────────────────────────────────────────── */}
+        <Paneel id="methode" actief={tab}>
+          <div className="sectiekop">
+            <span className="eyebrow">Methode · {TABS[4].vraag}</span>
+            <h2>Waar de cijfers vandaan komen, en wat we eerlijk moeten zeggen</h2>
+            <p>
+              Geen voorspelling maar een doorrekening op wat er echt gebeurd is.
+              Hieronder de data, de grenzen van het model, en de aannames die nog
+              kunnen bewegen.
+            </p>
+          </div>
+          {wachtOpResultaat}
+          {result && manifest ? (
+            <Verantwoording manifest={manifest} result={result} domein={inst.domein} />
+          ) : null}
+
+          <section className="figure">
+            <div className="figure-kop">
+              <div>
+                <h3>Wat we niet weten</h3>
+                <p className="figure-uitleg">
+                  De richting van de uitkomst is stevig; de exacte hoogte niet.
+                  Dit zijn de aannames waar het om draait.
+                </p>
+              </div>
+            </div>
+            <ul className="methode-lijst">
+              <li>
+                <b>Het profiel is een gemiddelde.</b> Jouw huis piekt scherper dan
+                het gemiddelde van veel huishoudens. Dat onderschat wat een
+                batterij kan opvangen. De schuif "Pieken in je verbruik" maakt dat
+                instelbaar.
+                <span className="badge let-op">richting zeker, hoogte niet</span>
+              </li>
+              <li>
+                <b>Eén leverancier.</b> De prijzen zijn van ANWB Energie. Een andere
+                dynamische leverancier rekent een andere opslag; dat verschuift de
+                kosten, nauwelijks de besparing.
+                <span className="badge goed">klein effect</span>
+              </li>
+              <li>
+                <b>Het nettarief van 2029 is een scenario.</b> De blokken en
+                wegingsfactoren staan in het voorstel; het basistarief is een
+                prognose van CE Delft en de ACM heeft nog niet beslist. Invoering
+                is "in beginsel" 1 januari 2029, met uitwijk naar 2030.
+                <span className="badge let-op">te toetsen eind 2026</span>
+              </li>
+              <li>
+                <b>De energiebelasting daalt.</b> De heffing was in 2024 en 2025 een
+                kwart tot een derde hoger dan nu, en de besparing schaalt daar
+                bijna één-op-één mee. Kies "van nu" bij de geavanceerde
+                instellingen om dat effect te zien; het nettariefscenario rekent
+                al met de belasting van 2029.
+                <span className="badge let-op">kan lager uitvallen</span>
+              </li>
+              <li>
+                <b>Batterijprijzen bewegen.</b> De richtprijzen zijn van{" "}
+                {PRIJSPEILDATUM}; vul je eigen offerte in bij de geavanceerde
+                instellingen.
+                <span className="badge neutraal">zelf in te vullen</span>
+              </li>
+              <li>
+                <b>Wat er niet in zit.</b> Vastrecht, belastingvermindering en het
+                vaste deel van de netbeheerkosten: met en zonder batterij gelijk.
+                Terugleverkosten alleen als één instelbaar bedrag per kWh; geen
+                staffels per leverancier. Geen kosten voor slimme sturing.
+                <span className="badge neutraal">bewust buiten beeld</span>
+              </li>
+            </ul>
+          </section>
+        </Paneel>
+      </main>
+
+      {/* Verder lezen: de tablist bovenin is om ergens naartoe te springen,
+          deze is om door te stappen. Eén keer, na de panelen — alleen het
+          actieve paneel is zichtbaar, dus hij staat altijd onder wat je leest. */}
+      <TabStapper actief={tab} onKies={setTab} />
+
+      <footer className="voet">
+        <span>
+          Bronnen: MFFBAS/EDSN profielfracties · ANWB Energie uurtarieven · CE
+          Delft en Netbeheer Nederland (nettarief 2029). Geen commerciële partij,
+          geen advies.
+        </span>
+        {manifest ? <span>Data gegenereerd {datum(manifest.gegenereerd.slice(0, 10))}</span> : null}
+      </footer>
+    </div>
   );
 }

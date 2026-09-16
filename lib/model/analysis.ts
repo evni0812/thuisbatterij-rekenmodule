@@ -7,14 +7,8 @@
  */
 
 import { LocalTimeIndex } from "../data/timeaxis";
-import {
-  equivalentCycles,
-  marginalWearCostPerKwh,
-  standbyKwhPerStep,
-  usableCapacityKwh,
-  wearCostPerKwh,
-  WEAR_ONDERGRENS_DEEL,
-} from "./battery";
+import { isPiekuur } from "../nettarief";
+import { equivalentCycles, usableCapacityKwh, wearCostPerKwh } from "./battery";
 import { dispatchBaseline } from "./dispatch-baseline";
 import { dispatchOptimal } from "./dispatch-optimal";
 import { dispatchRolling } from "./dispatch-rolling";
@@ -51,14 +45,14 @@ export interface SavingBreakdown {
  * De energieboekhouding van de batterij: wat erin ging, wat eruit kwam, en waar
  * het verschil bleef.
  *
- * Drie verliezen, en ze zijn wezenlijk anders van aard:
+ * Twee verliezen:
  *
  *   laadverlies     omzetting van wisselstroom naar de cel. Evenredig met wat
  *                   je erin stopt.
  *   ontlaadverlies  omzetting terug. Evenredig met wat je eruit haalt.
- *   standby         de elektronica die dag en nacht aan staat, ook als er niets
- *                   gebeurt. Hangt níét van het gebruik af, en is bij een
- *                   kleine batterij daarom relatief het zwaarst.
+ *
+ * Het eigen verbruik van de omvormer (standby) zit niet in het model: dat is
+ * een vaste post van het bezit, geen gevolg van de handel. Zie BatterySpec.
  *
  * De euro's zijn opportuniteitskosten: een verloren kilowattuur kost je wat hij
  * had opgeleverd als hij er nog was geweest. Uit eigen overschot is dat de
@@ -72,12 +66,10 @@ export interface EnergyLosses {
   deliveredKwh: number;
   chargeLossKwh: number;
   dischargeLossKwh: number;
-  standbyKwh: number;
-  /** Som van de drie verliezen, kWh. */
+  /** Som van de twee verliezen, kWh. */
   totalKwh: number;
   chargeLossEur: number;
   dischargeLossEur: number;
-  standbyEur: number;
   totalEur: number;
   /**
    * De gemeten rondgang: hoeveel er per ingaande kilowattuur weer uit komt.
@@ -111,6 +103,61 @@ export interface MonthTotals {
   gridExportBatteryKwh: number;
   /** Gemiddeld verschil tussen de hoogste en laagste afnameprijs per dag. */
   priceSpreadEurPerKwh: number;
+  /**
+   * Netafname in de piekuren van het nettariefprofiel (winter 16–22 uur, zomer
+   * 19–23 uur), zonder en met batterij, kWh. Zie `piekurenVoorMaand`.
+   */
+  peakHourImportBaselineKwh: number;
+  peakHourImportBatteryKwh: number;
+}
+
+/**
+ * Het gemiddelde dagprofiel van een seizoen, per uur van de dag.
+ *
+ * De jaarcijfers zeggen hoevéél een batterij verzet, niet wannéér. Dat laatste
+ * is juist waar het om draait zodra het nettarief van het moment gaat afhangen:
+ * een batterij verplaatst afname van de avond naar de nacht en van het net naar
+ * je eigen dak. Zonder dit profiel is die verplaatsing nergens te zien.
+ *
+ * Alles in kWh per uur van een gemiddelde dag in dat seizoen, zodat winter en
+ * zomer naast elkaar leesbaar zijn ook al telt de ene meer dagen dan de andere.
+ * Uren in lokale tijd: een avondpiek is een wandklokbegrip.
+ */
+export interface SeasonProfile {
+  /** "zomer" is april tot en met september; dezelfde grens als het nettarief. */
+  season: "winter" | "zomer";
+  /** Aantal dagen waarover is gemiddeld, over alle meegetelde jaren samen. */
+  days: number;
+  /** Van het net gehaald, zonder batterij, kWh per uur van de dag. */
+  importBaseline: number[];
+  /** Van het net gehaald, met batterij. */
+  importBattery: number[];
+  /** Aan het net teruggeleverd, zonder batterij. */
+  exportBaseline: number[];
+  /** Aan het net teruggeleverd, met batterij. */
+  exportBattery: number[];
+}
+
+/**
+ * De optelling waaruit een seizoensprofiel volgt: sommen per uur, plus hoeveel
+ * kwartieren er in dat uur vielen. Apart van het profiel zelf, want over
+ * meerdere jaren moet je de sommen bij elkaar optellen en pas daarna delen.
+ */
+interface SeasonAccum {
+  som: { impBasis: Float64Array; impBat: Float64Array; expBasis: Float64Array; expBat: Float64Array };
+  stappen: Float64Array;
+}
+
+function leegAccum(): SeasonAccum {
+  return {
+    som: {
+      impBasis: new Float64Array(24),
+      impBat: new Float64Array(24),
+      expBasis: new Float64Array(24),
+      expBat: new Float64Array(24),
+    },
+    stappen: new Float64Array(24),
+  };
 }
 
 /** Uitkomsten voor één profieljaar. */
@@ -141,6 +188,19 @@ export interface YearAnalysis {
   losses: EnergyLosses;
   /** Per kalendermaand; maanden buiten het venster ontbreken. */
   months: MonthTotals[];
+  /**
+   * Netafname in de piekuren van het nettariefprofiel, zonder en met batterij,
+   * kWh. Som van de maandwaarden.
+   */
+  peakHourImportKwh: number;
+  peakHourImportWithBatteryKwh: number;
+  /**
+   * Slijtage van de laadbeurten in dit jaar, EUR: geleverde kWh maal de volle
+   * aanschafprijs per kWh doorzet. Zit NIET in de besparing — die post zit al
+   * in de aanschafprijs en zou anders dubbel tellen — maar staat ernaast, zodat
+   * je ziet wat de handel van de batterij opsoupeert.
+   */
+  wearCostEur: number;
 }
 
 /**
@@ -175,6 +235,21 @@ export interface KeyStats {
   /** Autarkie: welk deel van je verbruik je zelf dekt, 0–1. */
   selfSufficiencyBaseline: number | null;
   selfSufficiencyBattery: number | null;
+  /**
+   * Netafname in de piekuren van het nettarief — winter 16 tot en met 22 uur,
+   * zomer 19 tot en met 23 uur — zonder en met batterij, kWh per jaar.
+   *
+   * Dit is de maat voor wat een batterij voor het net doet: hoeveel er op de
+   * duurste uren minder gevraagd wordt. Als aandeel van de netafname is het de
+   * tegenhanger van zelfconsumptie: welk deel van wat je afneemt, valt in de
+   * piek. Onafhankelijk van of het nettarief in de prijs zit, zodat het effect
+   * van het tarief op het gedrag zichtbaar is.
+   */
+  peakHourImportBaselineKwh: number;
+  peakHourImportBatteryKwh: number;
+  /** Slijtage per jaar, EUR, en de volle slijtageprijs per geleverde kWh. Zie YearAnalysis. */
+  wearCostPerYearEur: number;
+  wearCostEurPerKwh: number;
 }
 
 export interface AnalysisInput {
@@ -189,12 +264,14 @@ export interface AnalysisInput {
   tariff: TariffSpec;
   investmentEur: number;
   cycleLife: number;
-  /** Kalenderlevensduur van de batterij; stuurt de slijtagedrempel. */
+  /** Kalenderlevensduur van de batterij, uit de catalogus; alleen ter duiding in de uitleg. */
   calendarLifeYears: number;
   years: number;
   priceEscalation: number;
   discountRate: number;
   calendarFadePerYear: number;
+  /** Deel van de volle slijtageprijs als drempel voor de planner, 0–1; standaard 1. */
+  wearFraction?: number;
   residualValueEur: number;
   /** Capaciteitsfracties waarop de besparingscurve wordt bemonsterd. */
   curveFractions?: number[];
@@ -311,6 +388,8 @@ export interface SampleDayStats {
   socEndKwh: number;
   /** Afgeregeld overschot, kWh. */
   curtailedKwh: number;
+  /** Slijtage van de laadbeurten van deze dag, EUR; niet in savingEur verrekend. */
+  wearCostEur: number;
   /** Hoogste en laagste afnameprijs van de dag, EUR/kWh. */
   priceMinEurPerKwh: number;
   priceMaxEurPerKwh: number;
@@ -382,6 +461,21 @@ export interface StrategyGap {
 
 export interface AnalysisResult {
   perYear: YearAnalysis[];
+  /**
+   * De uitsplitsing van de besparing, gemiddeld per jaar over de volledige
+   * jaren — dezelfde grondslag als `losses`, `perMonth` en `averageSavingEur`.
+   *
+   * Eerder pakte de pagina hiervoor één profieljaar. Dat leverde een
+   * uitsplitsing die optelde tot een ander bedrag dan het antwoord bovenaan,
+   * en die per sectie een andere periode noemde. De posten zijn optelbaar, dus
+   * middelen mag: `totalEur` is per constructie gelijk aan `averageSavingEur`.
+   */
+  breakdown: SavingBreakdown;
+  /**
+   * Het gemiddelde dagprofiel per seizoen, zonder en met batterij. Twee
+   * elementen: winter en zomer, in die volgorde.
+   */
+  seasonProfiles: SeasonProfile[];
   /**
    * Gemiddeld per kalendermaand over de volledige profieljaren.
    *
@@ -518,8 +612,7 @@ export function breakdown(
  *
  * Los van breakdown(), want dit is een andere vraag. Daar gaat het om waar de
  * besparing vandaan komt — hier om waar de kilowatturen bleven. Het
- * omzettingsverlies in euro's komt in beide op hetzelfde neer; standby staat
- * alleen hier, omdat het geen omzettingsverlies is maar eigen verbruik.
+ * omzettingsverlies in euro's komt in beide op hetzelfde neer.
  */
 export function energyLosses(
   window: Window,
@@ -527,7 +620,6 @@ export function energyLosses(
   spec: BatterySpec,
 ): EnergyLosses {
   const n = window.residualKwh.length;
-  const standbyPerStap = standbyKwhPerStep(spec);
 
   let geladen = 0;
   let geleverd = 0;
@@ -535,7 +627,6 @@ export function energyLosses(
   let laadverliesEur = 0;
   let ontlaadverliesKwh = 0;
   let ontlaadverliesEur = 0;
-  let standbyEur = 0;
 
   for (let i = 0; i < n; i++) {
     const ip = window.prices.importPrice[i]!;
@@ -562,25 +653,17 @@ export function energyLosses(
       ontlaadverliesKwh += verlies;
       ontlaadverliesEur += (verlies / ontladen) * (naarHuis * ip + naarNet * ep);
     }
-
-    // Standby loopt door of de batterij nu werkt of niet. Wat het kost hangt af
-    // van waar je op dat moment staat: koop je bij, dan de afnameprijs; lever je
-    // terug, dan de opbrengst die je misloopt.
-    standbyEur += standbyPerStap * (bat.gridImportKwh[i]! > 0 ? ip : ep);
   }
 
-  const standbyKwh = standbyPerStap * n;
   return {
     chargedKwh: geladen,
     deliveredKwh: geleverd,
     chargeLossKwh: laadverliesKwh,
     dischargeLossKwh: ontlaadverliesKwh,
-    standbyKwh,
-    totalKwh: laadverliesKwh + ontlaadverliesKwh + standbyKwh,
+    totalKwh: laadverliesKwh + ontlaadverliesKwh,
     chargeLossEur: laadverliesEur,
     dischargeLossEur: ontlaadverliesEur,
-    standbyEur,
-    totalEur: laadverliesEur + ontlaadverliesEur + standbyEur,
+    totalEur: laadverliesEur + ontlaadverliesEur,
     roundtrip: geladen > 0 ? geleverd / geladen : 0,
   };
 }
@@ -619,11 +702,14 @@ export function maandTotalen(
         gridExportBaselineKwh: 0,
         gridExportBatteryKwh: 0,
         priceSpreadEurPerKwh: 0,
+        peakHourImportBaselineKwh: 0,
+        peakHourImportBatteryKwh: 0,
         dagen: 0,
         spreidingSom: 0,
       };
       per.set(maand, m);
     }
+    const piek = PIEKUREN[maand - 1]!;
 
     let hoog = -Infinity;
     let laag = Infinity;
@@ -631,8 +717,6 @@ export function maandTotalen(
     for (let i = a; i < b; i++) {
       const ip = window.prices.importPrice[i]!;
       const ep = window.prices.exportPrice[i]!;
-      const curtail = false;
-      void curtail;
       m.savingEur +=
         (base.gridImportKwh[i]! - bat.gridImportKwh[i]!) * ip -
         (base.gridExportKwh[i]! - bat.gridExportKwh[i]!) * ep;
@@ -643,6 +727,11 @@ export function maandTotalen(
       ontladen += bat.dischargeKwh[i]!;
       if (ip > hoog) hoog = ip;
       if (ip < laag) laag = ip;
+      // De piekuren van het nettarief zijn wandkloktijd, net als de maand.
+      if (piek[index.localHour(window.startMs[i]!)]) {
+        m.peakHourImportBaselineKwh += base.gridImportKwh[i]!;
+        m.peakHourImportBatteryKwh += bat.gridImportKwh[i]!;
+      }
     }
     m.throughputKwh += ontladen;
     m.dagen += 1;
@@ -660,9 +749,84 @@ export function maandTotalen(
       gridExportBaselineKwh: m.gridExportBaselineKwh,
       gridExportBatteryKwh: m.gridExportBatteryKwh,
       priceSpreadEurPerKwh: m.dagen > 0 ? m.spreidingSom / m.dagen : 0,
+      peakHourImportBaselineKwh: m.peakHourImportBaselineKwh,
+      peakHourImportBatteryKwh: m.peakHourImportBatteryKwh,
     }))
     .sort((a, b) => a.month - b.month);
 }
+
+/**
+ * Tel per seizoen en per uur van de dag op wat er door de meter ging.
+ *
+ * Eén extra pass over de dispatch die er al is. Uur en maand in lokale tijd,
+ * net als overal: het gaat om de avondpiek zoals je hem op de klok ziet, en de
+ * zomergrens van het nettarief loopt op wandkloktijd.
+ */
+export function seizoensAccumulatie(
+  window: Window,
+  base: DispatchResult,
+  bat: DispatchResult,
+): { winter: SeasonAccum; zomer: SeasonAccum } {
+  const n = window.residualKwh.length;
+  const index = new LocalTimeIndex(window.startMs[0]!, window.startMs[n - 1]!);
+  const uit = { winter: leegAccum(), zomer: leegAccum() };
+
+  for (let i = 0; i < n; i++) {
+    const ms = window.startMs[i]!;
+    const maand = Number(index.localDate(ms).slice(5, 7));
+    const uur = index.localHour(ms);
+    const a = maand >= 4 && maand <= 9 ? uit.zomer : uit.winter;
+    a.som.impBasis[uur]! += base.gridImportKwh[i]!;
+    a.som.impBat[uur]! += bat.gridImportKwh[i]!;
+    a.som.expBasis[uur]! += base.gridExportKwh[i]!;
+    a.som.expBat[uur]! += bat.gridExportKwh[i]!;
+    a.stappen[uur]! += 1;
+  }
+  return uit;
+}
+
+/** Tel twee accumulaties bij elkaar op, zodat jaren gemiddeld kunnen worden. */
+function telAccumOp(a: SeasonAccum, b: SeasonAccum): void {
+  for (let u = 0; u < 24; u++) {
+    a.som.impBasis[u]! += b.som.impBasis[u]!;
+    a.som.impBat[u]! += b.som.impBat[u]!;
+    a.som.expBasis[u]! += b.som.expBasis[u]!;
+    a.som.expBat[u]! += b.som.expBat[u]!;
+    a.stappen[u]! += b.stappen[u]!;
+  }
+}
+
+/**
+ * Van sommen naar een gemiddelde dag.
+ *
+ * Elk uur telt vier kwartieren, dus het aantal dagen achter een uur is het
+ * aantal kwartieren gedeeld door vier — ook als er door de zomertijd een uur
+ * ontbreekt of dubbel voorkomt, want dan klopt de deling per uur nog steeds.
+ */
+function naarSeizoensprofiel(
+  season: SeasonProfile["season"],
+  a: SeasonAccum,
+): SeasonProfile {
+  const perDag = (som: Float64Array) =>
+    Array.from({ length: 24 }, (_, u) =>
+      a.stappen[u]! > 0 ? som[u]! / (a.stappen[u]! / 4) : 0,
+    );
+  let stappen = 0;
+  for (let u = 0; u < 24; u++) stappen += a.stappen[u]!;
+  return {
+    season,
+    days: stappen / 96,
+    importBaseline: perDag(a.som.impBasis),
+    importBattery: perDag(a.som.impBat),
+    exportBaseline: perDag(a.som.expBasis),
+    exportBattery: perDag(a.som.expBat),
+  };
+}
+
+/** Piekuren per maand als 24 booleans, één keer opgebouwd. */
+const PIEKUREN: readonly (readonly boolean[])[] = Array.from({ length: 12 }, (_, m) =>
+  Array.from({ length: 24 }, (_, u) => isPiekuur(m + 1, u)),
+);
 
 /** Alleen de besparing, zonder baseline en optimum: voor de besparingscurve. */
 function quickSaving(
@@ -686,11 +850,15 @@ function analyseWindow(
   tariff: TariffSpec,
   /** Een al berekende realistische dispatch voor precies deze spec, indien voorhanden. */
   realistischAlBerekend?: DispatchResult,
+  /** Volle slijtageprijs per geleverde kWh, voor de zichtbare slijtagepost. */
+  wearEurPerKwh = 0,
 ): {
   analysis: YearAnalysis;
   realistic: DispatchResult;
   optimal: DispatchResult;
   baselineCost: number;
+  /** Sommen per uur van de dag, per seizoen; pas na het middelen bruikbaar. */
+  seizoenen: { winter: SeasonAccum; zomer: SeasonAccum };
 } {
   const { window, year, firstDay, lastDay, isFullYear } = entry;
   const base = dispatchBaseline(window, tariff);
@@ -717,9 +885,14 @@ function analyseWindow(
   const realSaving = base.totalCostEur - real.totalCostEur;
   const optSaving = base.totalCostEur - opt.totalCostEur;
 
-  // Zelfvoorziening meten we op de afname: hoeveel minder het net hoeft te
-  // leveren. Zonder bruto verbruik is dat de eerlijkste maat die we hebben.
-  const totaalBehoefte = imp;
+  const months = maandTotalen(window, base, real, spec);
+  let piekBasis = 0;
+  let piekBat = 0;
+  for (const m of months) {
+    piekBasis += m.peakHourImportBaselineKwh;
+    piekBat += m.peakHourImportBatteryKwh;
+  }
+
   const analysis: YearAnalysis = {
     year,
     firstDay,
@@ -739,14 +912,17 @@ function analyseWindow(
     gridExportWithBatteryKwh: exportWithBattery,
     throughputKwh: dischargeTotal,
     losses: energyLosses(window, real, spec),
-    months: maandTotalen(window, base, real, spec),
+    months,
+    peakHourImportKwh: piekBasis,
+    peakHourImportWithBatteryKwh: piekBat,
+    wearCostEur: dischargeTotal * wearEurPerKwh,
   };
-  void totaalBehoefte;
   return {
     analysis,
     realistic: real,
     optimal: opt,
     baselineCost: base.totalCostEur,
+    seizoenen: seizoensAccumulatie(window, base, real),
   };
 }
 
@@ -850,6 +1026,8 @@ export function dayStats(
   start: number,
   end: number,
   optimal?: DispatchResult,
+  /** Volle slijtageprijs per geleverde kWh; nul laat de post op nul. */
+  wearEurPerKwh = 0,
 ): SampleDayStats {
   let baselineCost = 0;
   let batteryCost = 0;
@@ -869,7 +1047,6 @@ export function dayStats(
   let meterImp = 0;
   let meterExp = 0;
 
-  const standby = standbyKwhPerStep(spec);
   const parts = window.parts;
 
   for (let i = start; i < end; i++) {
@@ -891,7 +1068,7 @@ export function dayStats(
       baselineCost -= (overschot - weg) * ep;
     }
 
-    // Met batterij: uit de dispatch, die de standby al in het net verwerkt.
+    // Met batterij: uit de dispatch.
     const gi = dispatch.gridImportKwh[i]!;
     const ge = dispatch.gridExportKwh[i]!;
     impBat += gi;
@@ -909,9 +1086,8 @@ export function dayStats(
     geladen += laden;
     geleverd += ontladen;
     if (laden > 0) {
-      // Zolang er overschot is komt de lading daaruit; de rest is inkoop. Het
-      // standby-verbruik hoort bij het huis, niet bij het overschot.
-      const overschot = Math.max(0, -r - standby);
+      // Zolang er overschot is komt de lading daaruit; de rest is inkoop.
+      const overschot = Math.max(0, -r);
       const zon = Math.min(laden, overschot);
       uitZon += zon;
       uitNet += laden - zon;
@@ -944,6 +1120,7 @@ export function dayStats(
     socStartKwh: start > 0 ? dispatch.socKwh[start - 1]! : 0,
     socEndKwh: end > start ? dispatch.socKwh[end - 1]! : 0,
     curtailedKwh: afgeregeld,
+    wearCostEur: geleverd * wearEurPerKwh,
     priceMinEurPerKwh: prijsMin === Infinity ? 0 : prijsMin,
     priceMaxEurPerKwh: prijsMax === -Infinity ? 0 : prijsMax,
     meterImportKwh: parts ? meterImp : null,
@@ -962,6 +1139,7 @@ export function extractDay(
   label: string,
   date: string,
   optimal?: DispatchResult,
+  wearEurPerKwh = 0,
 ): SampleDay {
   const plak = (arr: { [k: number]: number }): number[] => {
     const uit: number[] = [];
@@ -1007,7 +1185,7 @@ export function extractDay(
     meterImportKwh: window.parts ? plak(window.parts.gridImportKwh) : [],
     cumulatiefBasisEur: cumBasis,
     cumulatiefBatterijEur: cumBat,
-    stats: dayStats(window, dispatch, spec, tariff, start, end, optimal),
+    stats: dayStats(window, dispatch, spec, tariff, start, end, optimal, wearEurPerKwh),
   };
 }
 
@@ -1019,6 +1197,7 @@ export function findDay(
   tariff: TariffSpec,
   isoDate: string,
   optimal?: DispatchResult,
+  wearEurPerKwh = 0,
 ): SampleDay | null {
   const { starts, index } = dayBoundaries(window.startMs);
   for (let d = 0; d + 1 < starts.length; d++) {
@@ -1034,6 +1213,7 @@ export function findDay(
         "",
         isoDate,
         optimal,
+        wearEurPerKwh,
       );
     }
   }
@@ -1053,6 +1233,7 @@ function pickSampleDays(
   tariff: TariffSpec,
   dispatch: DispatchResult,
   optimal?: DispatchResult,
+  wearEurPerKwh = 0,
 ): SampleDay[] {
   const { window } = entry;
   const n = window.residualKwh.length;
@@ -1090,6 +1271,7 @@ function pickSampleDays(
       label,
       index.localDate(window.startMs[g.start]!),
       optimal,
+      wearEurPerKwh,
     );
   };
 
@@ -1157,47 +1339,19 @@ export function runAnalysis(
   input: AnalysisInput,
   options: AnalysisOptions = {},
 ): AnalysisResult {
-  // Eerst uitvinden of laadbeurten schaars zijn: pas als de batterij ze binnen
-  // zijn kalenderlevensduur opmaakt, kost een extra beurt méér dan de
-  // ondergrens. Eén proefjaar is genoeg voor die schatting.
-  //
-  // De proefrun draait mét de ondergrens, niet zonder drempel. Dat is niet
-  // alleen realistischer — een beurt kost altijd iets — het houdt ook de
-  // hergebruiktruc in stand: blijkt de drempel op de ondergrens te blijven, dan
-  // ÍS deze run de realistische dispatch van dat jaar en hoeft hij niet
-  // opnieuw. Zonder die keuze zou elke doorrekening een volledige extra
-  // jaarsimulatie kosten, want de drempel is sinds de ondergrens nooit meer nul.
-  const ondergrens =
-    wearCostPerKwh(input.investmentEur, input.cycleLife, input.battery) *
-    WEAR_ONDERGRENS_DEEL;
-  const metOndergrens: BatterySpec = {
+  // De slijtageprijs: wat een geleverde kWh van de aanschaf opsoupeert. Die
+  // komt overal terug als zichtbare post. De planner rekent er een deel van als
+  // schaduwprijs (de strategie, zie lib/strategie.ts; standaard het geheel):
+  // een beurt gaat alleen door als de marge na het omzettingsverlies groter is
+  // dan dat deel van de slijtage, anders staat de batterij stil.
+  const volleSlijtage = wearCostPerKwh(input.investmentEur, input.cycleLife, input.battery);
+  const spec: BatterySpec = {
     ...input.battery,
-    wearCostEurPerKwh: ondergrens,
+    wearCostEurPerKwh: volleSlijtage * (input.wearFraction ?? 1),
   };
-  const proef = input.windows.find((w) => w.isFullYear) ?? input.windows[0];
-  let verwachteCycli = 0;
-  let proefRun: DispatchResult | undefined;
-  if (proef) {
-    proefRun = dispatchRolling(proef.window, metOndergrens, input.tariff);
-    verwachteCycli = proefRun.equivalentCycles;
-  }
-
-  const drempel = marginalWearCostPerKwh(
-    input.investmentEur,
-    input.cycleLife,
-    input.battery,
-    verwachteCycli,
-    input.calendarLifeYears,
-  );
-  const spec: BatterySpec = { ...input.battery, wearCostEurPerKwh: drempel };
 
   const uitkomsten = input.windows.map((w) =>
-    analyseWindow(
-      w,
-      spec,
-      input.tariff,
-      w === proef && Math.abs(drempel - ondergrens) < 1e-12 ? proefRun : undefined,
-    ),
+    analyseWindow(w, spec, input.tariff, undefined, volleSlijtage),
   );
   const perYear = uitkomsten.map((u) => u.analysis);
   if (options.collectDispatches) {
@@ -1233,6 +1387,8 @@ export function runAnalysis(
       hit.som.gridExportBaselineKwh += m.gridExportBaselineKwh;
       hit.som.gridExportBatteryKwh += m.gridExportBatteryKwh;
       hit.som.priceSpreadEurPerKwh += m.priceSpreadEurPerKwh;
+      hit.som.peakHourImportBaselineKwh += m.peakHourImportBaselineKwh;
+      hit.som.peakHourImportBatteryKwh += m.peakHourImportBatteryKwh;
     }
   }
   const perMonth: MonthTotals[] = [...maandBuckets.values()]
@@ -1246,8 +1402,24 @@ export function runAnalysis(
       gridExportBaselineKwh: som.gridExportBaselineKwh / jaren,
       gridExportBatteryKwh: som.gridExportBatteryKwh / jaren,
       priceSpreadEurPerKwh: som.priceSpreadEurPerKwh / jaren,
+      peakHourImportBaselineKwh: som.peakHourImportBaselineKwh / jaren,
+      peakHourImportBatteryKwh: som.peakHourImportBatteryKwh / jaren,
     }))
     .sort((a, b) => a.month - b.month);
+
+  // Het seizoensprofiel over dezelfde volledige jaren: sommen optellen en pas
+  // daarna delen, anders weegt een jaar met minder dagen even zwaar mee.
+  const seizoenSom = { winter: leegAccum(), zomer: leegAccum() };
+  for (let i = 0; i < perYear.length; i++) {
+    if (!basis.includes(perYear[i]!)) continue;
+    const s = uitkomsten[i]!.seizoenen;
+    telAccumOp(seizoenSom.winter, s.winter);
+    telAccumOp(seizoenSom.zomer, s.zomer);
+  }
+  const seasonProfiles: SeasonProfile[] = [
+    naarSeizoensprofiel("winter", seizoenSom.winter),
+    naarSeizoensprofiel("zomer", seizoenSom.zomer),
+  ];
 
   const besparingen = basis.map((y) => y.realisticSavingEur);
   const gemiddeld =
@@ -1345,6 +1517,10 @@ export function runAnalysis(
       brutoVerbruik && brutoVerbruik > 0
         ? Math.min(1, 1 - impBat / brutoVerbruik)
         : null,
+    peakHourImportBaselineKwh: gem((y) => y.peakHourImportKwh),
+    peakHourImportBatteryKwh: gem((y) => y.peakHourImportWithBatteryKwh),
+    wearCostPerYearEur: gem((y) => y.wearCostEur),
+    wearCostEurPerKwh: volleSlijtage,
   };
 
   // Verliezen per jaar. Alle posten zijn optelbaar en dus middelbaar; de
@@ -1356,17 +1532,26 @@ export function runAnalysis(
     deliveredKwh: geleverdGem,
     chargeLossKwh: gem((y) => y.losses.chargeLossKwh),
     dischargeLossKwh: gem((y) => y.losses.dischargeLossKwh),
-    standbyKwh: gem((y) => y.losses.standbyKwh),
     totalKwh: gem((y) => y.losses.totalKwh),
     chargeLossEur: gem((y) => y.losses.chargeLossEur),
     dischargeLossEur: gem((y) => y.losses.dischargeLossEur),
-    standbyEur: gem((y) => y.losses.standbyEur),
     totalEur: gem((y) => y.losses.totalEur),
     roundtrip: geladenGem > 0 ? geleverdGem / geladenGem : 0,
   };
 
+  const breakdownGem: SavingBreakdown = {
+    selfConsumptionEur: gem((y) => y.breakdown.selfConsumptionEur),
+    arbitrageEur: gem((y) => y.breakdown.arbitrageEur),
+    avoidedNegativeExportEur: gem((y) => y.breakdown.avoidedNegativeExportEur),
+    conversionLossEur: gem((y) => y.breakdown.conversionLossEur),
+    conversionLossKwh: gem((y) => y.breakdown.conversionLossKwh),
+    totalEur: gem((y) => y.breakdown.totalEur),
+  };
+
   return {
     perYear,
+    breakdown: breakdownGem,
+    seasonProfiles,
     perMonth,
     stats,
     losses,
@@ -1378,7 +1563,7 @@ export function runAnalysis(
     priceGap: computePriceGap(input.windows, input.tariff),
     sampleDays:
       toonVenster && toonDispatch
-        ? pickSampleDays(toonVenster, spec, input.tariff, toonDispatch, toonOptimaal)
+        ? pickSampleDays(toonVenster, spec, input.tariff, toonDispatch, toonOptimaal, volleSlijtage)
         : [],
     gap:
       referentieIndex >= 0
@@ -1392,6 +1577,20 @@ export function runAnalysis(
           )
         : null,
   };
+}
+
+/**
+ * Het jaar waar losse cijfers naar verwijzen: het meest recente volledige
+ * profieljaar, of het laatste venster als er geen volledig jaar in zit.
+ *
+ * Eén definitie, want de uitsplitsing in de pagina en de uitleg erachter
+ * moeten hetzelfde jaar noemen. Toen de pagina het eerste volledige jaar pakte
+ * en de uitleg het laatste, stond er onder de grafiek € 89 over 2024 en in de
+ * uitleg ernaast € 100,25 over 2025 — dezelfde vraag, twee antwoorden.
+ */
+export function referentieJaar(r: AnalysisResult): YearAnalysis {
+  const vol = r.perYear.filter((j) => j.isFullYear);
+  return vol[vol.length - 1] ?? r.perYear[r.perYear.length - 1]!;
 }
 
 export { usableCapacityKwh };

@@ -8,9 +8,10 @@
  * óók het antwoord.
  */
 
+import { useState, type ReactNode } from "react";
 import type { FinanceResult } from "../lib/model/finance";
 import { euro, jaren, procent } from "../lib/format";
-import { Figure, Raster, kiesTicks } from "./chart-parts";
+import { Figure, Grafiek, Raster, Trefvlak, kiesTicks, useTip } from "./chart-parts";
 
 const B = 720;
 const H = 240;
@@ -19,10 +20,15 @@ const MARGE = { boven: 16, rechts: 16, onder: 34, links: 64 };
 export function Cashflow({
   finance,
   investeringEur,
+  actie,
 }: {
   finance: FinanceResult;
   investeringEur: number;
+  /** De knop "Hoe is dit berekend?" in de kop. */
+  actie?: ReactNode;
 }) {
+  const { kader, tip, toon, wis } = useTip();
+  const [aangewezen, setAangewezen] = useState<number | null>(null);
   const cf = finance.cashflows;
   if (cf.length === 0) return null;
 
@@ -56,21 +62,26 @@ export function Cashflow({
 
   return (
     <Figure
+      actie={actie}
       titel={titel}
       toelichting={
         <>
-          Wat je tot dat moment in totaal hebt terugverdiend, met de aanschafprijs
-          als startpunt. De lijn telt de euro's zoals je ze krijgt. De contante
-          waarde hieronder trekt daar de rente vanaf die je op dat geld had kunnen
-          maken. De besparing loopt terug naarmate de batterij slijt.
+          Eén doorgerekend jaar, herhaald over de levensduur: wat je tot dat
+          moment in totaal hebt terugverdiend, met de aanschafprijs als
+          startpunt. De lijn telt de euro's zoals je ze krijgt. De contante
+          waarde hieronder trekt daar de rente vanaf die je op dat geld had
+          kunnen maken. De besparing loopt terug naarmate de batterij slijt.
         </>
       }
     >
-      <div
-        className="chart-wrap"
-        tabIndex={0}
-        role="group"
-        aria-label="Grafiek, horizontaal scrollbaar"
+      <Grafiek
+        kader={kader}
+        tip={tip}
+        onWis={() => {
+          setAangewezen(null);
+          wis();
+        }}
+        label="Cumulatief terugverdiend bedrag over de analyseperiode"
       >
         <svg
           viewBox={`0 0 ${B} ${H}`}
@@ -78,6 +89,16 @@ export function Cashflow({
           role="img"
           aria-label="Cumulatief terugverdiend bedrag over de analyseperiode"
         >
+          {aangewezen !== null ? (
+            <rect
+              className="aangewezen"
+              x={x(aangewezen) - plotB / cf.length / 2}
+              y={MARGE.boven}
+              width={plotB / cf.length}
+              height={plotH}
+            />
+          ) : null}
+
           <Raster
             ticks={ticks}
             x0={MARGE.links}
@@ -131,13 +152,73 @@ export function Cashflow({
                 {j === 0 ? "nu" : `${j} jaar`}
               </text>
             ))}
+
+          {/* Het punt dat je aanwijst, en de trefvlakken eromheen. */}
+          {aangewezen !== null ? (
+            <circle
+              cx={x(aangewezen)}
+              cy={y(waarden[aangewezen]!)}
+              r={4}
+              fill={positief ? "var(--series-3)" : "var(--critical)"}
+              stroke="var(--surface-1)"
+              strokeWidth={2}
+            />
+          ) : null}
+          {waarden.map((v, i) => (
+            <Trefvlak
+              key={`t${i}`}
+              x={x(i) - plotB / cf.length / 2}
+              y={MARGE.boven}
+              breedte={plotB / cf.length}
+              hoogte={plotH}
+              onWijs={(punt) => {
+                setAangewezen(i);
+                const post = i > 0 ? cf[i - 1] : null;
+                toon(punt, {
+                  titel: i === 0 ? "Bij aanschaf" : `Na ${jaren(i)}`,
+                  regels: [
+                    {
+                      kleur: positief ? "var(--series-3)" : "var(--critical)",
+                      label: v >= 0 ? "Terugverdiend" : "Nog niet terugverdiend",
+                      waarde: euro(v),
+                      uitkomst: true,
+                    },
+                    ...(post
+                      ? [
+                          { label: "Besparing dat jaar", waarde: euro(post.savingNominalEur) },
+                          {
+                            label: "Resterende capaciteit",
+                            waarde: procent(post.capacityFraction),
+                          },
+                          {
+                            label: "Laadbeurten tot nu",
+                            waarde: String(Math.round(post.cumulativeCycles)),
+                          },
+                        ]
+                      : [{ label: "Aanschafprijs", waarde: euro(investeringEur) }]),
+                  ],
+                  noot:
+                    breakEven !== null && i === Math.ceil(breakEven)
+                      ? "Rond dit jaar staat de teller op nul."
+                      : undefined,
+                });
+              }}
+              onWis={() => {
+                setAangewezen(null);
+                wis();
+              }}
+            />
+          ))}
         </svg>
-      </div>
+      </Grafiek>
 
       <dl className="kerncijfers">
         <div>
           <dt>Terugverdientijd</dt>
-          <dd>{jaren(finance.paybackYears)}</dd>
+          <dd>
+            {jaren(finance.paybackYears)}
+            <span className="dd-noot">als een gemiddeld jaar zich herhaalt</span>
+          </dd>
         </div>
         <div>
           <dt>
@@ -168,6 +249,15 @@ export function Cashflow({
           </dd>
         </div>
       </dl>
+      <p className="posten-noot">
+        Deze lijn is geen prognose van de energiemarkt. Hij neemt de besparing
+        die de batterij in de doorgerekende jaren <em>had</em> gehaald en laat
+        die zich herhalen, met de prijsstijging en het capaciteitsverlies die je
+        bij de geavanceerde instellingen hebt staan. Vallen de prijsverschillen
+        tussen uren de komende jaren kleiner uit, dan schuift de
+        terugverdientijd naar achteren; worden ze groter, dan naar voren.
+      </p>
+
     </Figure>
   );
 }

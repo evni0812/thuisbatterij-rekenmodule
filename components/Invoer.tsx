@@ -28,6 +28,7 @@ export function controleerInvoer(
   afnameKwh: number,
   terugleveringKwh: number,
   preset: BatteryPreset,
+  zonnepanelen = true,
 ): Waarschuwing[] {
   const uit: Waarschuwing[] = [];
 
@@ -46,7 +47,14 @@ export function controleerInvoer(
     });
   }
 
-  if (terugleveringKwh <= 0) {
+  if (!zonnepanelen) {
+    uit.push({
+      ernst: "info",
+      tekst: "Zonder zonnepanelen kan een batterij alleen verdienen aan prijsverschillen over " +
+        "de dag: 's nachts of midden op de dag laden, 's avonds leveren. Dat levert veel " +
+        "minder op dan het opslaan van eigen zonnestroom.",
+    });
+  } else if (terugleveringKwh <= 0) {
     uit.push({
       ernst: "info",
       tekst: "Zonder teruglevering valt er weinig op te slaan. Een batterij kan dan alleen " +
@@ -108,9 +116,11 @@ function Veld({
 export function Invoer({
   afnameKwh,
   terugleveringKwh,
+  zonnepanelen = true,
   presetId,
   onAfname,
   onTeruglevering,
+  onZonnepanelen,
   onPreset,
   onBereken,
   verouderd,
@@ -118,9 +128,12 @@ export function Invoer({
 }: {
   afnameKwh: number;
   terugleveringKwh: number;
+  /** Met (standaard) of zonder zonnepanelen; kiest het gemeten profiel. */
+  zonnepanelen?: boolean;
   presetId: string;
   onAfname: (v: number) => void;
   onTeruglevering: (v: number) => void;
+  onZonnepanelen?: (v: boolean) => void;
   onPreset: (id: string) => void;
   /** Reken door met de huidige invoer. */
   onBereken: () => void;
@@ -129,10 +142,37 @@ export function Invoer({
   bezig: boolean;
 }) {
   const preset = PRESETS.find((p) => p.id === presetId) ?? PRESETS[0]!;
-  const waarschuwingen = controleerInvoer(afnameKwh, terugleveringKwh, preset);
+  const waarschuwingen = controleerInvoer(afnameKwh, terugleveringKwh, preset, zonnepanelen);
 
   return (
     <div className="invoer">
+      {/* Een keuze tussen twee gemeten profielen, geen aan-uitschakelaar: beide
+          kanten hebben een naam, en de hint zegt waar de data vandaan komt. */}
+      <div className="invoer-keuze">
+        <div className="segment" role="group" aria-label="Zonnepanelen">
+          <button
+            type="button"
+            aria-pressed={zonnepanelen}
+            className={zonnepanelen ? "segment-knop actief" : "segment-knop"}
+            onClick={() => onZonnepanelen?.(true)}
+          >
+            Met zonnepanelen
+          </button>
+          <button
+            type="button"
+            aria-pressed={!zonnepanelen}
+            className={!zonnepanelen ? "segment-knop actief" : "segment-knop"}
+            onClick={() => onZonnepanelen?.(false)}
+          >
+            Zonder zonnepanelen
+          </button>
+        </div>
+        <p className="invoer-keuze-hint">
+          {zonnepanelen
+            ? "Gerekend met het gemeten profiel van huishoudens met zonnepanelen en een dynamisch contract."
+            : "Gerekend met het gemeten profiel van huishoudens zonder zonnepanelen (MFFBAS, aansluiting zonder invoeding). Ook dit is echt verbruik, geen model."}
+        </p>
+      </div>
       <div className="invoer-velden">
         <Veld
           label="Hoeveel stroom neem je per jaar van het net af?"
@@ -154,6 +194,7 @@ export function Invoer({
           </div>
         </Veld>
 
+        {zonnepanelen ? (
         <Veld
           label="Hoeveel lever je per jaar terug?"
           hint="Staat op je jaarafrekening onder 'teruglevering' of 'ingevoed'."
@@ -173,6 +214,7 @@ export function Invoer({
             <span className="eenheid">kWh</span>
           </div>
         </Veld>
+        ) : null}
 
         <Veld label="Welke batterij?" hint={`${getal(preset.capaciteitKwh, 2)} kWh · ${getal(preset.vermogenKw, 1)} kW · ${euro(preset.prijsEur)}`}>
           <select value={presetId} onChange={(e) => onPreset(e.target.value)}>

@@ -8,7 +8,7 @@
  * ziet iemand eerst het ene raster en na een herberekening het andere.
  */
 
-import { marginalWearCostPerKwh, wearCostPerKwh, WEAR_ONDERGRENS_DEEL } from "./battery";
+import { wearCostPerKwh } from "./battery";
 import { dispatchRolling } from "./dispatch-rolling";
 import type { AnalysisInput } from "./analysis";
 import type { BatterySpec, DispatchResult, TariffSpec } from "./types";
@@ -39,9 +39,8 @@ export function rasterJaar(invoer: AnalysisInput): AnalysisInput["windows"][numb
  * de prijs van de gekozen batterij, en werd een grote batterij vrijwel zonder
  * slijtagedrempel doorgerekend.
  *
- * Eerst met de ondergrens: dat vertelt of de beurten voor deze maat schaars
- * zijn. Zijn ze dat niet, dan blijft de drempel op die ondergrens en ís deze
- * run al het antwoord. Alleen bij schaarste volgt een tweede run.
+ * Eén run per punt, met de slijtageprijs van die maat maal het strategiedeel
+ * als drempel: dezelfde regel als in `runAnalysis`.
  */
 export function rasterPunt(
   entry: AnalysisInput["windows"][number],
@@ -52,7 +51,7 @@ export function rasterPunt(
   kw: number,
   prijsPerKwh: number,
   cycleLife: number,
-  calendarLifeYears: number,
+  wearFraction = 1,
 ): GridPoint {
   const maat: BatterySpec = {
     ...battery,
@@ -61,24 +60,11 @@ export function rasterPunt(
     maxDischargeKw: kw,
     wearCostEurPerKwh: 0,
   };
-  const ondergrens =
-    wearCostPerKwh(prijsPerKwh * cap, cycleLife, maat) * WEAR_ONDERGRENS_DEEL;
-  const vrij = dispatchRolling(
+  const res = dispatchRolling(
     entry.window,
-    { ...maat, wearCostEurPerKwh: ondergrens },
+    { ...maat, wearCostEurPerKwh: wearCostPerKwh(prijsPerKwh * cap, cycleLife, maat) * wearFraction },
     tariff,
   );
-  const wear = marginalWearCostPerKwh(
-    prijsPerKwh * cap,
-    cycleLife,
-    maat,
-    vrij.equivalentCycles,
-    calendarLifeYears,
-  );
-  const res =
-    wear > ondergrens + 1e-12
-      ? dispatchRolling(entry.window, { ...maat, wearCostEurPerKwh: wear }, tariff)
-      : vrij;
   return {
     capacityKwh: cap,
     powerKw: kw,

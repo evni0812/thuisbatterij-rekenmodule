@@ -1,7 +1,8 @@
 {
-  "gegenereerd": "2026-09-01T12:14:06.727663+00:00",
+  "gegenereerd": "2026-09-16T19:23:33.824857+00:00",
   "categorie": "E1A",
   "afnametype": "AMI",
+  "afnametype_zonder": "AZI",
   "tijdzone": "Europe/Amsterdam",
   "legenda": "* achter een jaar betekent: geen volledig kalenderjaar, genormaliseerd met de factor van een volledig jaar",
   "toelichting": {
@@ -65,15 +66,15 @@
       "bytes": 70096
     },
     "2026": {
-      "uren": 5844,
+      "uren": 6204,
       "volledig": false,
       "eerste_uur_utc": "2025-12-31T23:00:00+00:00",
-      "laatste_uur_utc": "2026-09-01T10:00:00+00:00",
+      "laatste_uur_utc": "2026-09-16T10:00:00+00:00",
       "ontbrekend": 0,
       "eerste_ontbrekend": null,
       "jaarconstante_eur_per_kwh": 0.128848,
       "jaarconstante_spreiding": 0.01,
-      "bytes": 46768
+      "bytes": 49648
     }
   },
   "profielen": {
@@ -115,16 +116,16 @@
         "bytes": 280336
       },
       "2026": {
-        "kwartieren": 23036,
+        "kwartieren": 24476,
         "eerste_dag": "2026-01-01",
-        "laatste_dag": "2026-08-28",
+        "laatste_dag": "2026-09-12",
         "volledig_jaar": false,
-        "ruwe_som_E17": 0.63199,
-        "ruwe_som_E18": 0.827791,
+        "ruwe_som_E17": 0.664156,
+        "ruwe_som_E18": 0.86839,
         "normalisatie_E17": 1.017794,
         "normalisatie_E18": 1.04954,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 184304
+        "bytes": 195824
       }
     },
     "871687120000052782": {
@@ -165,16 +166,16 @@
         "bytes": 280336
       },
       "2026": {
-        "kwartieren": 23036,
+        "kwartieren": 24476,
         "eerste_dag": "2026-01-01",
-        "laatste_dag": "2026-08-28",
+        "laatste_dag": "2026-09-12",
         "volledig_jaar": false,
-        "ruwe_som_E17": 0.63646,
-        "ruwe_som_E18": 0.825019,
+        "ruwe_som_E17": 0.666942,
+        "ruwe_som_E18": 0.869312,
         "normalisatie_E17": 1.025687,
         "normalisatie_E18": 1.041009,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 184304
+        "bytes": 195824
       }
     },
     "871687400000002254": {
@@ -215,16 +216,16 @@
         "bytes": 280336
       },
       "2026": {
-        "kwartieren": 23036,
+        "kwartieren": 24476,
         "eerste_dag": "2026-01-01",
-        "laatste_dag": "2026-08-28",
+        "laatste_dag": "2026-09-12",
         "volledig_jaar": false,
-        "ruwe_som_E17": 0.629222,
-        "ruwe_som_E18": 0.828676,
+        "ruwe_som_E17": 0.661302,
+        "ruwe_som_E18": 0.87297,
         "normalisatie_E17": 1.015818,
         "normalisatie_E18": 1.071603,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 184304
+        "bytes": 195824
       }
     },
     "871687800090000015": {
@@ -265,16 +266,16 @@
         "bytes": 280336
       },
       "2026": {
-        "kwartieren": 23036,
+        "kwartieren": 24476,
         "eerste_dag": "2026-01-01",
-        "laatste_dag": "2026-08-28",
+        "laatste_dag": "2026-09-12",
         "volledig_jaar": false,
-        "ruwe_som_E17": 0.62065,
-        "ruwe_som_E18": 0.823132,
+        "ruwe_som_E17": 0.652723,
+        "ruwe_som_E18": 0.86633,
         "normalisatie_E17": 1.004133,
         "normalisatie_E18": 1.09334,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 184304
+        "bytes": 195824
       }
     },
     "871687910000219120": {
@@ -315,16 +316,16 @@
         "bytes": 280336
       },
       "2026": {
-        "kwartieren": 23036,
+        "kwartieren": 24476,
         "eerste_dag": "2026-01-01",
-        "laatste_dag": "2026-08-28",
+        "laatste_dag": "2026-09-12",
         "volledig_jaar": false,
-        "ruwe_som_E17": 0.635423,
-        "ruwe_som_E18": 0.825257,
+        "ruwe_som_E17": 0.665885,
+        "ruwe_som_E18": 0.871278,
         "normalisatie_E17": 1.02088,
         "normalisatie_E18": 1.087486,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 184304
+        "bytes": 195824
       }
     },
     "871688520000076884": {
@@ -365,16 +366,16 @@
         "bytes": 280336
       },
       "2026": {
-        "kwartieren": 23036,
+        "kwartieren": 24476,
         "eerste_dag": "2026-01-01",
-        "laatste_dag": "2026-08-28",
+        "laatste_dag": "2026-09-12",
         "volledig_jaar": false,
-        "ruwe_som_E17": 0.637984,
-        "ruwe_som_E18": 0.808823,
+        "ruwe_som_E17": 0.665974,
+        "ruwe_som_E18": 0.857783,
         "normalisatie_E17": 1.021592,
         "normalisatie_E18": 1.092349,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 184304
+        "bytes": 195824
       }
     },
     "871688600000002202": {
@@ -415,16 +416,16 @@
         "bytes": 280336
       },
       "2026": {
-        "kwartieren": 23036,
+        "kwartieren": 24476,
         "eerste_dag": "2026-01-01",
-        "laatste_dag": "2026-08-28",
+        "laatste_dag": "2026-09-12",
         "volledig_jaar": false,
-        "ruwe_som_E17": 0.627007,
-        "ruwe_som_E18": 0.824396,
+        "ruwe_som_E17": 0.65988,
+        "ruwe_som_E18": 0.867568,
         "normalisatie_E17": 1.008115,
         "normalisatie_E18": 1.096002,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 184304
+        "bytes": 195824
       }
     },
     "871689200000010161": {
@@ -465,16 +466,16 @@
         "bytes": 280336
       },
       "2026": {
-        "kwartieren": 23036,
+        "kwartieren": 24476,
         "eerste_dag": "2026-01-01",
-        "laatste_dag": "2026-08-28",
+        "laatste_dag": "2026-09-12",
         "volledig_jaar": false,
-        "ruwe_som_E17": 0.632302,
-        "ruwe_som_E18": 0.821704,
+        "ruwe_som_E17": 0.664333,
+        "ruwe_som_E18": 0.866911,
         "normalisatie_E17": 1.013104,
         "normalisatie_E18": 1.092739,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 184304
+        "bytes": 195824
       }
     },
     "871690200000000007": {
@@ -515,16 +516,16 @@
         "bytes": 280336
       },
       "2026": {
-        "kwartieren": 23036,
+        "kwartieren": 24476,
         "eerste_dag": "2026-01-01",
-        "laatste_dag": "2026-08-28",
+        "laatste_dag": "2026-09-12",
         "volledig_jaar": false,
-        "ruwe_som_E17": 0.629736,
-        "ruwe_som_E18": 0.820655,
+        "ruwe_som_E17": 0.659913,
+        "ruwe_som_E18": 0.867875,
         "normalisatie_E17": 1.023423,
         "normalisatie_E18": 1.098799,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 184304
+        "bytes": 195824
       }
     },
     "871690499910000003": {
@@ -565,16 +566,16 @@
         "bytes": 280336
       },
       "2026": {
-        "kwartieren": 23036,
+        "kwartieren": 24476,
         "eerste_dag": "2026-01-01",
-        "laatste_dag": "2026-08-28",
+        "laatste_dag": "2026-09-12",
         "volledig_jaar": false,
-        "ruwe_som_E17": 0.637582,
-        "ruwe_som_E18": 0.811995,
+        "ruwe_som_E17": 0.666285,
+        "ruwe_som_E18": 0.861276,
         "normalisatie_E17": 1.017084,
         "normalisatie_E18": 1.120636,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 184304
+        "bytes": 195824
       }
     },
     "871690910000025589": {
@@ -615,16 +616,16 @@
         "bytes": 280336
       },
       "2026": {
-        "kwartieren": 23036,
+        "kwartieren": 24476,
         "eerste_dag": "2026-01-01",
-        "laatste_dag": "2026-08-28",
+        "laatste_dag": "2026-09-12",
         "volledig_jaar": false,
-        "ruwe_som_E17": 0.624635,
-        "ruwe_som_E18": 0.822294,
+        "ruwe_som_E17": 0.656974,
+        "ruwe_som_E18": 0.865093,
         "normalisatie_E17": 1.008909,
         "normalisatie_E18": 1.065309,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 184304
+        "bytes": 195824
       }
     },
     "871691280000000008": {
@@ -665,16 +666,16 @@
         "bytes": 280336
       },
       "2026": {
-        "kwartieren": 23036,
+        "kwartieren": 24476,
         "eerste_dag": "2026-01-01",
-        "laatste_dag": "2026-08-28",
+        "laatste_dag": "2026-09-12",
         "volledig_jaar": false,
-        "ruwe_som_E17": 0.641673,
-        "ruwe_som_E18": 0.823536,
+        "ruwe_som_E17": 0.670626,
+        "ruwe_som_E18": 0.867918,
         "normalisatie_E17": 1.030317,
         "normalisatie_E18": 1.055562,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 184304
+        "bytes": 195824
       }
     },
     "871691600019188908": {
@@ -715,16 +716,16 @@
         "bytes": 280336
       },
       "2026": {
-        "kwartieren": 23036,
+        "kwartieren": 24476,
         "eerste_dag": "2026-01-01",
-        "laatste_dag": "2026-08-28",
+        "laatste_dag": "2026-09-12",
         "volledig_jaar": false,
-        "ruwe_som_E17": 0.64129,
-        "ruwe_som_E18": 0.837281,
+        "ruwe_som_E17": 0.669851,
+        "ruwe_som_E18": 0.881759,
         "normalisatie_E17": 1.027157,
         "normalisatie_E18": 1.044455,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 184304
+        "bytes": 195824
       }
     },
     "871692100000010038": {
@@ -765,16 +766,16 @@
         "bytes": 280336
       },
       "2026": {
-        "kwartieren": 23036,
+        "kwartieren": 24476,
         "eerste_dag": "2026-01-01",
-        "laatste_dag": "2026-08-28",
+        "laatste_dag": "2026-09-12",
         "volledig_jaar": false,
-        "ruwe_som_E17": 0.631227,
-        "ruwe_som_E18": 0.815322,
+        "ruwe_som_E17": 0.663297,
+        "ruwe_som_E18": 0.858621,
         "normalisatie_E17": 1.017747,
         "normalisatie_E18": 1.08269,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 184304
+        "bytes": 195824
       }
     },
     "871692510000000005": {
@@ -815,16 +816,16 @@
         "bytes": 280336
       },
       "2026": {
-        "kwartieren": 23036,
+        "kwartieren": 24476,
         "eerste_dag": "2026-01-01",
-        "laatste_dag": "2026-08-28",
+        "laatste_dag": "2026-09-12",
         "volledig_jaar": false,
-        "ruwe_som_E17": 0.629425,
-        "ruwe_som_E18": 0.822905,
+        "ruwe_som_E17": 0.661331,
+        "ruwe_som_E18": 0.867077,
         "normalisatie_E17": 1.006472,
         "normalisatie_E18": 1.102071,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 184304
+        "bytes": 195824
       }
     },
     "871694600000002173": {
@@ -865,16 +866,16 @@
         "bytes": 280336
       },
       "2026": {
-        "kwartieren": 23036,
+        "kwartieren": 24476,
         "eerste_dag": "2026-01-01",
-        "laatste_dag": "2026-08-28",
+        "laatste_dag": "2026-09-12",
         "volledig_jaar": false,
-        "ruwe_som_E17": 0.624428,
-        "ruwe_som_E18": 0.84221,
+        "ruwe_som_E17": 0.657294,
+        "ruwe_som_E18": 0.884715,
         "normalisatie_E17": 1.013769,
         "normalisatie_E18": 1.066707,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 184304
+        "bytes": 195824
       }
     },
     "871694830000000309": {
@@ -915,16 +916,868 @@
         "bytes": 280336
       },
       "2026": {
-        "kwartieren": 23036,
+        "kwartieren": 24476,
         "eerste_dag": "2026-01-01",
-        "laatste_dag": "2026-08-28",
+        "laatste_dag": "2026-09-12",
         "volledig_jaar": false,
-        "ruwe_som_E17": 0.642399,
-        "ruwe_som_E18": 0.829427,
+        "ruwe_som_E17": 0.671206,
+        "ruwe_som_E18": 0.873728,
         "normalisatie_E17": 1.033863,
         "normalisatie_E18": 1.041912,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 184304
+        "bytes": 195824
+      }
+    }
+  },
+  "profielen_zonder": {
+    "871685900000056162": {
+      "2023": {
+        "kwartieren": 26404,
+        "eerste_dag": "2023-04-01",
+        "laatste_dag": "2023-12-31",
+        "volledig_jaar": false,
+        "ruwe_som_E17": 0.725252,
+        "ruwe_som_E18": 0.98757,
+        "normalisatie_E17": 1.01221,
+        "normalisatie_E18": 1.04954,
+        "normalisatie_geleend": "volledig jaar",
+        "bytes": 211248
+      },
+      "2024": {
+        "kwartieren": 35136,
+        "eerste_dag": "2024-01-01",
+        "laatste_dag": "2024-12-31",
+        "volledig_jaar": true,
+        "ruwe_som_E17": 1.014501,
+        "ruwe_som_E18": 1.029857,
+        "normalisatie_E17": 1.014501,
+        "normalisatie_E18": 1.029857,
+        "normalisatie_geleend": null,
+        "bytes": 281104
+      },
+      "2025": {
+        "kwartieren": 35040,
+        "eerste_dag": "2025-01-01",
+        "laatste_dag": "2025-12-31",
+        "volledig_jaar": true,
+        "ruwe_som_E17": 1.01221,
+        "ruwe_som_E18": 1.04954,
+        "normalisatie_E17": 1.01221,
+        "normalisatie_E18": 1.04954,
+        "normalisatie_geleend": null,
+        "bytes": 280336
+      },
+      "2026": {
+        "kwartieren": 24476,
+        "eerste_dag": "2026-01-01",
+        "laatste_dag": "2026-09-12",
+        "volledig_jaar": false,
+        "ruwe_som_E17": 0.702009,
+        "ruwe_som_E18": 0.86839,
+        "normalisatie_E17": 1.01221,
+        "normalisatie_E18": 1.04954,
+        "normalisatie_geleend": "volledig jaar",
+        "bytes": 195824
+      }
+    },
+    "871687120000052782": {
+      "2023": {
+        "kwartieren": 26404,
+        "eerste_dag": "2023-04-01",
+        "laatste_dag": "2023-12-31",
+        "volledig_jaar": false,
+        "ruwe_som_E17": 0.727099,
+        "ruwe_som_E18": 0.992019,
+        "normalisatie_E17": 1.015729,
+        "normalisatie_E18": 1.041009,
+        "normalisatie_geleend": "volledig jaar",
+        "bytes": 211248
+      },
+      "2024": {
+        "kwartieren": 35136,
+        "eerste_dag": "2024-01-01",
+        "laatste_dag": "2024-12-31",
+        "volledig_jaar": true,
+        "ruwe_som_E17": 1.016456,
+        "ruwe_som_E18": 1.014935,
+        "normalisatie_E17": 1.016456,
+        "normalisatie_E18": 1.014935,
+        "normalisatie_geleend": null,
+        "bytes": 281104
+      },
+      "2025": {
+        "kwartieren": 35040,
+        "eerste_dag": "2025-01-01",
+        "laatste_dag": "2025-12-31",
+        "volledig_jaar": true,
+        "ruwe_som_E17": 1.015729,
+        "ruwe_som_E18": 1.041009,
+        "normalisatie_E17": 1.015729,
+        "normalisatie_E18": 1.041009,
+        "normalisatie_geleend": null,
+        "bytes": 280336
+      },
+      "2026": {
+        "kwartieren": 24476,
+        "eerste_dag": "2026-01-01",
+        "laatste_dag": "2026-09-12",
+        "volledig_jaar": false,
+        "ruwe_som_E17": 0.708732,
+        "ruwe_som_E18": 0.869312,
+        "normalisatie_E17": 1.015729,
+        "normalisatie_E18": 1.041009,
+        "normalisatie_geleend": "volledig jaar",
+        "bytes": 195824
+      }
+    },
+    "871687400000002254": {
+      "2023": {
+        "kwartieren": 26404,
+        "eerste_dag": "2023-04-01",
+        "laatste_dag": "2023-12-31",
+        "volledig_jaar": false,
+        "ruwe_som_E17": 0.725087,
+        "ruwe_som_E18": 1.023458,
+        "normalisatie_E17": 1.01459,
+        "normalisatie_E18": 1.071603,
+        "normalisatie_geleend": "volledig jaar",
+        "bytes": 211248
+      },
+      "2024": {
+        "kwartieren": 35136,
+        "eerste_dag": "2024-01-01",
+        "laatste_dag": "2024-12-31",
+        "volledig_jaar": true,
+        "ruwe_som_E17": 1.014066,
+        "ruwe_som_E18": 1.016627,
+        "normalisatie_E17": 1.014066,
+        "normalisatie_E18": 1.016627,
+        "normalisatie_geleend": null,
+        "bytes": 281104
+      },
+      "2025": {
+        "kwartieren": 35040,
+        "eerste_dag": "2025-01-01",
+        "laatste_dag": "2025-12-31",
+        "volledig_jaar": true,
+        "ruwe_som_E17": 1.01459,
+        "ruwe_som_E18": 1.071603,
+        "normalisatie_E17": 1.01459,
+        "normalisatie_E18": 1.071603,
+        "normalisatie_geleend": null,
+        "bytes": 280336
+      },
+      "2026": {
+        "kwartieren": 24476,
+        "eerste_dag": "2026-01-01",
+        "laatste_dag": "2026-09-12",
+        "volledig_jaar": false,
+        "ruwe_som_E17": 0.703533,
+        "ruwe_som_E18": 0.87297,
+        "normalisatie_E17": 1.01459,
+        "normalisatie_E18": 1.071603,
+        "normalisatie_geleend": "volledig jaar",
+        "bytes": 195824
+      }
+    },
+    "871687800090000015": {
+      "2023": {
+        "kwartieren": 26404,
+        "eerste_dag": "2023-04-01",
+        "laatste_dag": "2023-12-31",
+        "volledig_jaar": false,
+        "ruwe_som_E17": 0.726247,
+        "ruwe_som_E18": 1.052931,
+        "normalisatie_E17": 1.015908,
+        "normalisatie_E18": 1.09334,
+        "normalisatie_geleend": "volledig jaar",
+        "bytes": 211248
+      },
+      "2024": {
+        "kwartieren": 35136,
+        "eerste_dag": "2024-01-01",
+        "laatste_dag": "2024-12-31",
+        "volledig_jaar": true,
+        "ruwe_som_E17": 1.018104,
+        "ruwe_som_E18": 0.987101,
+        "normalisatie_E17": 1.018104,
+        "normalisatie_E18": 0.987101,
+        "normalisatie_geleend": null,
+        "bytes": 281104
+      },
+      "2025": {
+        "kwartieren": 35040,
+        "eerste_dag": "2025-01-01",
+        "laatste_dag": "2025-12-31",
+        "volledig_jaar": true,
+        "ruwe_som_E17": 1.015908,
+        "ruwe_som_E18": 1.09334,
+        "normalisatie_E17": 1.015908,
+        "normalisatie_E18": 1.09334,
+        "normalisatie_geleend": null,
+        "bytes": 280336
+      },
+      "2026": {
+        "kwartieren": 24476,
+        "eerste_dag": "2026-01-01",
+        "laatste_dag": "2026-09-12",
+        "volledig_jaar": false,
+        "ruwe_som_E17": 0.703087,
+        "ruwe_som_E18": 0.86633,
+        "normalisatie_E17": 1.015908,
+        "normalisatie_E18": 1.09334,
+        "normalisatie_geleend": "volledig jaar",
+        "bytes": 195824
+      }
+    },
+    "871687910000219120": {
+      "2023": {
+        "kwartieren": 26404,
+        "eerste_dag": "2023-04-01",
+        "laatste_dag": "2023-12-31",
+        "volledig_jaar": false,
+        "ruwe_som_E17": 0.726703,
+        "ruwe_som_E18": 1.025097,
+        "normalisatie_E17": 1.018598,
+        "normalisatie_E18": 1.087486,
+        "normalisatie_geleend": "volledig jaar",
+        "bytes": 211248
+      },
+      "2024": {
+        "kwartieren": 35136,
+        "eerste_dag": "2024-01-01",
+        "laatste_dag": "2024-12-31",
+        "volledig_jaar": true,
+        "ruwe_som_E17": 1.0184,
+        "ruwe_som_E18": 0.988012,
+        "normalisatie_E17": 1.0184,
+        "normalisatie_E18": 0.988012,
+        "normalisatie_geleend": null,
+        "bytes": 281104
+      },
+      "2025": {
+        "kwartieren": 35040,
+        "eerste_dag": "2025-01-01",
+        "laatste_dag": "2025-12-31",
+        "volledig_jaar": true,
+        "ruwe_som_E17": 1.018598,
+        "ruwe_som_E18": 1.087486,
+        "normalisatie_E17": 1.018598,
+        "normalisatie_E18": 1.087486,
+        "normalisatie_geleend": null,
+        "bytes": 280336
+      },
+      "2026": {
+        "kwartieren": 24476,
+        "eerste_dag": "2026-01-01",
+        "laatste_dag": "2026-09-12",
+        "volledig_jaar": false,
+        "ruwe_som_E17": 0.712819,
+        "ruwe_som_E18": 0.871278,
+        "normalisatie_E17": 1.018598,
+        "normalisatie_E18": 1.087486,
+        "normalisatie_geleend": "volledig jaar",
+        "bytes": 195824
+      }
+    },
+    "871688520000076884": {
+      "2023": {
+        "kwartieren": 26404,
+        "eerste_dag": "2023-04-01",
+        "laatste_dag": "2023-12-31",
+        "volledig_jaar": false,
+        "ruwe_som_E17": 0.723173,
+        "ruwe_som_E18": 1.012271,
+        "normalisatie_E17": 1.021878,
+        "normalisatie_E18": 1.092349,
+        "normalisatie_geleend": "volledig jaar",
+        "bytes": 211248
+      },
+      "2024": {
+        "kwartieren": 35136,
+        "eerste_dag": "2024-01-01",
+        "laatste_dag": "2024-12-31",
+        "volledig_jaar": true,
+        "ruwe_som_E17": 1.020689,
+        "ruwe_som_E18": 0.975618,
+        "normalisatie_E17": 1.020689,
+        "normalisatie_E18": 0.975618,
+        "normalisatie_geleend": null,
+        "bytes": 281104
+      },
+      "2025": {
+        "kwartieren": 35040,
+        "eerste_dag": "2025-01-01",
+        "laatste_dag": "2025-12-31",
+        "volledig_jaar": true,
+        "ruwe_som_E17": 1.021878,
+        "ruwe_som_E18": 1.092349,
+        "normalisatie_E17": 1.021878,
+        "normalisatie_E18": 1.092349,
+        "normalisatie_geleend": null,
+        "bytes": 280336
+      },
+      "2026": {
+        "kwartieren": 24476,
+        "eerste_dag": "2026-01-01",
+        "laatste_dag": "2026-09-12",
+        "volledig_jaar": false,
+        "ruwe_som_E17": 0.718713,
+        "ruwe_som_E18": 0.857783,
+        "normalisatie_E17": 1.021878,
+        "normalisatie_E18": 1.092349,
+        "normalisatie_geleend": "volledig jaar",
+        "bytes": 195824
+      }
+    },
+    "871688600000002202": {
+      "2023": {
+        "kwartieren": 26404,
+        "eerste_dag": "2023-04-01",
+        "laatste_dag": "2023-12-31",
+        "volledig_jaar": false,
+        "ruwe_som_E17": 0.723212,
+        "ruwe_som_E18": 1.044031,
+        "normalisatie_E17": 1.007424,
+        "normalisatie_E18": 1.096002,
+        "normalisatie_geleend": "volledig jaar",
+        "bytes": 211248
+      },
+      "2024": {
+        "kwartieren": 35136,
+        "eerste_dag": "2024-01-01",
+        "laatste_dag": "2024-12-31",
+        "volledig_jaar": true,
+        "ruwe_som_E17": 1.0116,
+        "ruwe_som_E18": 0.991865,
+        "normalisatie_E17": 1.0116,
+        "normalisatie_E18": 0.991865,
+        "normalisatie_geleend": null,
+        "bytes": 281104
+      },
+      "2025": {
+        "kwartieren": 35040,
+        "eerste_dag": "2025-01-01",
+        "laatste_dag": "2025-12-31",
+        "volledig_jaar": true,
+        "ruwe_som_E17": 1.007424,
+        "ruwe_som_E18": 1.096002,
+        "normalisatie_E17": 1.007424,
+        "normalisatie_E18": 1.096002,
+        "normalisatie_geleend": null,
+        "bytes": 280336
+      },
+      "2026": {
+        "kwartieren": 24476,
+        "eerste_dag": "2026-01-01",
+        "laatste_dag": "2026-09-12",
+        "volledig_jaar": false,
+        "ruwe_som_E17": 0.703418,
+        "ruwe_som_E18": 0.867568,
+        "normalisatie_E17": 1.007424,
+        "normalisatie_E18": 1.096002,
+        "normalisatie_geleend": "volledig jaar",
+        "bytes": 195824
+      }
+    },
+    "871689200000010161": {
+      "2023": {
+        "kwartieren": 26404,
+        "eerste_dag": "2023-04-01",
+        "laatste_dag": "2023-12-31",
+        "volledig_jaar": false,
+        "ruwe_som_E17": 0.726512,
+        "ruwe_som_E18": 1.081654,
+        "normalisatie_E17": 1.012074,
+        "normalisatie_E18": 1.092739,
+        "normalisatie_geleend": "volledig jaar",
+        "bytes": 211248
+      },
+      "2024": {
+        "kwartieren": 35136,
+        "eerste_dag": "2024-01-01",
+        "laatste_dag": "2024-12-31",
+        "volledig_jaar": true,
+        "ruwe_som_E17": 1.014028,
+        "ruwe_som_E18": 1.000794,
+        "normalisatie_E17": 1.014028,
+        "normalisatie_E18": 1.000794,
+        "normalisatie_geleend": null,
+        "bytes": 281104
+      },
+      "2025": {
+        "kwartieren": 35040,
+        "eerste_dag": "2025-01-01",
+        "laatste_dag": "2025-12-31",
+        "volledig_jaar": true,
+        "ruwe_som_E17": 1.012074,
+        "ruwe_som_E18": 1.092739,
+        "normalisatie_E17": 1.012074,
+        "normalisatie_E18": 1.092739,
+        "normalisatie_geleend": null,
+        "bytes": 280336
+      },
+      "2026": {
+        "kwartieren": 24476,
+        "eerste_dag": "2026-01-01",
+        "laatste_dag": "2026-09-12",
+        "volledig_jaar": false,
+        "ruwe_som_E17": 0.707594,
+        "ruwe_som_E18": 0.866911,
+        "normalisatie_E17": 1.012074,
+        "normalisatie_E18": 1.092739,
+        "normalisatie_geleend": "volledig jaar",
+        "bytes": 195824
+      }
+    },
+    "871690200000000007": {
+      "2023": {
+        "kwartieren": 26404,
+        "eerste_dag": "2023-04-01",
+        "laatste_dag": "2023-12-31",
+        "volledig_jaar": false,
+        "ruwe_som_E17": 0.731099,
+        "ruwe_som_E18": 1.012744,
+        "normalisatie_E17": 1.036618,
+        "normalisatie_E18": 1.098799,
+        "normalisatie_geleend": "volledig jaar",
+        "bytes": 211248
+      },
+      "2024": {
+        "kwartieren": 35136,
+        "eerste_dag": "2024-01-01",
+        "laatste_dag": "2024-12-31",
+        "volledig_jaar": true,
+        "ruwe_som_E17": 1.04043,
+        "ruwe_som_E18": 0.981355,
+        "normalisatie_E17": 1.04043,
+        "normalisatie_E18": 0.981355,
+        "normalisatie_geleend": null,
+        "bytes": 281104
+      },
+      "2025": {
+        "kwartieren": 35040,
+        "eerste_dag": "2025-01-01",
+        "laatste_dag": "2025-12-31",
+        "volledig_jaar": true,
+        "ruwe_som_E17": 1.036618,
+        "ruwe_som_E18": 1.098799,
+        "normalisatie_E17": 1.036618,
+        "normalisatie_E18": 1.098799,
+        "normalisatie_geleend": null,
+        "bytes": 280336
+      },
+      "2026": {
+        "kwartieren": 24476,
+        "eerste_dag": "2026-01-01",
+        "laatste_dag": "2026-09-12",
+        "volledig_jaar": false,
+        "ruwe_som_E17": 0.718861,
+        "ruwe_som_E18": 0.867875,
+        "normalisatie_E17": 1.036618,
+        "normalisatie_E18": 1.098799,
+        "normalisatie_geleend": "volledig jaar",
+        "bytes": 195824
+      }
+    },
+    "871690499910000003": {
+      "2023": {
+        "kwartieren": 26404,
+        "eerste_dag": "2023-04-01",
+        "laatste_dag": "2023-12-31",
+        "volledig_jaar": false,
+        "ruwe_som_E17": 0.724857,
+        "ruwe_som_E18": 1.012315,
+        "normalisatie_E17": 1.012342,
+        "normalisatie_E18": 1.120636,
+        "normalisatie_geleend": "volledig jaar",
+        "bytes": 211248
+      },
+      "2024": {
+        "kwartieren": 35136,
+        "eerste_dag": "2024-01-01",
+        "laatste_dag": "2024-12-31",
+        "volledig_jaar": true,
+        "ruwe_som_E17": 1.016781,
+        "ruwe_som_E18": 0.992674,
+        "normalisatie_E17": 1.016781,
+        "normalisatie_E18": 0.992674,
+        "normalisatie_geleend": null,
+        "bytes": 281104
+      },
+      "2025": {
+        "kwartieren": 35040,
+        "eerste_dag": "2025-01-01",
+        "laatste_dag": "2025-12-31",
+        "volledig_jaar": true,
+        "ruwe_som_E17": 1.012342,
+        "ruwe_som_E18": 1.120636,
+        "normalisatie_E17": 1.012342,
+        "normalisatie_E18": 1.120636,
+        "normalisatie_geleend": null,
+        "bytes": 280336
+      },
+      "2026": {
+        "kwartieren": 24476,
+        "eerste_dag": "2026-01-01",
+        "laatste_dag": "2026-09-12",
+        "volledig_jaar": false,
+        "ruwe_som_E17": 0.710707,
+        "ruwe_som_E18": 0.861276,
+        "normalisatie_E17": 1.012342,
+        "normalisatie_E18": 1.120636,
+        "normalisatie_geleend": "volledig jaar",
+        "bytes": 195824
+      }
+    },
+    "871690910000025589": {
+      "2023": {
+        "kwartieren": 26404,
+        "eerste_dag": "2023-04-01",
+        "laatste_dag": "2023-12-31",
+        "volledig_jaar": false,
+        "ruwe_som_E17": 0.723898,
+        "ruwe_som_E18": 0.985276,
+        "normalisatie_E17": 1.009354,
+        "normalisatie_E18": 1.065309,
+        "normalisatie_geleend": "volledig jaar",
+        "bytes": 211248
+      },
+      "2024": {
+        "kwartieren": 35136,
+        "eerste_dag": "2024-01-01",
+        "laatste_dag": "2024-12-31",
+        "volledig_jaar": true,
+        "ruwe_som_E17": 1.010239,
+        "ruwe_som_E18": 1.012993,
+        "normalisatie_E17": 1.010239,
+        "normalisatie_E18": 1.012993,
+        "normalisatie_geleend": null,
+        "bytes": 281104
+      },
+      "2025": {
+        "kwartieren": 35040,
+        "eerste_dag": "2025-01-01",
+        "laatste_dag": "2025-12-31",
+        "volledig_jaar": true,
+        "ruwe_som_E17": 1.009354,
+        "ruwe_som_E18": 1.065309,
+        "normalisatie_E17": 1.009354,
+        "normalisatie_E18": 1.065309,
+        "normalisatie_geleend": null,
+        "bytes": 280336
+      },
+      "2026": {
+        "kwartieren": 24476,
+        "eerste_dag": "2026-01-01",
+        "laatste_dag": "2026-09-12",
+        "volledig_jaar": false,
+        "ruwe_som_E17": 0.701424,
+        "ruwe_som_E18": 0.865093,
+        "normalisatie_E17": 1.009354,
+        "normalisatie_E18": 1.065309,
+        "normalisatie_geleend": "volledig jaar",
+        "bytes": 195824
+      }
+    },
+    "871691280000000008": {
+      "2023": {
+        "kwartieren": 26404,
+        "eerste_dag": "2023-04-01",
+        "laatste_dag": "2023-12-31",
+        "volledig_jaar": false,
+        "ruwe_som_E17": 0.731409,
+        "ruwe_som_E18": 0.996071,
+        "normalisatie_E17": 1.022947,
+        "normalisatie_E18": 1.055562,
+        "normalisatie_geleend": "volledig jaar",
+        "bytes": 211248
+      },
+      "2024": {
+        "kwartieren": 35136,
+        "eerste_dag": "2024-01-01",
+        "laatste_dag": "2024-12-31",
+        "volledig_jaar": true,
+        "ruwe_som_E17": 1.030343,
+        "ruwe_som_E18": 1.026526,
+        "normalisatie_E17": 1.030343,
+        "normalisatie_E18": 1.026526,
+        "normalisatie_geleend": null,
+        "bytes": 281104
+      },
+      "2025": {
+        "kwartieren": 35040,
+        "eerste_dag": "2025-01-01",
+        "laatste_dag": "2025-12-31",
+        "volledig_jaar": true,
+        "ruwe_som_E17": 1.022947,
+        "ruwe_som_E18": 1.055562,
+        "normalisatie_E17": 1.022947,
+        "normalisatie_E18": 1.055562,
+        "normalisatie_geleend": null,
+        "bytes": 280336
+      },
+      "2026": {
+        "kwartieren": 24476,
+        "eerste_dag": "2026-01-01",
+        "laatste_dag": "2026-09-12",
+        "volledig_jaar": false,
+        "ruwe_som_E17": 0.713955,
+        "ruwe_som_E18": 0.867918,
+        "normalisatie_E17": 1.022947,
+        "normalisatie_E18": 1.055562,
+        "normalisatie_geleend": "volledig jaar",
+        "bytes": 195824
+      }
+    },
+    "871691600019188908": {
+      "2023": {
+        "kwartieren": 26404,
+        "eerste_dag": "2023-04-01",
+        "laatste_dag": "2023-12-31",
+        "volledig_jaar": false,
+        "ruwe_som_E17": 0.731597,
+        "ruwe_som_E18": 1.031852,
+        "normalisatie_E17": 1.02901,
+        "normalisatie_E18": 1.044455,
+        "normalisatie_geleend": "volledig jaar",
+        "bytes": 211248
+      },
+      "2024": {
+        "kwartieren": 35136,
+        "eerste_dag": "2024-01-01",
+        "laatste_dag": "2024-12-31",
+        "volledig_jaar": true,
+        "ruwe_som_E17": 1.022695,
+        "ruwe_som_E18": 1.01739,
+        "normalisatie_E17": 1.022695,
+        "normalisatie_E18": 1.01739,
+        "normalisatie_geleend": null,
+        "bytes": 281104
+      },
+      "2025": {
+        "kwartieren": 35040,
+        "eerste_dag": "2025-01-01",
+        "laatste_dag": "2025-12-31",
+        "volledig_jaar": true,
+        "ruwe_som_E17": 1.02901,
+        "ruwe_som_E18": 1.044455,
+        "normalisatie_E17": 1.02901,
+        "normalisatie_E18": 1.044455,
+        "normalisatie_geleend": null,
+        "bytes": 280336
+      },
+      "2026": {
+        "kwartieren": 24476,
+        "eerste_dag": "2026-01-01",
+        "laatste_dag": "2026-09-12",
+        "volledig_jaar": false,
+        "ruwe_som_E17": 0.714319,
+        "ruwe_som_E18": 0.881759,
+        "normalisatie_E17": 1.02901,
+        "normalisatie_E18": 1.044455,
+        "normalisatie_geleend": "volledig jaar",
+        "bytes": 195824
+      }
+    },
+    "871692100000010038": {
+      "2023": {
+        "kwartieren": 26404,
+        "eerste_dag": "2023-04-01",
+        "laatste_dag": "2023-12-31",
+        "volledig_jaar": false,
+        "ruwe_som_E17": 0.722925,
+        "ruwe_som_E18": 1.039063,
+        "normalisatie_E17": 1.010658,
+        "normalisatie_E18": 1.08269,
+        "normalisatie_geleend": "volledig jaar",
+        "bytes": 211248
+      },
+      "2024": {
+        "kwartieren": 35136,
+        "eerste_dag": "2024-01-01",
+        "laatste_dag": "2024-12-31",
+        "volledig_jaar": true,
+        "ruwe_som_E17": 1.012754,
+        "ruwe_som_E18": 1.003701,
+        "normalisatie_E17": 1.012754,
+        "normalisatie_E18": 1.003701,
+        "normalisatie_geleend": null,
+        "bytes": 281104
+      },
+      "2025": {
+        "kwartieren": 35040,
+        "eerste_dag": "2025-01-01",
+        "laatste_dag": "2025-12-31",
+        "volledig_jaar": true,
+        "ruwe_som_E17": 1.010658,
+        "ruwe_som_E18": 1.08269,
+        "normalisatie_E17": 1.010658,
+        "normalisatie_E18": 1.08269,
+        "normalisatie_geleend": null,
+        "bytes": 280336
+      },
+      "2026": {
+        "kwartieren": 24476,
+        "eerste_dag": "2026-01-01",
+        "laatste_dag": "2026-09-12",
+        "volledig_jaar": false,
+        "ruwe_som_E17": 0.706523,
+        "ruwe_som_E18": 0.858621,
+        "normalisatie_E17": 1.010658,
+        "normalisatie_E18": 1.08269,
+        "normalisatie_geleend": "volledig jaar",
+        "bytes": 195824
+      }
+    },
+    "871692510000000005": {
+      "2023": {
+        "kwartieren": 26404,
+        "eerste_dag": "2023-04-01",
+        "laatste_dag": "2023-12-31",
+        "volledig_jaar": false,
+        "ruwe_som_E17": 0.726513,
+        "ruwe_som_E18": 1.047642,
+        "normalisatie_E17": 1.015998,
+        "normalisatie_E18": 1.102071,
+        "normalisatie_geleend": "volledig jaar",
+        "bytes": 211248
+      },
+      "2024": {
+        "kwartieren": 35136,
+        "eerste_dag": "2024-01-01",
+        "laatste_dag": "2024-12-31",
+        "volledig_jaar": true,
+        "ruwe_som_E17": 1.016504,
+        "ruwe_som_E18": 0.99378,
+        "normalisatie_E17": 1.016504,
+        "normalisatie_E18": 0.99378,
+        "normalisatie_geleend": null,
+        "bytes": 281104
+      },
+      "2025": {
+        "kwartieren": 35040,
+        "eerste_dag": "2025-01-01",
+        "laatste_dag": "2025-12-31",
+        "volledig_jaar": true,
+        "ruwe_som_E17": 1.015998,
+        "ruwe_som_E18": 1.102071,
+        "normalisatie_E17": 1.015998,
+        "normalisatie_E18": 1.102071,
+        "normalisatie_geleend": null,
+        "bytes": 280336
+      },
+      "2026": {
+        "kwartieren": 24476,
+        "eerste_dag": "2026-01-01",
+        "laatste_dag": "2026-09-12",
+        "volledig_jaar": false,
+        "ruwe_som_E17": 0.705334,
+        "ruwe_som_E18": 0.867077,
+        "normalisatie_E17": 1.015998,
+        "normalisatie_E18": 1.102071,
+        "normalisatie_geleend": "volledig jaar",
+        "bytes": 195824
+      }
+    },
+    "871694600000002173": {
+      "2023": {
+        "kwartieren": 26404,
+        "eerste_dag": "2023-04-01",
+        "laatste_dag": "2023-12-31",
+        "volledig_jaar": false,
+        "ruwe_som_E17": 0.709651,
+        "ruwe_som_E18": 1.023829,
+        "normalisatie_E17": 1.006313,
+        "normalisatie_E18": 1.066707,
+        "normalisatie_geleend": "volledig jaar",
+        "bytes": 211248
+      },
+      "2024": {
+        "kwartieren": 35136,
+        "eerste_dag": "2024-01-01",
+        "laatste_dag": "2024-12-31",
+        "volledig_jaar": true,
+        "ruwe_som_E17": 1.015981,
+        "ruwe_som_E18": 1.051078,
+        "normalisatie_E17": 1.015981,
+        "normalisatie_E18": 1.051078,
+        "normalisatie_geleend": null,
+        "bytes": 281104
+      },
+      "2025": {
+        "kwartieren": 35040,
+        "eerste_dag": "2025-01-01",
+        "laatste_dag": "2025-12-31",
+        "volledig_jaar": true,
+        "ruwe_som_E17": 1.006313,
+        "ruwe_som_E18": 1.066707,
+        "normalisatie_E17": 1.006313,
+        "normalisatie_E18": 1.066707,
+        "normalisatie_geleend": null,
+        "bytes": 280336
+      },
+      "2026": {
+        "kwartieren": 24476,
+        "eerste_dag": "2026-01-01",
+        "laatste_dag": "2026-09-12",
+        "volledig_jaar": false,
+        "ruwe_som_E17": 0.693817,
+        "ruwe_som_E18": 0.884715,
+        "normalisatie_E17": 1.006313,
+        "normalisatie_E18": 1.066707,
+        "normalisatie_geleend": "volledig jaar",
+        "bytes": 195824
+      }
+    },
+    "871694830000000309": {
+      "2023": {
+        "kwartieren": 26404,
+        "eerste_dag": "2023-04-01",
+        "laatste_dag": "2023-12-31",
+        "volledig_jaar": false,
+        "ruwe_som_E17": 0.728603,
+        "ruwe_som_E18": 1.019225,
+        "normalisatie_E17": 1.025342,
+        "normalisatie_E18": 1.041912,
+        "normalisatie_geleend": "volledig jaar",
+        "bytes": 211248
+      },
+      "2024": {
+        "kwartieren": 35136,
+        "eerste_dag": "2024-01-01",
+        "laatste_dag": "2024-12-31",
+        "volledig_jaar": true,
+        "ruwe_som_E17": 1.025726,
+        "ruwe_som_E18": 1.036159,
+        "normalisatie_E17": 1.025726,
+        "normalisatie_E18": 1.036159,
+        "normalisatie_geleend": null,
+        "bytes": 281104
+      },
+      "2025": {
+        "kwartieren": 35040,
+        "eerste_dag": "2025-01-01",
+        "laatste_dag": "2025-12-31",
+        "volledig_jaar": true,
+        "ruwe_som_E17": 1.025342,
+        "ruwe_som_E18": 1.041912,
+        "normalisatie_E17": 1.025342,
+        "normalisatie_E18": 1.041912,
+        "normalisatie_geleend": null,
+        "bytes": 280336
+      },
+      "2026": {
+        "kwartieren": 24476,
+        "eerste_dag": "2026-01-01",
+        "laatste_dag": "2026-09-12",
+        "volledig_jaar": false,
+        "ruwe_som_E17": 0.712363,
+        "ruwe_som_E18": 0.873728,
+        "normalisatie_E17": 1.025342,
+        "normalisatie_E18": 1.041912,
+        "normalisatie_geleend": "volledig jaar",
+        "bytes": 195824
       }
     }
   },
