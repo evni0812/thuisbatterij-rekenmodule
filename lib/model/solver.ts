@@ -55,6 +55,48 @@ const MIN_STEPS_PER_TRANSFER = 4;
 const ACTION_SUBDIVISIONS = 6;
 
 /**
+ * Binnen dit bedrag zijn twee kandidaten economisch gelijk, in euro per stap.
+ *
+ * ── Waarom er een gelijkspelregel moet zijn ─────────────────────────────────
+ * De prijs staat vaak uren achtereen exact stil: de day-ahead markt noteert per
+ * uur, dus vier kwartieren delen altijd één prijs, en op een rustige middag
+ * lopen er zo vier aaneengesloten uren op dezelfde cent. In zo'n vlak is elke
+ * laadvolgorde precies even duur. Of je om 12:00 vol laadt of om 15:00, en of
+ * je het spreidt: het kost tot op de euro hetzelfde.
+ *
+ * De vergelijking was `total < best`, en bij een exact gelijkspel wint dan de
+ * eerste kandidaat — nul, niets doen. Maar exacte gelijkspelen bestaan in
+ * drijvende komma nauwelijks: twee wegen naar dezelfde lading verschillen in
+ * het laatste bit, en het teken daarvan is willekeurig. Zo won afwisselend wél
+ * en niet laden. Op 13 juli 2025 stond de prijs van 11:00 tot 15:45 op 17,13 ct
+ * en laadde de batterij in blokjes van 0,03, 0,07, 0,04, 0,12, 0,16, nul, 0,17
+ * kWh: een grillig patroon dat op geen enkele afweging berustte en dat geen
+ * echte omvormer zou vertonen. Wie de grafiek las, zocht naar een reden die er
+ * niet was.
+ *
+ * Een kandidaat moet nu écht goedkoper zijn om de vorige te verdringen. Bij
+ * gelijkspel blijft staan wat er stond, en dat is nul: `cand[0]`. De batterij
+ * stelt de keuze dus uit tot het moment dat hij hem moet maken, en laadt dan in
+ * één blok op vol vermogen. Diezelfde dag wordt zo één aaneengesloten blok van
+ * 13:30 tot 15:45, tot de cel vol is en net voordat de prijs oploopt.
+ *
+ * ── Waarom uitstellen en niet vooruit ───────────────────────────────────────
+ * De omgekeerde voorkeur — bij gelijkspel de gróótste beweging, dus meteen vol
+ * laden — geeft een even net blok, maar kost 1,47 euro per jaar op 89. Het plan
+ * is dan wel even duur, maar het wordt uitgevoerd op een dag die anders loopt
+ * dan voorspeld. Een batterij die om 14:15 al vol zit, heeft geen ruimte meer
+ * voor zon die onverwacht toch doorkomt. Uitstellen houdt die ruimte open, en
+ * kost 6 cent per jaar ten opzichte van de willekeur die er stond.
+ *
+ * Een miljardste euro ligt ver onder elk verschil dat ertoe doet (een kwartier
+ * van 0,2 kWh bij één cent prijsverschil is al 2 · 10⁻³) en ver boven de ruis
+ * van de optelling zelf (10⁻¹⁵ of kleiner). Alleen echte gelijkspelen vallen
+ * eronder: op perfecte vooruitblik, waar het plan en de werkelijkheid
+ * samenvallen, verschuift de uitkomst 0,001 euro per jaar.
+ */
+const GELIJKSPEL_EUR = 1e-9;
+
+/**
  * Kies een SoC-grid dat zowel de capaciteit als het vermogen recht doet.
  *
  * @param maxTransferKwh grootste ladingsverandering in de cel per kwartier
@@ -207,7 +249,10 @@ export function planSocPath(
         const future = next[i0]! * (1 - frac) + next[i0 + 1]! * frac;
 
         const total = cost + future;
-        if (total < best) {
+        // Alleen een écht goedkopere kandidaat verdringt de vorige. Bij
+        // gelijkspel wint degene die het eerst langskwam, en dat is niets doen:
+        // `cand[0]` is nul.
+        if (total < best - GELIJKSPEL_EUR) {
           best = total;
           bestB = b;
         }
