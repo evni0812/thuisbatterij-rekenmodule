@@ -20,6 +20,7 @@ import type {
   TariffSpec,
   Window,
 } from "./types";
+import type { Configuration } from "../worker/protocol";
 
 /** Waar de besparing vandaan komt, in EUR over het venster. */
 export interface SavingBreakdown {
@@ -143,7 +144,7 @@ export interface SeasonProfile {
  * kwartieren er in dat uur vielen. Apart van het profiel zelf, want over
  * meerdere jaren moet je de sommen bij elkaar optellen en pas daarna delen.
  */
-interface SeasonAccum {
+export interface SeasonAccum {
   som: { impBasis: Float64Array; impBat: Float64Array; expBasis: Float64Array; expBat: Float64Array };
   stappen: Float64Array;
 }
@@ -160,8 +161,13 @@ function leegAccum(): SeasonAccum {
   };
 }
 
-/** Uitkomsten voor één profieljaar. */
-export interface YearAnalysis {
+/**
+ * Uitkomsten voor één profieljaar zonder het optimum: alles wat uit de
+ * realistische strategie en de baseline volgt. Het scenario rekent alleen dit;
+ * het optimum kost een extra doorrekening per jaar en wordt daar nergens
+ * getoond.
+ */
+export interface YearKern {
   year: number;
   firstDay: string;
   lastDay: string;
@@ -171,13 +177,9 @@ export interface YearAnalysis {
   gridExportKwh: number;
   baselineCostEur: number;
   realisticCostEur: number;
-  optimalCostEur: number;
   realisticSavingEur: number;
-  optimalSavingEur: number;
   breakdown: SavingBreakdown;
   cyclesPerYear: number;
-  /** Aandeel van het optimum dat de realistische strategie haalt, 0–1. */
-  captureRate: number;
   /** Netafname met batterij, kWh — waar de reductie uit volgt. */
   gridImportWithBatteryKwh: number;
   /** Netinvoeding met batterij, kWh. */
@@ -202,6 +204,17 @@ export interface YearAnalysis {
    */
   wearCostEur: number;
 }
+
+/** Wat het optimum met perfecte kennis aan een jaar toevoegt. */
+export interface YearOptimum {
+  optimalCostEur: number;
+  optimalSavingEur: number;
+  /** Aandeel van het optimum dat de realistische strategie haalt, 0–1. */
+  captureRate: number;
+}
+
+/** Uitkomsten voor één profieljaar, inclusief het optimum. */
+export interface YearAnalysis extends YearKern, YearOptimum {}
 
 /**
  * Kerncijfers over de gekozen periode, per jaar.
@@ -459,8 +472,16 @@ export interface StrategyGap {
   forecastCostEur: number;
 }
 
-export interface AnalysisResult {
-  perYear: YearAnalysis[];
+/**
+ * Wat een doorrekening zonder optimum, voorbeelddagen en gat oplevert.
+ *
+ * Dit is alles wat het nettariefscenario nodig heeft: de pagina leest daarvan
+ * de besparing, de kerncijfers, de financiën en de curve. Een volledige
+ * `AnalysisResult` is hieraan toewijsbaar, dus bewaarde bundels en het
+ * vooruitgerekende antwoord blijven bruikbaar.
+ */
+export interface ScenarioResult {
+  perYear: YearKern[];
   /**
    * De uitsplitsing van de besparing, gemiddeld per jaar over de volledige
    * jaren — dezelfde grondslag als `losses`, `perMonth` en `averageSavingEur`.
@@ -491,10 +512,15 @@ export interface AnalysisResult {
   finance: FinanceResult;
   curve: SavingCurvePoint[];
   priceGap: PriceGap;
-  sampleDays: SampleDay[];
   stats: KeyStats;
   /** Verliezen per jaar, gemiddeld over de volledige profieljaren. */
   losses: EnergyLosses;
+}
+
+/** De volledige doorrekening: het scenario-deel plus optimum, voorbeelddagen en gat. */
+export interface AnalysisResult extends Omit<ScenarioResult, "perYear"> {
+  perYear: YearAnalysis[];
+  sampleDays: SampleDay[];
   /** Waarom de realistische strategie onder het optimum blijft. */
   gap: StrategyGap | null;
 }
@@ -844,26 +870,43 @@ function quickSaving(
   };
 }
 
-function analyseWindow(
-  entry: AnalysisInput["windows"][number],
-  spec: BatterySpec,
-  tariff: TariffSpec,
-  /** Een al berekende realistische dispatch voor precies deze spec, indien voorhanden. */
-  realistischAlBerekend?: DispatchResult,
-  /** Volle slijtageprijs per geleverde kWh, voor de zichtbare slijtagepost. */
-  wearEurPerKwh = 0,
-): {
-  analysis: YearAnalysis;
+/** De uitkomsten van één venster, zoals de samenvoeging ze nodig heeft. */
+export interface VensterUitkomst {
+  kern: YearKern;
+  /** Alleen als het optimum is doorgerekend. */
+  optimum?: YearOptimum;
   realistic: DispatchResult;
-  optimal: DispatchResult;
+  optimal?: DispatchResult;
   baselineCost: number;
   /** Sommen per uur van de dag, per seizoen; pas na het middelen bruikbaar. */
   seizoenen: { winter: SeasonAccum; zomer: SeasonAccum };
-} {
+}
+
+export interface VensterOpties {
+  /** Ook het optimum met perfecte kennis doorrekenen (een extra jaarsimulatie). */
+  metOptimum: boolean;
+  /** Volle slijtageprijs per geleverde kWh, voor de zichtbare slijtagepost. */
+  wearEurPerKwh: number;
+  /** Een al berekende realistische dispatch voor precies deze spec, indien voorhanden. */
+  realistischAlBerekend?: DispatchResult;
+}
+
+/**
+ * Reken één venster door: baseline, realistische strategie en desgewenst het
+ * optimum. Puur in zijn invoer, zodat vensters over meerdere workers verdeeld
+ * kunnen worden en daarna met `voegSamen` tot hetzelfde resultaat leiden als
+ * één doorlopende `runAnalysis`.
+ */
+export function analyseWindow(
+  entry: AnalysisInput["windows"][number],
+  spec: BatterySpec,
+  tariff: TariffSpec,
+  opties: VensterOpties,
+): VensterUitkomst {
   const { window, year, firstDay, lastDay, isFullYear } = entry;
   const base = dispatchBaseline(window, tariff);
-  const real = realistischAlBerekend ?? dispatchRolling(window, spec, tariff);
-  const opt = dispatchOptimal(window, spec, tariff);
+  const real = opties.realistischAlBerekend ?? dispatchRolling(window, spec, tariff);
+  const opt = opties.metOptimum ? dispatchOptimal(window, spec, tariff) : undefined;
 
   let imp = 0;
   let exp = 0;
@@ -883,7 +926,6 @@ function analyseWindow(
   }
 
   const realSaving = base.totalCostEur - real.totalCostEur;
-  const optSaving = base.totalCostEur - opt.totalCostEur;
 
   const months = maandTotalen(window, base, real, spec);
   let piekBasis = 0;
@@ -893,7 +935,7 @@ function analyseWindow(
     piekBat += m.peakHourImportBatteryKwh;
   }
 
-  const analysis: YearAnalysis = {
+  const kern: YearKern = {
     year,
     firstDay,
     lastDay,
@@ -902,12 +944,9 @@ function analyseWindow(
     gridExportKwh: exp,
     baselineCostEur: base.totalCostEur,
     realisticCostEur: real.totalCostEur,
-    optimalCostEur: opt.totalCostEur,
     realisticSavingEur: realSaving,
-    optimalSavingEur: optSaving,
     breakdown: breakdown(window, base, real, spec),
     cyclesPerYear: equivalentCycles(dischargeTotal, spec),
-    captureRate: optSaving > 0 ? realSaving / optSaving : 0,
     gridImportWithBatteryKwh: importWithBattery,
     gridExportWithBatteryKwh: exportWithBattery,
     throughputKwh: dischargeTotal,
@@ -915,10 +954,20 @@ function analyseWindow(
     months,
     peakHourImportKwh: piekBasis,
     peakHourImportWithBatteryKwh: piekBat,
-    wearCostEur: dischargeTotal * wearEurPerKwh,
+    wearCostEur: dischargeTotal * opties.wearEurPerKwh,
   };
+  let optimum: YearOptimum | undefined;
+  if (opt) {
+    const optSaving = base.totalCostEur - opt.totalCostEur;
+    optimum = {
+      optimalCostEur: opt.totalCostEur,
+      optimalSavingEur: optSaving,
+      captureRate: optSaving > 0 ? realSaving / optSaving : 0,
+    };
+  }
   return {
-    analysis,
+    kern,
+    optimum,
     realistic: real,
     optimal: opt,
     baselineCost: base.totalCostEur,
@@ -1297,15 +1346,36 @@ export function computeStrategyGap(
   realisticSavingEur: number,
   optimalSavingEur: number,
 ): StrategyGap {
-  const perfect = dispatchRolling(entry.window, spec, tariff, {
-    perfectForecast: true,
-  });
-  const perfectSaving = baselineCost - perfect.totalCostEur;
+  return strategyGapUit(
+    entry.year,
+    perfectVoorspellingBesparing(entry, spec, tariff, baselineCost),
+    realisticSavingEur,
+    optimalSavingEur,
+  );
+}
 
+/** De besparing van de rollende strategie met de werkelijke residual als voorspelling. */
+export function perfectVoorspellingBesparing(
+  entry: AnalysisInput["windows"][number],
+  spec: BatterySpec,
+  tariff: TariffSpec,
+  baselineCost: number,
+): number {
+  const perfect = dispatchRolling(entry.window, spec, tariff, { perfectForecast: true });
+  return baselineCost - perfect.totalCostEur;
+}
+
+/** Het gat uit de drie besparingen; puur rekenwerk, geen simulatie. */
+export function strategyGapUit(
+  year: number,
+  perfectSaving: number,
+  realisticSavingEur: number,
+  optimalSavingEur: number,
+): StrategyGap {
   // De twee posten kunnen door discretisatieruis een fractie negatief
   // uitvallen; dat is geen informatieverlies en hoort niet als zodanig getoond.
   return {
-    year: entry.year,
+    year,
     optimalSavingEur,
     perfectForecastSavingEur: perfectSaving,
     realisticSavingEur,
@@ -1335,33 +1405,181 @@ export interface AnalysisOptions {
   collectOptimal?: DispatchResult[];
 }
 
-export function runAnalysis(
-  input: AnalysisInput,
-  options: AnalysisOptions = {},
-): AnalysisResult {
-  // De slijtageprijs: wat een geleverde kWh van de aanschaf opsoupeert. Die
-  // komt overal terug als zichtbare post. De planner rekent er een deel van als
-  // schaduwprijs (de strategie, zie lib/strategie.ts; standaard het geheel):
-  // een beurt gaat alleen door als de marge na het omzettingsverlies groter is
-  // dan dat deel van de slijtage, anders staat de batterij stil.
+/**
+ * De slijtageprijs en de batterijspec waarmee de planner rekent.
+ *
+ * De volle prijs is wat een geleverde kWh van de aanschaf opsoupeert; die komt
+ * overal terug als zichtbare post. De planner rekent er een deel van als
+ * schaduwprijs (de strategie, zie lib/strategie.ts): een beurt gaat alleen
+ * door als de marge na het omzettingsverlies groter is dan dat deel van de
+ * slijtage, anders staat de batterij stil.
+ */
+export function slijtageVoor(input: AnalysisInput): { volleSlijtage: number; spec: BatterySpec } {
   const volleSlijtage = wearCostPerKwh(input.investmentEur, input.cycleLife, input.battery);
-  const spec: BatterySpec = {
-    ...input.battery,
-    wearCostEurPerKwh: volleSlijtage * (input.wearFraction ?? 1),
+  return {
+    volleSlijtage,
+    spec: { ...input.battery, wearCostEurPerKwh: volleSlijtage * (input.wearFraction ?? 1) },
   };
+}
 
-  const uitkomsten = input.windows.map((w) =>
-    analyseWindow(w, spec, input.tariff, undefined, volleSlijtage),
-  );
-  const perYear = uitkomsten.map((u) => u.analysis);
-  if (options.collectDispatches) {
-    options.collectDispatches.length = 0;
-    for (const u of uitkomsten) options.collectDispatches.push(u.realistic);
+/**
+ * Het venster waar losse cijfers en de curve op rusten: het meest recente
+ * volledige jaar, of het laatste venster als er geen volledig jaar in zit.
+ */
+export function referentieIndexVan(kernen: readonly { isFullYear: boolean }[]): number {
+  for (let i = kernen.length - 1; i >= 0; i--) if (kernen[i]!.isFullYear) return i;
+  return kernen.length - 1;
+}
+
+/** Eén meetpunt van de besparingscurve: de besparing bij een kleinere capaciteit. */
+export interface CurveMeting {
+  fraction: number;
+  savingEur: number;
+  cyclesPerYear: number;
+}
+
+/** De steunpunten van de besparingscurve als de invoer er geen opgeeft. */
+export const STANDAARD_CURVE_FRACTIES: readonly number[] = [0.7, 0.85, 1];
+
+/** De capaciteitsfracties waarvoor een extra doorrekening nodig is (niet 1). */
+export function curveFracties(input: Pick<AnalysisInput, "curveFractions">): number[] {
+  return (input.curveFractions ?? STANDAARD_CURVE_FRACTIES).filter((f) => f !== 1);
+}
+
+/**
+ * Meet één curvepunt: dezelfde realistische strategie op het referentiejaar,
+ * met een kleinere capaciteit. Eén jaarsimulatie.
+ */
+export function meetCurvePunt(
+  input: AnalysisInput,
+  spec: BatterySpec,
+  referentieIndex: number,
+  fraction: number,
+  baselineCost: number,
+): CurveMeting {
+  const kleiner: BatterySpec = { ...spec, capacityKwh: spec.capacityKwh * fraction };
+  const q = quickSaving(input.windows[referentieIndex]!, kleiner, input.tariff, baselineCost);
+  return { fraction, ...q };
+}
+
+/**
+ * De velden die niets aan de dispatch veranderen en alleen in de financiën en
+ * de zelfvoorzieningscijfers doorwerken. Wie deze kent, kan een bewaard
+ * resultaat voor een andere looptijd of rente hergebruiken zonder te rekenen.
+ */
+export interface Afleiding {
+  investmentEur: number;
+  cycleLife: number;
+  years: number;
+  priceEscalation: number;
+  discountRate: number;
+  calendarFadePerYear: number;
+  residualValueEur: number;
+  annualProductionKwh?: number;
+}
+
+export function afleidingVanInvoer(input: AnalysisInput): Afleiding {
+  return {
+    investmentEur: input.investmentEur,
+    cycleLife: input.cycleLife,
+    years: input.years,
+    priceEscalation: input.priceEscalation,
+    discountRate: input.discountRate,
+    calendarFadePerYear: input.calendarFadePerYear,
+    residualValueEur: input.residualValueEur,
+    annualProductionKwh: input.annualProductionKwh,
+  };
+}
+
+export function afleidingVanConfiguratie(config: Configuration): Afleiding {
+  return {
+    investmentEur: config.investmentEur,
+    cycleLife: config.cycleLife,
+    years: config.analysisYears,
+    priceEscalation: config.priceEscalation,
+    discountRate: config.discountRate,
+    calendarFadePerYear: config.calendarFadePerYear,
+    residualValueEur: config.residualValueEur,
+    annualProductionKwh: config.annualProductionKwh,
+  };
+}
+
+function financeVoor(curve: SavingCurvePoint[], a: Afleiding): FinanceResult {
+  return computeFinance({
+    curve,
+    investmentEur: a.investmentEur,
+    years: a.years,
+    priceEscalation: a.priceEscalation,
+    discountRate: a.discountRate,
+    calendarFadePerYear: a.calendarFadePerYear,
+    cycleLife: a.cycleLife,
+    residualValueEur: a.residualValueEur,
+  });
+}
+
+/**
+ * Zelfconsumptie en autarkie uit de netcijfers en de (geschatte) jaaropwek.
+ * Wat je direct zelf gebruikt van je eigen opwek, zonder batterij, is alles
+ * wat niet is teruggeleverd; daaruit volgt het bruto verbruik.
+ */
+function metZelfvoorziening(stats: KeyStats, opwek: number | undefined): KeyStats {
+  const impBasis = stats.gridImportBaselineKwh;
+  const impBat = stats.gridImportBatteryKwh;
+  const expBasis = stats.gridExportBaselineKwh;
+  const expBat = stats.gridExportBatteryKwh;
+  const directEigen = opwek !== undefined ? Math.max(0, opwek - expBasis) : null;
+  const brutoVerbruik = directEigen !== null ? impBasis + directEigen : null;
+  return {
+    ...stats,
+    selfConsumptionBaseline:
+      opwek && opwek > 0 ? Math.min(1, 1 - expBasis / opwek) : null,
+    selfConsumptionBattery:
+      opwek && opwek > 0 ? Math.min(1, 1 - expBat / opwek) : null,
+    selfSufficiencyBaseline:
+      brutoVerbruik && brutoVerbruik > 0
+        ? Math.min(1, 1 - impBasis / brutoVerbruik)
+        : null,
+    selfSufficiencyBattery:
+      brutoVerbruik && brutoVerbruik > 0
+        ? Math.min(1, 1 - impBat / brutoVerbruik)
+        : null,
+  };
+}
+
+/**
+ * Pas de afleidbare velden van een bewaard resultaat aan een andere looptijd,
+ * rente, prijsstijging, degradatie, restwaarde of jaaropwek aan. Geen
+ * simulatie: dezelfde curve, dezelfde netcijfers, alleen de financiën en de
+ * zelfvoorzieningscijfers opnieuw. Levert per constructie hetzelfde als een
+ * verse doorrekening met die velden, want `voegSamen` gebruikt dezelfde twee
+ * functies.
+ */
+export function pasAfleidingToe<R extends ScenarioResult>(r: R, a: Afleiding): R {
+  return {
+    ...r,
+    finance: financeVoor(r.curve, a),
+    stats: metZelfvoorziening(r.stats, a.annualProductionKwh),
+  };
+}
+
+/**
+ * Voeg de vensters samen tot het scenario-deel van het resultaat: de
+ * middelingen over de volledige jaren, de curve, de financiën en de kerncijfers.
+ *
+ * De volgorde van optellen is die van de vensters in `input.windows`, ongeacht
+ * in welke volgorde ze zijn doorgerekend; zo geeft parallel rekenen exact
+ * hetzelfde antwoord als achter elkaar.
+ */
+export function voegSamenScenario(
+  input: AnalysisInput,
+  uitkomsten: readonly VensterUitkomst[],
+  metingen: readonly CurveMeting[],
+): ScenarioResult {
+  if (uitkomsten.length !== input.windows.length) {
+    throw new Error(`${uitkomsten.length} vensteruitkomsten voor ${input.windows.length} vensters`);
   }
-  if (options.collectOptimal) {
-    options.collectOptimal.length = 0;
-    for (const u of uitkomsten) options.collectOptimal.push(u.optimal);
-  }
+  const { volleSlijtage } = slijtageVoor(input);
+  const perYear = uitkomsten.map((u) => u.kern);
 
   // Alleen volledige jaren tellen mee voor het gemiddelde en de bandbreedte:
   // een deelperiode is per definitie lager en zou de uitkomst vertekenen.
@@ -1427,18 +1645,12 @@ export function runAnalysis(
 
   // Besparingscurve: dezelfde doorrekening bij een paar kleinere capaciteiten,
   // zodat de degradatie over de jaren geïnterpoleerd kan worden in plaats van
-  // opnieuw gesimuleerd.
-  // De curve wordt op ÉÉN representatief jaar bemonsterd, niet op alle jaren.
-  // Hij dient alleen om de degradatie over de looptijd te interpoleren, en de
-  // vorm van saving(capaciteit) verschilt nauwelijks tussen jaren — het niveau
-  // wel, en dat komt uit het gemiddelde hieronder. Alle jaren bemonsteren zou
-  // de doorrekening verdubbelen voor een verwaarloosbaar verschil.
-  const referentieJaar = basis[basis.length - 1]!;
-  const referentieIndex = perYear.indexOf(referentieJaar);
-  const referentieEntry = input.windows[referentieIndex]!;
-  const referentieBasis = uitkomsten[referentieIndex]!.baselineCost;
-
-  const fracties = input.curveFractions ?? [0.7, 0.85, 1];
+  // opnieuw gesimuleerd. Bemonsterd op ÉÉN representatief jaar: de vorm van
+  // saving(capaciteit) verschilt nauwelijks tussen jaren, het niveau wel, en
+  // dat komt uit het gemiddelde. Het referentiejaar geeft de VORM; het
+  // gemiddelde over alle jaren geeft het NIVEAU.
+  const referentieJaar = perYear[referentieIndexVan(perYear)]!;
+  const fracties = input.curveFractions ?? STANDAARD_CURVE_FRACTIES;
   const volleBesparing = referentieJaar.realisticSavingEur;
   const gemiddeldeCycli =
     basis.reduce((a, y) => a + y.cyclesPerYear, 0) / Math.max(1, basis.length);
@@ -1451,10 +1663,8 @@ export function runAnalysis(
         cyclesPerYear: gemiddeldeCycli,
       };
     }
-    const kleiner: BatterySpec = { ...spec, capacityKwh: spec.capacityKwh * f };
-    const q = quickSaving(referentieEntry, kleiner, input.tariff, referentieBasis);
-    // Het referentiejaar geeft de VORM; het gemiddelde over alle jaren geeft het
-    // NIVEAU. Zo blijft de curve consistent met de getoonde jaarbesparing.
+    const q = metingen.find((m) => m.fraction === f);
+    if (!q) throw new Error(`curvemeting voor fractie ${f} ontbreekt`);
     const verhouding = volleBesparing > 0 ? q.savingEur / volleBesparing : 1;
     return {
       capacityFraction: f,
@@ -1463,65 +1673,34 @@ export function runAnalysis(
     };
   });
 
-  const finance = computeFinance({
-    curve,
-    investmentEur: input.investmentEur,
-    years: input.years,
-    priceEscalation: input.priceEscalation,
-    discountRate: input.discountRate,
-    calendarFadePerYear: input.calendarFadePerYear,
-    cycleLife: input.cycleLife,
-    residualValueEur: input.residualValueEur,
-  });
-
-  // Voorbeelddagen komen uit het meest recente volledige jaar: dat is het
-  // herkenbaarst en het best gedekt.
-  const toonIndex = referentieIndex >= 0 ? referentieIndex : perYear.length - 1;
-  const toonVenster = input.windows[toonIndex];
-  const toonDispatch = uitkomsten[toonIndex]?.realistic;
-  const toonOptimaal = uitkomsten[toonIndex]?.optimal;
+  const afleiding = afleidingVanInvoer(input);
+  const finance = financeVoor(curve, afleiding);
 
   // Kerncijfers over de volledige jaren, per jaar gemiddeld.
-  const gem = (f: (y: YearAnalysis) => number) =>
+  const gem = (f: (y: YearKern) => number) =>
     basis.reduce((a, y) => a + f(y), 0) / Math.max(1, basis.length);
 
-  const impBasis = gem((y) => y.gridImportKwh);
-  const impBat = gem((y) => y.gridImportWithBatteryKwh);
-  const expBasis = gem((y) => y.gridExportKwh);
-  const expBat = gem((y) => y.gridExportWithBatteryKwh);
   const cycli = gem((y) => y.cyclesPerYear);
-
-  const opwek = input.annualProductionKwh;
-  // Wat je direct zelf gebruikt van je eigen opwek, zonder batterij: alles wat
-  // niet is teruggeleverd. Daaruit volgt het bruto verbruik.
-  const directEigen = opwek !== undefined ? Math.max(0, opwek - expBasis) : null;
-  const brutoVerbruik = directEigen !== null ? impBasis + directEigen : null;
-
-  const stats: KeyStats = {
-    cyclesPerYear: cycli,
-    cyclesPerDay: cycli / 365,
-    throughputPerYearKwh: gem((y) => y.throughputKwh),
-    gridImportBaselineKwh: impBasis,
-    gridImportBatteryKwh: impBat,
-    gridExportBaselineKwh: expBasis,
-    gridExportBatteryKwh: expBat,
-    selfConsumptionBaseline:
-      opwek && opwek > 0 ? Math.min(1, 1 - expBasis / opwek) : null,
-    selfConsumptionBattery:
-      opwek && opwek > 0 ? Math.min(1, 1 - expBat / opwek) : null,
-    selfSufficiencyBaseline:
-      brutoVerbruik && brutoVerbruik > 0
-        ? Math.min(1, 1 - impBasis / brutoVerbruik)
-        : null,
-    selfSufficiencyBattery:
-      brutoVerbruik && brutoVerbruik > 0
-        ? Math.min(1, 1 - impBat / brutoVerbruik)
-        : null,
-    peakHourImportBaselineKwh: gem((y) => y.peakHourImportKwh),
-    peakHourImportBatteryKwh: gem((y) => y.peakHourImportWithBatteryKwh),
-    wearCostPerYearEur: gem((y) => y.wearCostEur),
-    wearCostEurPerKwh: volleSlijtage,
-  };
+  const stats: KeyStats = metZelfvoorziening(
+    {
+      cyclesPerYear: cycli,
+      cyclesPerDay: cycli / 365,
+      throughputPerYearKwh: gem((y) => y.throughputKwh),
+      gridImportBaselineKwh: gem((y) => y.gridImportKwh),
+      gridImportBatteryKwh: gem((y) => y.gridImportWithBatteryKwh),
+      gridExportBaselineKwh: gem((y) => y.gridExportKwh),
+      gridExportBatteryKwh: gem((y) => y.gridExportWithBatteryKwh),
+      selfConsumptionBaseline: null,
+      selfConsumptionBattery: null,
+      selfSufficiencyBaseline: null,
+      selfSufficiencyBattery: null,
+      peakHourImportBaselineKwh: gem((y) => y.peakHourImportKwh),
+      peakHourImportBatteryKwh: gem((y) => y.peakHourImportWithBatteryKwh),
+      wearCostPerYearEur: gem((y) => y.wearCostEur),
+      wearCostEurPerKwh: volleSlijtage,
+    },
+    afleiding.annualProductionKwh,
+  );
 
   // Verliezen per jaar. Alle posten zijn optelbaar en dus middelbaar; de
   // rondgang niet — die volgt uit de gemiddelde in- en uitgaande energie.
@@ -1561,22 +1740,98 @@ export function runAnalysis(
     finance,
     curve,
     priceGap: computePriceGap(input.windows, input.tariff),
-    sampleDays:
-      toonVenster && toonDispatch
-        ? pickSampleDays(toonVenster, spec, input.tariff, toonDispatch, toonOptimaal, volleSlijtage)
-        : [],
-    gap:
-      referentieIndex >= 0
-        ? computeStrategyGap(
-            referentieEntry,
-            spec,
-            input.tariff,
-            referentieBasis,
-            referentieJaar.realisticSavingEur,
-            referentieJaar.optimalSavingEur,
-          )
-        : null,
   };
+}
+
+/**
+ * Voeg de vensters samen tot het volledige resultaat. Alle vensters moeten
+ * het optimum bevatten; de voorbeelddagen en het gat komen uit het
+ * referentiejaar.
+ *
+ * @param perfectSaving  besparing met perfecte verbruiksvoorspelling op het
+ *   referentiejaar (`perfectVoorspellingBesparing`), of null om het gat over te slaan
+ */
+export function voegSamen(
+  input: AnalysisInput,
+  uitkomsten: readonly VensterUitkomst[],
+  metingen: readonly CurveMeting[],
+  perfectSaving: number | null,
+): AnalysisResult {
+  const kern = voegSamenScenario(input, uitkomsten, metingen);
+  const { spec, volleSlijtage } = slijtageVoor(input);
+  const perYear: YearAnalysis[] = uitkomsten.map((u) => {
+    if (!u.optimum) throw new Error(`venster ${u.kern.year} is zonder optimum doorgerekend`);
+    return { ...u.kern, ...u.optimum };
+  });
+  const ref = referentieIndexVan(perYear);
+  const toon = uitkomsten[ref]!;
+  return {
+    ...kern,
+    perYear,
+    // Voorbeelddagen komen uit het meest recente volledige jaar: dat is het
+    // herkenbaarst en het best gedekt.
+    sampleDays: pickSampleDays(
+      input.windows[ref]!,
+      spec,
+      input.tariff,
+      toon.realistic,
+      toon.optimal,
+      volleSlijtage,
+    ),
+    gap:
+      perfectSaving === null
+        ? null
+        : strategyGapUit(
+            perYear[ref]!.year,
+            perfectSaving,
+            perYear[ref]!.realisticSavingEur,
+            perYear[ref]!.optimalSavingEur,
+          ),
+  };
+}
+
+/**
+ * De volledige doorrekening, achter elkaar in één thread: de referentie
+ * waaraan de parallelle weg (vensters over workers, daarna `voegSamen`)
+ * gelijk moet zijn.
+ */
+export function runAnalysis(
+  input: AnalysisInput,
+  options: AnalysisOptions = {},
+): AnalysisResult {
+  const { spec, volleSlijtage } = slijtageVoor(input);
+  const uitkomsten = input.windows.map((w) =>
+    analyseWindow(w, spec, input.tariff, { metOptimum: true, wearEurPerKwh: volleSlijtage }),
+  );
+  if (options.collectDispatches) {
+    options.collectDispatches.length = 0;
+    for (const u of uitkomsten) options.collectDispatches.push(u.realistic);
+  }
+  if (options.collectOptimal) {
+    options.collectOptimal.length = 0;
+    for (const u of uitkomsten) options.collectOptimal.push(u.optimal!);
+  }
+  const ref = referentieIndexVan(uitkomsten.map((u) => u.kern));
+  const basisKosten = uitkomsten[ref]!.baselineCost;
+  const metingen = curveFracties(input).map((f) => meetCurvePunt(input, spec, ref, f, basisKosten));
+  const perfect = perfectVoorspellingBesparing(input.windows[ref]!, spec, input.tariff, basisKosten);
+  return voegSamen(input, uitkomsten, metingen, perfect);
+}
+
+/**
+ * De doorrekening voor het nettariefscenario: zonder optimum, voorbeelddagen
+ * en gat, want daar leest de pagina niets van. Dat scheelt vier jaarsimulaties
+ * van het optimum en één met perfecte voorspelling.
+ */
+export function runScenario(input: AnalysisInput): ScenarioResult {
+  const { spec, volleSlijtage } = slijtageVoor(input);
+  const uitkomsten = input.windows.map((w) =>
+    analyseWindow(w, spec, input.tariff, { metOptimum: false, wearEurPerKwh: volleSlijtage }),
+  );
+  const ref = referentieIndexVan(uitkomsten.map((u) => u.kern));
+  const basisKosten = uitkomsten[ref]!.baselineCost;
+  const metingen = curveFracties(input).map((f) => meetCurvePunt(input, spec, ref, f, basisKosten));
+  return voegSamenScenario(input, uitkomsten, metingen);
 }
 
 /**

@@ -5,12 +5,16 @@
  * beginnen is niet alleen traag maar ook onnodig: dezelfde invoer op dezelfde
  * data geeft altijd hetzelfde antwoord, want er zit geen willekeur in het model.
  *
- * De sleutel is een hash van de hele configuratie plus een versienummer. Dat
- * versienummer moet omhoog zodra het rekenmodel verandert — anders zou een
- * bezoeker een oud antwoord blijven zien na een verbetering.
+ * De sleutel is een hash van de dispatch-velden van de configuratie plus een
+ * versienummer. Velden die alleen de financiën of de zelfvoorzieningscijfers
+ * raken (looptijd, rente, prijsstijging, degradatie, restwaarde, jaaropwek)
+ * zitten er bewust niet in: daarvoor wordt een bewaard resultaat hergebruikt
+ * en alleen de afleiding opnieuw gedaan (`pasAfleidingToe`). Het versienummer
+ * moet omhoog zodra het rekenmodel verandert — anders zou een bezoeker een oud
+ * antwoord blijven zien na een verbetering.
  */
 
-import type { AnalysisResult } from "./model/analysis";
+import type { AnalysisResult, ScenarioResult } from "./model/analysis";
 import type { Configuration, GridPoint } from "./worker/protocol";
 
 /**
@@ -19,7 +23,7 @@ import type { Configuration, GridPoint } from "./worker/protocol";
  */
 export interface Bundel {
   result: AnalysisResult;
-  scenario?: AnalysisResult;
+  scenario?: ScenarioResult;
   scenarioOpTeruglevering?: boolean;
   /** Voor welk jaar het basistarief in het scenario gold; ontbreekt = 2029. */
   scenarioJaar?: number;
@@ -73,19 +77,107 @@ export interface Bundel {
 export const MODEL_VERSIE = 13;
 
 const SLEUTEL_PREFIX = "tbat:v" + MODEL_VERSIE + ":";
-/** Hoeveel doorrekeningen we bewaren voordat de oudste eruit gaat. */
-const MAX_ITEMS = 12;
+/**
+ * Hoeveel doorrekeningen we bewaren voordat de oudste eruit gaat.
+ *
+ * Een bundel is zo'n 150 KB tekst, en de browser telt die dubbel (UTF-16)
+ * tegen een quota van meestal 5 MB. Twaalf bundels liepen daar tegenaan, en
+ * dan gooide de opslag-vol-afhandeling álles weg. Zes past ruim.
+ */
+export const MAX_ITEMS = 6;
+/**
+ * De index: welke sleutels er zijn en wanneer ze zijn geschreven. Opruimen
+ * leest alleen dit lijstje, in plaats van elke bundel te parsen om er één
+ * tijdstempel uit te halen; dat kostte tot tientallen milliseconden op de
+ * hoofdthread, precies op het moment dat het antwoord verschijnt.
+ */
+const INDEX_SLEUTEL = "tbat:index";
 
-/** Stabiele hash van de configuratie; sleutelvolgorde mag niet uitmaken. */
-export function configSleutel(config: Configuration): string {
-  const genormaliseerd = JSON.stringify(config, Object.keys(config).sort());
-  // FNV-1a: kort, snel en ruim voldoende om configuraties uit elkaar te houden.
+/**
+ * JSON met de sleutels op elk niveau gesorteerd, zodat de volgorde waarin een
+ * object is opgebouwd niet uitmaakt voor de hash.
+ *
+ * Eerder stond hier `JSON.stringify(config, Object.keys(config).sort())`. Een
+ * array als tweede argument is een witte lijst die op ÁLLE niveaus geldt, dus
+ * de velden van `household`, `battery` en `tariff` vielen eruit: twee
+ * configuraties met een andere jaarafname kregen dezelfde sleutel, en een
+ * bezoeker die zijn verbruik aanpaste kreeg het bewaarde antwoord van het oude
+ * verbruik terug als "uit de cache".
+ */
+export function stabielJson(waarde: unknown): string {
+  if (Array.isArray(waarde)) return `[${waarde.map(stabielJson).join(",")}]`;
+  if (waarde !== null && typeof waarde === "object") {
+    const o = waarde as Record<string, unknown>;
+    const delen = Object.keys(o)
+      .sort()
+      .filter((k) => o[k] !== undefined)
+      .map((k) => `${JSON.stringify(k)}:${stabielJson(o[k])}`);
+    return `{${delen.join(",")}}`;
+  }
+  return JSON.stringify(waarde) ?? "null";
+}
+
+/**
+ * Welke velden van de configuratie de dispatch veranderen en welke alleen
+ * de afleiding (financiën en zelfvoorzieningscijfers).
+ *
+ * `Record<keyof Configuration, …>` dwingt af dat een nieuw veld hier wordt
+ * ingedeeld: vergeet je het, dan compileert de tool niet. Een veld ten
+ * onrechte als "afleiding" markeren zou een bewaard antwoord tonen bij een
+ * configuratie die anders rekent — dus bij twijfel "dispatch".
+ */
+export const VELDKLASSE: Record<keyof Configuration, "dispatch" | "afleiding"> = {
+  domain: "dispatch",
+  from: "dispatch",
+  to: "dispatch",
+  household: "dispatch",
+  afnametype: "dispatch",
+  battery: "dispatch",
+  tariff: "dispatch",
+  investmentEur: "dispatch",
+  cycleLife: "dispatch",
+  wearFraction: "dispatch",
+  useHistoricalLevy: "dispatch",
+  netTariff: "dispatch",
+  netTariffOnExport: "dispatch",
+  netTariffYear: "dispatch",
+  levyEurPerKwh: "dispatch",
+  analysisYears: "afleiding",
+  priceEscalation: "afleiding",
+  discountRate: "afleiding",
+  calendarFadePerYear: "afleiding",
+  residualValueEur: "afleiding",
+  annualProductionKwh: "afleiding",
+  calendarLifeYears: "afleiding",
+};
+
+/** De configuratie zonder de afleidingsvelden. */
+export function dispatchDeel(config: Configuration): Partial<Configuration> {
+  const uit: Record<string, unknown> = {};
+  for (const [k, v] of Object.entries(config)) {
+    if (VELDKLASSE[k as keyof Configuration] === "dispatch") uit[k] = v;
+  }
+  return uit as Partial<Configuration>;
+}
+
+/**
+ * Stabiele hash van de velden die de dispatch bepalen. Twee configuraties die
+ * alleen in looptijd, rente, prijsstijging, degradatie, restwaarde of
+ * jaaropwek verschillen, delen dezelfde bundel; de afleiding wordt bij het
+ * lezen opnieuw gedaan (`pasAfleidingToe` in lib/model/analysis.ts).
+ */
+export function dispatchSleutel(config: Configuration): string {
+  return SLEUTEL_PREFIX + fnv(stabielJson(dispatchDeel(config)));
+}
+
+/** FNV-1a: kort, snel en ruim voldoende om configuraties uit elkaar te houden. */
+function fnv(tekst: string): string {
   let h = 0x811c9dc5;
-  for (let i = 0; i < genormaliseerd.length; i++) {
-    h ^= genormaliseerd.charCodeAt(i);
+  for (let i = 0; i < tekst.length; i++) {
+    h ^= tekst.charCodeAt(i);
     h = Math.imul(h, 0x01000193);
   }
-  return SLEUTEL_PREFIX + (h >>> 0).toString(36);
+  return (h >>> 0).toString(36);
 }
 
 interface Bewaard extends Bundel {
@@ -95,7 +187,7 @@ interface Bewaard extends Bundel {
 export function leesCache(config: Configuration): Bundel | null {
   if (typeof window === "undefined") return null;
   try {
-    const ruw = window.localStorage.getItem(configSleutel(config));
+    const ruw = window.localStorage.getItem(dispatchSleutel(config));
     if (!ruw) return null;
     const { result, scenario, scenarioOpTeruglevering, scenarioJaar, grid } = JSON.parse(ruw) as Bewaard;
     return { result, scenario, scenarioOpTeruglevering, scenarioJaar, grid };
@@ -109,44 +201,85 @@ export function leesCache(config: Configuration): Bundel | null {
 /**
  * Bewaar een bundel, of vul een bestaande aan. Scenario en raster komen later
  * binnen dan het hoofdresultaat, en mogen dat niet overschrijven met niets.
+ *
+ * Zonder bestaande bundel wordt alleen een deel mét hoofdresultaat geschreven:
+ * een los scenario of raster zonder antwoord is voor niemand bruikbaar, en het
+ * zou bij de volgende lezing als hoofdantwoord kunnen worden aangezien.
  */
-export function schrijfCache(config: Configuration, deel: Partial<Bundel> & Pick<Bundel, "result">): void {
+export function schrijfCache(config: Configuration, deel: Partial<Bundel>): void {
   if (typeof window === "undefined") return;
   const bestaand = leesCache(config);
-  const bewaard: Bewaard = { ...bestaand, ...deel, opgeslagen: Date.now() };
+  if (!bestaand && !deel.result) return;
+  const bewaard: Bewaard = { ...bestaand!, ...deel, opgeslagen: Date.now() };
+  const sleutel = dispatchSleutel(config);
   try {
-    window.localStorage.setItem(configSleutel(config), JSON.stringify(bewaard));
-    ruimOp();
+    window.localStorage.setItem(sleutel, JSON.stringify(bewaard));
+    ruimOp(sleutel, bewaard.opgeslagen);
   } catch {
     // Opslag vol: gooi alles van ons weg en probeer het één keer opnieuw.
     try {
       wisAlles();
-      window.localStorage.setItem(configSleutel(config), JSON.stringify(bewaard));
+      window.localStorage.setItem(sleutel, JSON.stringify(bewaard));
+      ruimOp(sleutel, bewaard.opgeslagen);
     } catch {
       // Dan niet. De tool werkt ook zonder cache.
     }
   }
 }
 
-/** Houd de opslag klein: alleen de meest recente doorrekeningen blijven. */
-function ruimOp(): void {
-  const eigen: { sleutel: string; opgeslagen: number }[] = [];
-  for (let i = 0; i < window.localStorage.length; i++) {
-    const sleutel = window.localStorage.key(i);
-    if (!sleutel?.startsWith("tbat:")) continue;
-    let opgeslagen = 0;
-    try {
-      opgeslagen = (JSON.parse(window.localStorage.getItem(sleutel)!) as Bewaard)
-        .opgeslagen;
-    } catch {
-      // Onleesbaar of van een oudere modelversie: als eerste weggooien.
-    }
-    eigen.push({ sleutel, opgeslagen });
+interface IndexRegel {
+  sleutel: string;
+  opgeslagen: number;
+}
+
+/** De index zoals hij in de opslag staat; leeg als hij ontbreekt of stuk is. */
+function leesIndex(): IndexRegel[] {
+  try {
+    const ruw = window.localStorage.getItem(INDEX_SLEUTEL);
+    const lijst = ruw ? (JSON.parse(ruw) as unknown) : [];
+    return Array.isArray(lijst)
+      ? lijst.filter(
+          (r): r is IndexRegel =>
+            typeof r === "object" && r !== null && typeof (r as IndexRegel).sleutel === "string",
+        )
+      : [];
+  } catch {
+    return [];
   }
-  eigen.sort((a, b) => b.opgeslagen - a.opgeslagen);
-  for (const { sleutel } of eigen.slice(MAX_ITEMS)) {
+}
+
+/**
+ * Houd de opslag klein: alleen de meest recente doorrekeningen blijven.
+ *
+ * Bundels die buiten de index om in de opslag staan (van vóór de index, of
+ * van een oudere modelversie) worden met tijdstempel nul opgenomen, zodat ze
+ * als eerste wijken. Sleutels in de index die niet meer bestaan vallen eruit.
+ */
+function ruimOp(zojuist: string, opgeslagen: number): void {
+  const aanwezig = new Set<string>();
+  for (let i = 0; i < window.localStorage.length; i++) {
+    const k = window.localStorage.key(i);
+    if (k && k.startsWith("tbat:") && k !== INDEX_SLEUTEL) aanwezig.add(k);
+  }
+  const index = new Map<string, number>();
+  for (const r of leesIndex()) {
+    if (aanwezig.has(r.sleutel)) index.set(r.sleutel, Number(r.opgeslagen) || 0);
+  }
+  for (const k of aanwezig) if (!index.has(k)) index.set(k, 0);
+  // De nieuwste is altijd strikt de nieuwste, ook als twee schrijfacties in
+  // dezelfde milliseconde vallen; anders is de sortering daar willekeurig.
+  let hoogste = 0;
+  for (const [k, t] of index) if (k !== zojuist && t > hoogste) hoogste = t;
+  index.set(zojuist, Math.max(opgeslagen, hoogste + 1));
+
+  const gesorteerd = [...index.entries()].sort((a, b) => b[1] - a[1]);
+  for (const [sleutel] of gesorteerd.slice(MAX_ITEMS)) {
     window.localStorage.removeItem(sleutel);
   }
+  const blijft: IndexRegel[] = gesorteerd
+    .slice(0, MAX_ITEMS)
+    .map(([sleutel, t]) => ({ sleutel, opgeslagen: t }));
+  window.localStorage.setItem(INDEX_SLEUTEL, JSON.stringify(blijft));
 }
 
 export function wisAlles(): void {

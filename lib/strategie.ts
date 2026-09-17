@@ -49,8 +49,51 @@ export const STRATEGIEEN: readonly Strategie[] = [
   },
 ];
 
-/** De standaardstand: elke beurt betaalt zichzelf terug. */
-export const STANDAARD_SLIJTAGEDEEL = 1;
+/**
+ * De standaardstand: alleen het capaciteitsverlies dat er toch komt.
+ *
+ * Stond eerst op 1 — elke beurt moest zijn eigen slijtage tegen de volle
+ * aanschafprijs terugverdienen. Dat is de voorzichtige keuze, maar voor de
+ * batterijen in deze catalogus is het de verkeerde: zes duizend beurten over
+ * vijftien kalenderjaren is vierhonderd per jaar, en zelfs zónder drempel komt
+ * de accu niet verder dan 411. De beurten zijn dus niet het schaarse goed, de
+ * kalender is dat. Elke beurt die de drempel dan tegenhoudt, is opbrengst die
+ * je laat liggen en nooit meer inhaalt.
+ *
+ * Doorgerekend op vier jaar echte prijzen, Zendure 800 Pro 2 van EUR 699:
+ *
+ *   deel 1,0   EUR 111,67 per jaar   278 beurten   contante waarde EUR 533
+ *   deel 0,5   EUR 115,57            312                          EUR 576
+ *   deel 0,2   EUR 118,74            361                          EUR 610
+ *   deel 0,0   EUR 120,09            411                          EUR 624
+ *
+ * Waarom dan 0,2 en niet 0? Omdat 0 betekent dat een beurt gratis is, en dat is
+ * ze nooit: de cellen verliezen hoe dan ook capaciteit door doorzet. Twintig
+ * procent is precies het capaciteitsverlies dat het model over de levensduur
+ * aan de beurten toerekent (lineair naar 80%), dus het is de ondergrens die
+ * nog ergens op slaat. De laatste stap van 0,2 naar 0 levert ook maar EUR 14
+ * contante waarde op tegenover vijftig extra beurten per jaar.
+ *
+ * ── Waarom 0,2 ook veilig is ────────────────────────────────────────────────
+ * Het model kent geen vervangingsmoment: de capaciteit zakt lineair door onder
+ * de 80% en er komt nooit een nieuwe accu. Dat zou een te lage drempel kunnen
+ * belonen — maar hier gebeurt dat niet, want de beurten raken niet op:
+ *
+ *   deel 1,0   278 per jaar   3.833 van 6.000 in vijftien jaar   64%
+ *   deel 0,5   312            4.294                              72%
+ *   deel 0,2   361            4.965                              83%
+ *   deel 0,0   411            5.643                              94%
+ *
+ * Op 0,2 blijft er ruim een zesde van de beurten over. De soepelheid van het
+ * financieringsmodel wordt dus nergens uitgebuit; er is niets om uit te buiten.
+ * Op 0,0 wordt die marge wél krap, en dat is de tweede reden om daar niet te
+ * gaan zitten.
+ *
+ * Voor een accu die zijn beurten wél opmaakt binnen de looptijd — meer
+ * capaciteit, minder beurten, of zwaarder gebruik — mist het model de klif van
+ * een vervanging, en is "Zuinig" de veiliger stand. Die staat er daarom nog.
+ */
+export const STANDAARD_SLIJTAGEDEEL = 0.2;
 
 /** Welke stand bij dit deel hoort, of null als het een eigen waarde is. */
 export function strategieVoor(deel: number): Strategie | null {

@@ -10,7 +10,7 @@ import {
 import { dispatchBaseline } from "../lib/model/dispatch-baseline";
 import { DAY_AHEAD_PUBLICATION_HOUR, dispatchRolling, publicationMoments } from "../lib/model/dispatch-rolling";
 import { dispatchOptimal } from "../lib/model/dispatch-optimal";
-import { breakdown as breakdownVoorTest, energyLosses, runAnalysis } from "../lib/model/analysis";
+import { afleidingVanInvoer, breakdown as breakdownVoorTest, energyLosses, pasAfleidingToe, runAnalysis } from "../lib/model/analysis";
 import { buildPriceSeries } from "../lib/model/tariff";
 import { buildResidual, solveNettingScale, summarizeResidual } from "../lib/model/residual";
 import { emptyResult, executePath, planSocPath } from "../lib/model/solver";
@@ -907,6 +907,19 @@ describe("financiële instellingen raken de natuurkunde niet", () => {
     // De contante waarde verandert natuurlijk wél: zonder rente telt later geld
     // net zo zwaar als geld van nu.
     expect(nul.finance.npvEur).toBeGreaterThan(drie.finance.npvEur);
+  });
+
+  it("komt via de afleiding op precies hetzelfde uit als een verse doorrekening", () => {
+    /**
+     * De basis van de sleutelsplitsing: een bewaard resultaat met een andere
+     * looptijd, rente, prijsstijging, degradatie of jaaropwek hoeft niet
+     * opnieuw gerekend te worden. `pasAfleidingToe` moet dan wél exact
+     * hetzelfde opleveren als `runAnalysis` met die velden.
+     */
+    const a = invoer({ discountRate: 0.03, years: 15, annualProductionKwh: 3000 });
+    const b = invoer({ discountRate: 0, years: 10, priceEscalation: 0.04, calendarFadePerYear: 0.02, annualProductionKwh: 2000 });
+    const via = pasAfleidingToe(runAnalysis(a), afleidingVanInvoer(b));
+    expect(via).toEqual(runAnalysis(b));
   });
 
   it("laat de jaaropbrengst ongemoeid bij een andere looptijd", () => {

@@ -22,10 +22,18 @@ describe("de standen", () => {
     expect(strategieVoor(0.7)).toBeNull();
   });
 
-  it("gaat standaard zuinig en komt als wearFraction in de configuratie", () => {
-    expect(STANDAARD.slijtageDeel).toBe(1);
-    expect(maakConfiguratie(STANDAARD).wearFraction).toBe(1);
-    expect(maakConfiguratie({ ...STANDAARD, slijtageDeel: 0.2 }).wearFraction).toBe(0.2);
+  it("gaat standaard op maximaal rendement en komt als wearFraction in de configuratie", () => {
+    /**
+     * De beurten zijn bij deze batterijen niet het schaarse goed: 6.000 over
+     * vijftien kalenderjaren is 400 per jaar, en zelfs zonder drempel haalt de
+     * accu er 411. Een hogere drempel laat dan opbrengst liggen die nooit meer
+     * terugkomt. Niet nul, want doorzet kost altijd capaciteit; 0,2 is precies
+     * het deel dat het model aan de beurten toerekent.
+     */
+    expect(STANDAARD.slijtageDeel).toBe(0.2);
+    expect(strategieVoor(STANDAARD.slijtageDeel)?.id).toBe("maximaal");
+    expect(maakConfiguratie(STANDAARD).wearFraction).toBe(0.2);
+    expect(maakConfiguratie({ ...STANDAARD, slijtageDeel: 1 }).wearFraction).toBe(1);
   });
 });
 

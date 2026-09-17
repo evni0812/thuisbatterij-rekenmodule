@@ -22,6 +22,7 @@ export default defineConfig({
       ["tests/tabs-uitleg.test.tsx", "jsdom"],
       ["tests/opslag.test.ts", "jsdom"],
       ["tests/strategie.test.tsx", "jsdom"],
+      ["tests/cache.test.ts", "jsdom"],
     ],
   },
   esbuild: {

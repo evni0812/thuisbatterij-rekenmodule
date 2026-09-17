@@ -1,6 +1,12 @@
 /** Berichten tussen de UI en de rekenworker. */
 
-import type { AnalysisResult, SampleDay } from "../model/analysis";
+import type {
+  AnalysisResult,
+  CurveMeting,
+  SampleDay,
+  ScenarioResult,
+  VensterUitkomst,
+} from "../model/analysis";
 import type { PeriodeReeks, Resolutie } from "../model/periode";
 import type { Afnametype } from "../data/manifest";
 import type { NettariefJaar } from "../nettarief";
@@ -93,6 +99,11 @@ export type WorkerRequest =
       config: Configuration;
       capacities: number[];
       powers: number[];
+      /**
+       * Welke rijen (indices in `capacities`) deze worker doet; zonder dit
+       * alle rijen. De pool verdeelt de rijen over de workers.
+       */
+      rijen?: number[];
     }
   | {
       /**
@@ -131,6 +142,59 @@ export type WorkerRequest =
       tot: string;
       resolutie: Resolutie;
     }
+  | {
+      /**
+       * Eén venster van de doorrekening, als taak voor de pool. De worker bouwt
+       * alleen dat venster op (`bouwInvoer` met `alleenVenster`) en stuurt de
+       * uitkomst inclusief de dispatch-arrays terug, zodat de hoofdworker ze
+       * later voor de dagkiezer kan gebruiken.
+       */
+      type: "venster";
+      id: number;
+      groep: number;
+      config: Configuration;
+      jaarIndex: number;
+      metOptimum: boolean;
+    }
+  | {
+      /** Eén meetpunt van de besparingscurve op het referentiejaar. */
+      type: "quick";
+      id: number;
+      groep: number;
+      config: Configuration;
+      jaarIndex: number;
+      fraction: number;
+    }
+  | {
+      /** De besparing met perfecte verbruiksvoorspelling op het referentiejaar. */
+      type: "perfect";
+      id: number;
+      groep: number;
+      config: Configuration;
+      jaarIndex: number;
+    }
+  | {
+      /**
+       * Voeg de vensters samen tot het volledige resultaat; alleen voor de
+       * hoofdworker, die daarna de dispatches bewaart voor de dagkiezer.
+       */
+      type: "voegSamen";
+      id: number;
+      groep: number;
+      config: Configuration;
+      uitkomsten: VensterUitkomst[];
+      metingen: CurveMeting[];
+      perfect: number | null;
+    }
+  | {
+      /** Idem voor het scenario: zonder optimum, voorbeelddagen en gat. */
+      type: "voegSamenScenario";
+      id: number;
+      groep: number;
+      config: Configuration;
+      uitkomsten: VensterUitkomst[];
+      metingen: CurveMeting[];
+    }
   | { type: "cancel" };
 
 export type WorkerResponse =
@@ -142,9 +206,15 @@ export type WorkerResponse =
       /** Index in `capacities`. */
       row: number;
       points: GridPoint[];
+      /** De laatste rij die déze worker doet; of het raster vol is, weet de pool. */
       done: boolean;
     }
   | { type: "day"; id: number; day: SampleDay | null; date: string }
-  | { type: "scenario"; id: number; result: AnalysisResult }
+  | { type: "scenario"; id: number; result: ScenarioResult }
   | { type: "periode"; id: number; periode: PeriodeReeks }
+  | { type: "venster-uitkomst"; id: number; groep: number; jaarIndex: number; uitkomst: VensterUitkomst }
+  | { type: "quick"; id: number; groep: number; meting: CurveMeting }
+  | { type: "perfect"; id: number; groep: number; besparing: number }
+  /** Een pooltaak is afgerond (ook na een fout of annulering); de worker is vrij. */
+  | { type: "klaar"; id: number }
   | { type: "error"; id: number | null; message: string };

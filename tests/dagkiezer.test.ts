@@ -317,6 +317,28 @@ describe("het resultaat over een periode via de worker", () => {
     expect(dagen.periode.totaal.savingEur).toBeCloseTo(res.periode.totaal.savingEur, 6);
   }, 60_000);
 
+  it("beantwoordt van een reeks snel opeenvolgende periodevragen alleen de laatste", async () => {
+    /**
+     * De UI kan sneller vragen dan de worker rekent, bijvoorbeeld bij het
+     * bladeren door maanden. De worker registreert elke aanvraag, geeft de
+     * beurt terug aan de berichtenlus en rekent alleen als hij daarna nog de
+     * laatste is. Eerder werden ze alle drie uitgerekend, achter elkaar.
+     */
+    ontvangen = [];
+    const cfg = config();
+    const vragen = [
+      stuur({ type: "periode", id: 31, config: cfg, van: "2025-03-01", tot: "2025-03-31", resolutie: "dag" }),
+      stuur({ type: "periode", id: 32, config: cfg, van: "2025-04-01", tot: "2025-04-30", resolutie: "dag" }),
+      stuur({ type: "periode", id: 33, config: cfg, van: "2025-05-01", tot: "2025-05-31", resolutie: "dag" }),
+    ];
+    await Promise.all(vragen);
+    const antwoorden = ontvangen.filter((m) => m.type === "periode");
+    expect(antwoorden.map((m) => (m.type === "periode" ? m.id : -1))).toEqual([33]);
+    const res = antwoorden[0]!;
+    if (res.type !== "periode") throw new Error("geen periode-antwoord");
+    expect(res.periode.vakken[0]!.dag).toBe("2025-05-01");
+  }, 60_000);
+
   it("geeft de slijtage van een dag mee in de dagcijfers", async () => {
     // Een dag waarop de batterij levert: 3 december 2025 gaat hij van vol naar leeg.
     const dag = (await vraagDag("2025-12-03"))!;

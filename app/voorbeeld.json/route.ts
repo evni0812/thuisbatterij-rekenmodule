@@ -20,11 +20,20 @@
 
 import { readFile } from "node:fs/promises";
 import path from "node:path";
-import { MODEL_VERSIE, configSleutel } from "../../lib/cache";
+import { MODEL_VERSIE, dispatchSleutel } from "../../lib/cache";
 import { standaardConfiguratie } from "../../lib/configuratie";
 import { Invoerbron } from "../../lib/data/invoer";
 import type { Ophaler } from "../../lib/data/loader";
-import { runAnalysis } from "../../lib/model/analysis";
+import { runAnalysis, runScenario } from "../../lib/model/analysis";
+import { dispatchBaseline } from "../../lib/model/dispatch-baseline";
+import {
+  RASTER_CAPACITEITEN,
+  RASTER_VERMOGENS,
+  prijsPerKwhVan,
+  rasterJaar,
+  rasterPunt,
+} from "../../lib/model/raster";
+import type { GridPoint } from "../../lib/worker/protocol";
 import { scenarioConfiguratie } from "../../lib/nettarief";
 
 export const dynamic = "force-static";
@@ -51,22 +60,47 @@ export async function GET(): Promise<Response> {
   const result = runAnalysis(invoer);
 
   // Het nettariefscenario gaat mee: het staat in het antwoordblok bovenaan, dus
-  // daar wachten is het meest zichtbaar. Vier seconden werk erbij.
-  //
-  // Het RASTER gaat bewust niet mee. Tweeënveertig volledige doorrekeningen
-  // passen niet binnen de zestig seconden die Next.js een statische route gunt;
-  // de eerste poging liep daar drie keer op stuk en brak de hele build af. En de
-  // winst zou klein zijn: het raster staat ver onder de vouw en wordt in de
-  // achtergrondworker berekend terwijl je de rest van de pagina leest.
-  // Dezelfde afleiding als in de browser (lib/nettarief.ts), anders past het
-  // bewaarde scenario nooit bij wat de pagina vraagt.
-  const scenario = runAnalysis(await bron.bouwInvoer(scenarioConfiguratie(config)));
+  // daar wachten is het meest zichtbaar. Zonder optimum en voorbeelddagen, net
+  // als in de worker; dezelfde afleiding als in de browser (lib/nettarief.ts),
+  // anders past het bewaarde scenario nooit bij wat de pagina vraagt.
+  const scenario = runScenario(await bron.bouwInvoer(scenarioConfiguratie(config)));
+
+  // Het raster gaat óók mee: tweeënveertig doorrekeningen op één jaar, een
+  // twintigtal seconden. Dat paste eerder niet in de zestig seconden die
+  // Next.js een statische route gunt en brak de Vercel-build; sinds
+  // `staticPageGenerationTimeout` op 180 staat (next.config.mjs) past het
+  // ruim. Zonder dit rekende élke bezoeker het raster alsnog zelf, ook met een
+  // treffer op de rest. De ontsnapping is er voor het geval een bouwmachine
+  // toch te traag blijkt: dan bouwt de pagina zonder raster in plaats van
+  // helemaal niet.
+  let grid: GridPoint[][] | undefined;
+  if (process.env.VOORBEELD_ZONDER_RASTER !== "1") {
+    const entry = rasterJaar(invoer);
+    const basis = dispatchBaseline(entry.window, invoer.tariff);
+    const prijsPerKwh = prijsPerKwhVan(invoer, config.investmentEur);
+    grid = RASTER_CAPACITEITEN.map((cap) =>
+      RASTER_VERMOGENS.map((kw) =>
+        rasterPunt(
+          entry,
+          basis,
+          invoer.battery,
+          invoer.tariff,
+          cap,
+          kw,
+          prijsPerKwh,
+          config.cycleLife,
+          config.wearFraction ?? 1,
+        ),
+      ),
+    );
+  }
 
   return Response.json({
     versie: MODEL_VERSIE,
-    sleutel: configSleutel(config),
+    sleutel: dispatchSleutel(config),
     gemaakt: new Date().toISOString(),
     result,
     scenario,
+    grid,
   });
 }

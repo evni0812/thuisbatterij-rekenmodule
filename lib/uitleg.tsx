@@ -13,7 +13,7 @@
 import type { ReactNode } from "react";
 import { netgebiedNaam } from "./data/manifest";
 import { centPerKwh, euro, euroPrecies, getal, jaren, kwh, procent } from "./format";
-import { referentieJaar, type AnalysisResult, type YearAnalysis } from "./model/analysis";
+import { referentieJaar, type AnalysisResult, type ScenarioResult, type YearAnalysis } from "./model/analysis";
 import { usableCapacityKwh } from "./model/battery";
 import {
   BASISTARIEF,
@@ -47,7 +47,7 @@ export interface UitlegBlok {
 export interface UitlegContext {
   result: AnalysisResult;
   /** Het nettariefscenario, als het al is doorgerekend. */
-  scenario: AnalysisResult | null;
+  scenario: ScenarioResult | null;
   /** De configuratie waar `result` bij hoort. */
   config: Configuration;
   preset: BatteryPreset;
@@ -221,6 +221,14 @@ export const UITLEG: Record<UitlegId, (ctx: UitlegContext) => UitlegBlok> = {
           {procent(config.calendarFadePerYear, 2)} capaciteitsverlies per jaar. Het
           jaar waarin de opgetelde besparing de aanschafprijs inhaalt, is de
           terugverdientijd.
+        </>,
+        <>
+          Het nettarief van {NETTARIEF_JAAR} gaat pas over een paar jaar in. De
+          terugverdientijd die hierboven staat rekent daarom de eerste jaren met
+          de tarieven van vandaag en de jaren daarna met het nieuwe tarief, op
+          dezelfde batterij die gewoon doorslijt. De twee doorrekeningen apart
+          leggen elk hún tarief over de hele levensduur en vallen daardoor te
+          hoog of te laag uit.
         </>,
       ],
       voorbeeld: {
@@ -785,6 +793,7 @@ export const UITLEG: Record<UitlegId, (ctx: UitlegContext) => UitlegBlok> = {
         <>Per kwartier komt factor × basistarief bovenop de afnameprijs. Alleen op afname: het voorstel beprijst geen invoeding.</>,
         <>De heffing wordt in dit scenario die van het scenariojaar: {centPerKwh(scenarioHeffing(jaar))} in plaats van de 13 tot 17 cent van toen, anders stapelt het een nettarief van straks op een belasting van toen.</>,
         <>De batterij plant opnieuw op de nieuwe prijzen: de winteravond wordt duurder, dus levert hij dan liever; de zomermiddag wordt gratis, dus laadt hij dan liever.</>,
+        <>De bedragen hieronder zijn de doorrekening alsof dit tarief er de hele periode al was — zo zijn de twee werelden zuiver te vergelijken. Voor de terugverdientijd telt dat niet: die staat elders op de pagina mét de ingangsdatum erin, dus de eerste jaren op het tarief van nu.</>,
       ],
       voorbeeld: scenario
         ? {

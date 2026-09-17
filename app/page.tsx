@@ -34,6 +34,7 @@ import { leesLaatste, leesProfielen, type Profiel } from "../lib/opslag";
 import { PRIJSPEILDATUM, geschatteOpwekKwh } from "../lib/presets";
 import { STANDAARD, kiesPreset, maakConfiguratie } from "../lib/configuratie";
 import { UITLEG, type UitlegContext } from "../lib/uitleg";
+import { overgangsFinance } from "../lib/overgang";
 import { useAnalysis } from "../lib/useAnalysis";
 import { leesUrl, schrijfUrl, type Instellingen } from "../lib/url-state";
 import type { Configuration } from "../lib/worker/protocol";
@@ -153,6 +154,13 @@ export default function Page() {
     setRekenNa(false);
     herbereken();
   }, [rekenNa, herbereken]);
+
+  // De terugverdientijd van een batterij die je vandaag koopt: de eerste jaren
+  // op het huidige tarief, daarna op het nettarief van 2029. Geen van beide
+  // doorrekeningen op zichzelf zegt dat — de een doet alsof het nieuwe tarief
+  // er nooit komt, de ander alsof het er al is.
+  const overgang =
+    result && scenario && toon ? overgangsFinance(result, scenario, toon) : null;
 
   // De context voor "Hoe is dit berekend?": de getallen van dít resultaat.
   const ctx: UitlegContext | null =
@@ -274,6 +282,7 @@ export default function Page() {
               <Antwoord
                 result={result}
                 scenario={scenario}
+                overgang={overgang}
                 investeringEur={toonPrijs}
                 bezig={busy}
                 heffingVanNu={toon?.useHistoricalLevy === false}
@@ -417,6 +426,7 @@ export default function Page() {
               <Nettarief
                 huidig={result}
                 scenario={scenario}
+                overgang={overgang}
                 actie={uitleg("nettarief")}
               />
               <BatterijMaat
@@ -440,7 +450,12 @@ export default function Page() {
                   actie={uitleg("beurten")}
                 />
               ) : null}
-              <Cashflow finance={result.finance} investeringEur={toonPrijs} actie={uitleg("cashflow")} />
+              <Cashflow
+                finance={result.finance}
+                overgang={overgang}
+                investeringEur={toonPrijs}
+                actie={uitleg("cashflow")}
+              />
             </>
           ) : null}
         </Paneel>

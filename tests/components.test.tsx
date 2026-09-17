@@ -32,7 +32,8 @@ import { runAnalysis, type AnalysisResult, type SampleDay } from "../lib/model/a
 import { buildResidual } from "../lib/model/residual";
 import { buildPriceSeries } from "../lib/model/tariff";
 import { PRESETS } from "../lib/presets";
-import { STANDAARD } from "../lib/configuratie";
+import { STANDAARD, maakConfiguratie } from "../lib/configuratie";
+import { overgangsFinance } from "../lib/overgang";
 
 // Zonder opruimen stapelen de gerenderde DOM's op en vinden queries meerdere
 // treffers uit eerdere tests.
@@ -125,7 +126,7 @@ beforeAll(async () => {
 
 describe("de pagina toont het antwoord", () => {
   it("noemt een bedrag per jaar en een terugverdientijd", () => {
-    render(<Antwoord result={result} scenario={null} investeringEur={1199} bezig={false} />);
+    render(<Antwoord result={result} scenario={null} overgang={null} investeringEur={1199} bezig={false} />);
     expect(screen.getByText(/per jaar/)).toBeDefined();
     // Er moet een concreet eurobedrag staan, geen placeholder.
     expect(document.body.textContent).toMatch(/€/);
@@ -139,7 +140,7 @@ describe("de pagina toont het antwoord", () => {
      * alleen in de dialoog erachter: wie alleen de kop leest, leest anders een
      * belofte waar een doorrekening staat.
      */
-    render(<Antwoord result={result} scenario={null} investeringEur={699} bezig={false} />);
+    render(<Antwoord result={result} scenario={null} overgang={null} investeringEur={699} bezig={false} />);
     const tekst = document.body.textContent ?? "";
     expect(tekst).toMatch(/had deze batterij je/);
     expect(tekst).toMatch(/Blijven de komende jaren hierop lijken|blijven lijken/);
@@ -292,7 +293,7 @@ describe("de pagina toont het antwoord", () => {
   });
 
   it("toont de cashflow met kerncijfers", () => {
-    render(<Cashflow finance={result.finance} investeringEur={1199} />);
+    render(<Cashflow finance={result.finance} overgang={null} investeringEur={1199} />);
     const tekst = document.body.textContent ?? "";
     expect(tekst).toMatch(/Terugverdientijd/);
     expect(tekst).toMatch(/Contante waarde/);
@@ -795,7 +796,7 @@ describe("het nettarief van 2029", () => {
 
   it("legt uit dat je van een vast bedrag naar volume en moment gaat", () => {
     render(
-      <Nettarief huidig={result} scenario={result} />,
+      <Nettarief huidig={result} scenario={result} overgang={null} />,
     );
     const tekst = document.body.textContent ?? "";
     expect(tekst).toMatch(/vast bedrag per jaar/);
@@ -982,13 +983,31 @@ describe("de pagina vertelt het verhaal in vier delen, in die volgorde", () => {
   });
 
   it("laat het nettarief-antwoord in het antwoordblok zien zodra het er is", () => {
-    render(
-      <Antwoord result={result} scenario={result} investeringEur={819} bezig={false} />,
+    const overgang = overgangsFinance(
+      result,
+      result,
+      maakConfiguratie(LEGE_INSTELLINGEN),
+      new Date("2026-09-17"),
     );
-    expect(document.body.textContent).toMatch(/Met het nettarief dat in 2029 ingaat/);
+    render(
+      <Antwoord
+        result={result}
+        scenario={result}
+        overgang={overgang}
+        investeringEur={819}
+        bezig={false}
+      />,
+    );
+    const tekst = document.body.textContent ?? "";
+    expect(tekst).toMatch(/Vanaf 2029 gaat het tijdsafhankelijke nettarief in/);
+    // En het getal dat voor een koper van vandaag geldt: het nieuwe tarief gaat
+    // pas in 2029 in, dus de eerste jaren draait de batterij op dat van nu.
+    expect(tekst).toMatch(/Koop je nu, dan draait de batterij eerst nog 3 jaar/);
+    expect(tekst).toMatch(/terugverdiend na/);
+
     // Zolang het scenario nog loopt staat er een plaatshouder, geen lege regel.
     cleanup();
-    render(<Antwoord result={result} scenario={null} investeringEur={819} bezig={false} />);
+    render(<Antwoord result={result} scenario={null} overgang={null} investeringEur={819} bezig={false} />);
     expect(document.body.textContent).toMatch(/wordt doorgerekend/);
   });
 });

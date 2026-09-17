@@ -15,11 +15,20 @@ import { dispatchOptimal } from "../model/dispatch-optimal";
 import { dispatchRolling } from "../model/dispatch-rolling";
 import { periodeReeks, voegReeksenSamen, type PeriodeReeks } from "../model/periode";
 import {
+  analyseWindow,
   findDay,
+  meetCurvePunt,
+  perfectVoorspellingBesparing,
   runAnalysis,
+  runScenario,
+  slijtageVoor,
+  voegSamen,
+  voegSamenScenario,
   type AnalysisInput,
   type SampleDay,
+  type VensterUitkomst,
 } from "../model/analysis";
+import { dispatchSleutel } from "../cache";
 import type { BatterySpec, DispatchResult } from "../model/types";
 import type {
   Configuration,
@@ -39,8 +48,30 @@ async function buildInput(config: Configuration): Promise<AnalysisInput> {
   return bron.bouwInvoer(config);
 }
 
-function post(msg: WorkerResponse): void {
-  self.postMessage(msg);
+function post(msg: WorkerResponse, transfer: Transferable[] = []): void {
+  self.postMessage(msg, transfer);
+}
+
+/** De ArrayBuffers van een dispatch, om zonder kopie over te dragen. */
+function buffersVan(d: DispatchResult | undefined): ArrayBuffer[] {
+  if (!d) return [];
+  return [d.gridImportKwh, d.gridExportKwh, d.chargeKwh, d.dischargeKwh, d.socKwh, d.curtailedKwh].map(
+    (a) => a.buffer as ArrayBuffer,
+  );
+}
+
+/**
+ * Voer een pooltaak uit en meld daarna altijd `klaar`, ook na een fout: anders
+ * blijft de worker in de pool voor altijd bezet.
+ */
+async function pooltaak(id: number, werk: () => Promise<void>): Promise<void> {
+  try {
+    await werk();
+  } catch (err) {
+    post({ type: "error", id, message: err instanceof Error ? err.message : String(err) });
+  } finally {
+    post({ type: "klaar", id });
+  }
 }
 
 /**
@@ -58,14 +89,16 @@ async function runGrid(
   config: Configuration,
   capacities: number[],
   powers: number[],
+  rijen: number[],
 ): Promise<void> {
   const invoer = await buildInput(config);
   const entry = rasterJaar(invoer);
   const basis = dispatchBaseline(entry.window, invoer.tariff);
   const prijsPerKwh = prijsPerKwhVan(invoer, config.investmentEur);
 
-  for (let r = 0; r < capacities.length; r++) {
+  for (let k = 0; k < rijen.length; k++) {
     if (huidigeGrid !== id) return; // een nieuwere aanvraag heeft voorrang
+    const r = rijen[k]!;
     const cap = capacities[r]!;
     const points: GridPoint[] = powers.map((kw) =>
       rasterPunt(
@@ -80,7 +113,7 @@ async function runGrid(
         config.wearFraction ?? 1,
       ),
     );
-    post({ type: "grid-row", id, row: r, points, done: r === capacities.length - 1 });
+    post({ type: "grid-row", id, row: r, points, done: k === rijen.length - 1 });
     // Even terug naar de berichtenlus, zodat een annulering ertussen kan.
     await new Promise((resolve) => setTimeout(resolve, 0));
   }
@@ -88,6 +121,23 @@ async function runGrid(
 
 /** Volgnummer van het raster dat nu mag draaien; ouder werk stopt vanzelf. */
 let huidigeGrid = -1;
+/**
+ * Volgnummers van de laatst ontvangen dag-, periode- en scenario-aanvraag.
+ *
+ * Berichten stapelen zich op als de UI sneller vraagt dan de worker rekent.
+ * Elke aanvraag registreert eerst zijn nummer en geeft dan de beurt terug aan
+ * de berichtenlus; de aanvragen die al in de wachtrij stonden registreren zich
+ * dan ook. Wie daarna niet meer de laatste is, doet niets. Zo kost een reeks
+ * van twintig aanvragen één berekening in plaats van twintig.
+ */
+let huidigeDag = -1;
+let huidigePeriode = -1;
+let huidigScenario = -1;
+
+/** Geef de beurt terug aan de berichtenlus, zodat wachtende berichten binnenkomen. */
+function adempauze(): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, 0));
+}
 
 /**
  * De laatste doorrekening, bewaard zodat elke kalenderdag opvraagbaar is zonder
@@ -106,7 +156,7 @@ let huidigeGrid = -1;
  * alsnog maken als ze ontbreken. Per jaar, en alleen het jaar dat gevraagd
  * wordt: dat is één doorrekening van ruim 400 ms in plaats van de volle analyse.
  */
-let laatste: {
+interface Doorrekening {
   sleutel: string;
   invoer: AnalysisInput;
   spec: BatterySpec;
@@ -114,12 +164,24 @@ let laatste: {
   dispatches: Map<number, DispatchResult>;
   /** Perfect-foresight dispatch per venster-index, voor de vergelijking. */
   optimaal: Map<number, DispatchResult>;
-} | null = null;
-
-/** Onderscheidt configuraties die tot een andere dispatch leiden. */
-function configSleutel(config: Configuration): string {
-  return JSON.stringify(config);
+  /** Dispatch zonder batterij per venster-index; goedkoop, maar niet gratis. */
+  basis: Map<number, DispatchResult>;
 }
+let laatste: Doorrekening | null = null;
+/**
+ * De doorrekening vóór `laatste`. Een uitstapje — een dag opvragen voor een
+ * andere configuratie — mag de dispatches van het hoofdresultaat niet wissen,
+ * anders moet het volgende dagje uit dat hoofdresultaat weer een halve seconde
+ * rekenen. Twee slots is genoeg: de getoonde en de vorige.
+ */
+let vorige: Doorrekening | null = null;
+
+/**
+ * Onderscheidt configuraties die tot een andere dispatch leiden. Financiële
+ * velden (looptijd, rente, prijsstijging, degradatie, restwaarde, jaaropwek)
+ * tellen niet mee: daarvoor hoeft geen dag opnieuw gerekend te worden.
+ */
+const configSleutel = dispatchSleutel;
 
 /**
  * Zorg dat er dispatches zijn die bij deze configuratie horen.
@@ -128,11 +190,19 @@ function configSleutel(config: Configuration): string {
  * met dezelfde slijtageprijs als drempel als in `runAnalysis` — anders zou de
  * dagweergave een andere batterij tonen dan de cijfers erboven.
  */
-async function zorgVoorInvoer(config: Configuration): Promise<NonNullable<typeof laatste>> {
+async function zorgVoorInvoer(config: Configuration): Promise<Doorrekening> {
   const sleutel = configSleutel(config);
   if (laatste && laatste.sleutel === sleutel) return laatste;
+  if (vorige && vorige.sleutel === sleutel) {
+    // Terug naar de vorige configuratie: wissel de slots, niets weggooien.
+    const t = laatste;
+    laatste = vorige;
+    vorige = t;
+    return laatste;
+  }
 
   const invoer = await buildInput(config);
+  vorige = laatste;
   laatste = {
     sleutel,
     invoer,
@@ -144,13 +214,14 @@ async function zorgVoorInvoer(config: Configuration): Promise<NonNullable<typeof
     },
     dispatches: new Map(),
     optimaal: new Map(),
+    basis: new Map(),
   };
   return laatste;
 }
 
 /** Zoek de dag op, en reken het jaar waarin hij valt door als dat nog moet. */
 function haalDag(
-  staat: NonNullable<typeof laatste>,
+  staat: Doorrekening,
   isoDate: string,
 ): SampleDay | null {
   for (let i = 0; i < staat.invoer.windows.length; i++) {
@@ -188,7 +259,7 @@ function haalDag(
  * worden (zo nodig) doorgerekend; een week over een jaargrens komt uit twee.
  */
 function haalPeriode(
-  staat: NonNullable<typeof laatste>,
+  staat: Doorrekening,
   van: string,
   tot: string,
   resolutie: Parameters<typeof periodeReeks>[7],
@@ -203,7 +274,11 @@ function haalPeriode(
       real = dispatchRolling(entry.window, staat.spec, staat.invoer.tariff);
       staat.dispatches.set(i, real);
     }
-    const base = dispatchBaseline(entry.window, staat.invoer.tariff);
+    let base = staat.basis.get(i);
+    if (!base) {
+      base = dispatchBaseline(entry.window, staat.invoer.tariff);
+      staat.basis.set(i, base);
+    }
     delen.push(periodeReeks(entry.window, base, real, staat.spec, wear, van, tot, resolutie));
   }
   return voegReeksenSamen(delen, resolutie, van, tot);
@@ -220,22 +295,99 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
     }
     if (msg.type === "cancel") {
       huidigeGrid = -1;
+      huidigScenario = -1;
       return;
     }
     if (msg.type === "grid") {
       if (!manifest) throw new Error("worker is nog niet geïnitialiseerd");
       huidigeGrid = msg.id;
-      await runGrid(msg.id, msg.config, msg.capacities, msg.powers);
+      const rijen = msg.rijen ?? msg.capacities.map((_, i) => i);
+      await pooltaak(msg.id, () => runGrid(msg.id, msg.config, msg.capacities, msg.powers, rijen));
+      return;
+    }
+    if (msg.type === "venster") {
+      if (!manifest) throw new Error("worker is nog niet geïnitialiseerd");
+      await pooltaak(msg.id, async () => {
+        const invoer = await bron.bouwInvoer(msg.config, { alleenVenster: msg.jaarIndex });
+        const { spec, volleSlijtage } = slijtageVoor(invoer);
+        const uitkomst: VensterUitkomst = analyseWindow(invoer.windows[0]!, spec, invoer.tariff, {
+          metOptimum: msg.metOptimum,
+          wearEurPerKwh: volleSlijtage,
+        });
+        post(
+          { type: "venster-uitkomst", id: msg.id, groep: msg.groep, jaarIndex: msg.jaarIndex, uitkomst },
+          [...buffersVan(uitkomst.realistic), ...buffersVan(uitkomst.optimal)],
+        );
+      });
+      return;
+    }
+    if (msg.type === "quick") {
+      if (!manifest) throw new Error("worker is nog niet geïnitialiseerd");
+      await pooltaak(msg.id, async () => {
+        const invoer = await bron.bouwInvoer(msg.config, { alleenVenster: msg.jaarIndex });
+        const { spec } = slijtageVoor(invoer);
+        const basis = dispatchBaseline(invoer.windows[0]!.window, invoer.tariff);
+        const meting = meetCurvePunt(invoer, spec, 0, msg.fraction, basis.totalCostEur);
+        post({ type: "quick", id: msg.id, groep: msg.groep, meting });
+      });
+      return;
+    }
+    if (msg.type === "perfect") {
+      if (!manifest) throw new Error("worker is nog niet geïnitialiseerd");
+      await pooltaak(msg.id, async () => {
+        const invoer = await bron.bouwInvoer(msg.config, { alleenVenster: msg.jaarIndex });
+        const { spec } = slijtageVoor(invoer);
+        const basis = dispatchBaseline(invoer.windows[0]!.window, invoer.tariff);
+        const besparing = perfectVoorspellingBesparing(invoer.windows[0]!, spec, invoer.tariff, basis.totalCostEur);
+        post({ type: "perfect", id: msg.id, groep: msg.groep, besparing });
+      });
+      return;
+    }
+    if (msg.type === "voegSamen") {
+      if (!manifest) throw new Error("worker is nog niet geïnitialiseerd");
+      await pooltaak(msg.id, async () => {
+        const t0 = performance.now();
+        const invoer = await buildInput(msg.config);
+        const result = voegSamen(invoer, msg.uitkomsten, msg.metingen, msg.perfect);
+        // De dispatches komen uit dezelfde doorrekening; de dagkiezer moet
+        // dezelfde drempel gebruiken als de doorrekening zelf.
+        vorige = laatste;
+        laatste = {
+          sleutel: configSleutel(msg.config),
+          invoer,
+          spec: slijtageVoor(invoer).spec,
+          dispatches: new Map(msg.uitkomsten.map((u, i) => [i, u.realistic])),
+          optimaal: new Map(
+            msg.uitkomsten.flatMap((u, i): [number, DispatchResult][] => (u.optimal ? [[i, u.optimal]] : [])),
+          ),
+          basis: new Map(),
+        };
+        post({ type: "result", id: msg.id, result, elapsedMs: performance.now() - t0 });
+      });
+      return;
+    }
+    if (msg.type === "voegSamenScenario") {
+      if (!manifest) throw new Error("worker is nog niet geïnitialiseerd");
+      await pooltaak(msg.id, async () => {
+        const invoer = await buildInput(msg.config);
+        post({ type: "scenario", id: msg.id, result: voegSamenScenario(invoer, msg.uitkomsten, msg.metingen) });
+      });
       return;
     }
     if (msg.type === "day") {
       if (!manifest) throw new Error("worker is nog niet geïnitialiseerd");
+      huidigeDag = msg.id;
+      await adempauze();
+      if (huidigeDag !== msg.id) return; // er ligt al een nieuwere aanvraag
       const staat = await zorgVoorInvoer(msg.config);
       post({ type: "day", id: msg.id, day: haalDag(staat, msg.date), date: msg.date });
       return;
     }
     if (msg.type === "periode") {
       if (!manifest) throw new Error("worker is nog niet geïnitialiseerd");
+      huidigePeriode = msg.id;
+      await adempauze();
+      if (huidigePeriode !== msg.id) return;
       const staat = await zorgVoorInvoer(msg.config);
       post({ type: "periode", id: msg.id, periode: haalPeriode(staat, msg.van, msg.tot, msg.resolutie) });
       return;
@@ -254,6 +406,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       });
 
       // De dagkiezer moet dezelfde drempel gebruiken als de doorrekening zelf.
+      vorige = laatste;
       laatste = {
         sleutel: configSleutel(msg.config),
         invoer,
@@ -265,6 +418,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         },
         dispatches: new Map(dispatches.map((d, i) => [i, d])),
         optimaal: new Map(optimaal.map((d, i) => [i, d])),
+        basis: new Map(),
       };
 
       post({ type: "result", id: msg.id, result, elapsedMs: performance.now() - t0 });
@@ -275,16 +429,19 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       // `laatste` bewust niet aan: de dagkiezer hoort bij het hoofdresultaat, en
       // die zou anders stilletjes op het scenario gaan wijzen.
       if (!manifest) throw new Error("worker is nog niet geïnitialiseerd");
+      huidigScenario = msg.id;
+      await adempauze();
+      // Een annulering of een nieuwere aanvraag die intussen binnenkwam wint.
+      if (huidigScenario !== msg.id) return;
       const invoer = await buildInput(msg.config);
-      post({ type: "scenario", id: msg.id, result: runAnalysis(invoer) });
+      // Zonder optimum, voorbeelddagen en gat: de pagina leest daar niets van
+      // in het scenario, en het scheelt vijf jaarsimulaties.
+      post({ type: "scenario", id: msg.id, result: runScenario(invoer) });
     }
   } catch (err) {
     post({
       type: "error",
-      id:
-        msg.type === "analyse" || msg.type === "grid" || msg.type === "day" || msg.type === "periode"
-          ? msg.id
-          : null,
+      id: "id" in msg ? msg.id : null,
       message: err instanceof Error ? err.message : String(err),
     });
   }

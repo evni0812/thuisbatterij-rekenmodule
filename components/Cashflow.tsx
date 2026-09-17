@@ -10,6 +10,7 @@
 
 import { useState, type ReactNode } from "react";
 import type { FinanceResult } from "../lib/model/finance";
+import type { Overgang } from "../lib/overgang";
 import { euro, jaren, procent } from "../lib/format";
 import { Figure, Grafiek, Raster, Trefvlak, kiesTicks, useTip } from "./chart-parts";
 
@@ -18,17 +19,30 @@ const H = 240;
 const MARGE = { boven: 16, rechts: 16, onder: 34, links: 64 };
 
 export function Cashflow({
-  finance,
+  finance: huidigeFinance,
+  overgang,
   investeringEur,
   actie,
 }: {
   finance: FinanceResult;
+  /**
+   * De businesscase met de tariefwissel van 2029 erin. Zodra die er is, tekent
+   * de lijn dié — anders staat hier een andere terugverdientijd dan boven aan
+   * de pagina, en dat is precies het soort tegenspraak waar een lezer op
+   * afhaakt.
+   */
+  overgang: Overgang | null;
   investeringEur: number;
   /** De knop "Hoe is dit berekend?" in de kop. */
   actie?: ReactNode;
 }) {
   const { kader, tip, toon, wis } = useTip();
   const [aangewezen, setAangewezen] = useState<number | null>(null);
+  const finance = overgang?.finance ?? huidigeFinance;
+  const wisseljaar =
+    overgang && overgang.jarenOpHuidigTarief > 0 && overgang.jarenOpHuidigTarief < 25
+      ? overgang.jarenOpHuidigTarief
+      : null;
   const cf = finance.cashflows;
   if (cf.length === 0) return null;
 
@@ -68,9 +82,17 @@ export function Cashflow({
         <>
           Eén doorgerekend jaar, herhaald over de levensduur: wat je tot dat
           moment in totaal hebt terugverdiend, met de aanschafprijs als
-          startpunt. De lijn telt de euro's zoals je ze krijgt. De contante
-          waarde hieronder trekt daar de rente vanaf die je op dat geld had
-          kunnen maken. De besparing loopt terug naarmate de batterij slijt.
+          startpunt. De lijn telt de euro's zoals je ze krijgt.
+          {wisseljaar !== null ? (
+            <>
+              {" "}
+              Bij de stippellijn gaat het nieuwe nettarief in en wordt de
+              jaaropbrengst hoger; daarna loopt hij steiler.
+            </>
+          ) : null}{" "}
+          De contante waarde hieronder trekt de rente eraf die je op dat geld
+          had kunnen maken. De besparing loopt terug naarmate de batterij
+          slijt.
         </>
       }
     >
@@ -122,6 +144,28 @@ export function Cashflow({
             strokeLinejoin="round"
             strokeLinecap="round"
           />
+
+          {wisseljaar !== null && wisseljaar <= cf.length ? (
+            <g>
+              <line
+                x1={x(wisseljaar)}
+                x2={x(wisseljaar)}
+                y1={MARGE.boven}
+                y2={MARGE.boven + plotH}
+                stroke="var(--ac)"
+                strokeWidth={1.5}
+                strokeDasharray="2 4"
+              />
+              <text
+                x={x(wisseljaar) + 6}
+                y={MARGE.boven + plotH - 6}
+                className="mark-label op-lijn"
+                fill="var(--ac)"
+              >
+                nettarief {overgang!.ingangsjaar}
+              </text>
+            </g>
+          ) : null}
 
           {breakEven !== null && breakEven <= cf.length ? (
             <g>

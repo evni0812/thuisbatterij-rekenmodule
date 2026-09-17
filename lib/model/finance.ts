@@ -31,6 +31,20 @@ export interface SavingCurvePoint {
 export interface FinanceInput {
   /** Steunpunten van de besparingscurve, oplopend in capacityFraction. */
   curve: SavingCurvePoint[];
+  /**
+   * Een tweede besparingscurve die pas vanaf een bepaald jaar geldt, en het
+   * jaar waarin dat gebeurt (1-gebaseerd: 4 betekent vanaf het vierde jaar).
+   *
+   * Hiervoor is één geval: het tijdsafhankelijke nettarief gaat pas in 2029 in.
+   * Koop je nu een batterij, dan draait hij de eerste jaren op het huidige
+   * tarief en pas daarna op het nieuwe. De terugverdientijd van het scenario
+   * alleen is dus te optimistisch — die doet alsof het nieuwe tarief er vanaf
+   * dag één is — en die van vandaag te pessimistisch. De waarheid ligt
+   * ertussen, en dat is precies wat deze twee velden uitrekenen.
+   */
+  curveLater?: SavingCurvePoint[];
+  /** Vanaf welk analysejaar `curveLater` geldt, 1-gebaseerd. */
+  curveLaterVanafJaar?: number;
   investmentEur: number;
   /** Aantal jaren dat de analyse beslaat. */
   years: number;
@@ -130,7 +144,14 @@ export function computeFinance(input: FinanceInput): FinanceResult {
       input.calendarFadePerYear,
       input.cycleLife,
     );
-    const { savingEur, cyclesPerYear } = interpolateCurve(input.curve, fraction);
+    // Welke tariefwereld geldt er in dit jaar? De degradatie loopt door over
+    // de grens heen: het is dezelfde batterij, alleen de prijzen veranderen.
+    const curveNu =
+      input.curveLater && input.curveLaterVanafJaar !== undefined &&
+      y + 1 >= input.curveLaterVanafJaar
+        ? input.curveLater
+        : input.curve;
+    const { savingEur, cyclesPerYear } = interpolateCurve(curveNu, fraction);
 
     // Alle energieprijzen stijgen mee, dus de besparing schaalt evenredig. Het
     // oude model liet opslag en terugleverkosten nominaal staan en escaleerde

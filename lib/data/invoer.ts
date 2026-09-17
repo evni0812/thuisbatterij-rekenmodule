@@ -98,6 +98,39 @@ function lowerBound(axis: Float64Array, target: number): number {
   return lo;
 }
 
+/** De grenzen van één venster, af te leiden uit het manifest alleen. */
+export interface VensterGrens {
+  year: number;
+  firstDay: string;
+  lastDay: string;
+  isFullYear: boolean;
+}
+
+/**
+ * Welke vensters een configuratie oplevert, zonder één profiel te laden.
+ *
+ * Dit is dezelfde afleiding als `bouwInvoer`, maar dan alleen uit het manifest,
+ * zodat de hoofdthread weet hoeveel vensters er zijn en welke het referentiejaar
+ * is voordat hij het werk over de workers verdeelt. `bouwInvoer` met
+ * `alleenVenster` levert exact `windows[k]` van de volledige invoer.
+ */
+export function vensterGrenzen(m: Manifest, config: Configuration): VensterGrens[] {
+  const type: Afnametype = config.afnametype ?? "AMI";
+  const profielen = profielenVan(m, type);
+  return yearsInRange(m, config.domain, config.from, config.to, type).map((year) => {
+    const info = profielen[config.domain]![String(year)]!;
+    const firstDay = info.eerste_dag > config.from ? info.eerste_dag : config.from;
+    const lastDay = info.laatste_dag < config.to ? info.laatste_dag : config.to;
+    return {
+      year,
+      firstDay,
+      lastDay,
+      isFullYear:
+        firstDay === `${year}-01-01` && lastDay === `${year}-12-31` && info.volledig_jaar,
+    };
+  });
+}
+
 /** Het meest recente jaar waarvoor er prijzen zijn. */
 export function laatstePrijsjaar(m: Manifest): string {
   return Object.keys(m.prijzen).sort().at(-1)!;
@@ -190,7 +223,22 @@ export class Invoerbron {
     return scale;
   }
 
-  async bouwInvoer(config: Configuration): Promise<AnalysisInput> {
+  /**
+   * @param opties.alleenVenster  bouw alleen venster k van de volledige invoer,
+   *   door het bereik tot dat venster te vernauwen. Een helper-worker laadt zo
+   *   alleen zijn eigen jaar, en krijgt bit-voor-bit dezelfde reeksen als
+   *   `windows[k]` van de volledige invoer: dezelfde snede uit hetzelfde
+   *   profiel, en de schaalfactoren hangen niet van het bereik af.
+   */
+  async bouwInvoer(
+    config: Configuration,
+    opties: { alleenVenster?: number } = {},
+  ): Promise<AnalysisInput> {
+    if (opties.alleenVenster !== undefined) {
+      const grens = vensterGrenzen(this.gegevens, config)[opties.alleenVenster];
+      if (!grens) throw new Error(`venster ${opties.alleenVenster} bestaat niet voor deze configuratie`);
+      return this.bouwInvoer({ ...config, from: grens.firstDay, to: grens.lastDay });
+    }
     const m = this.gegevens;
     const type: Afnametype = config.afnametype ?? "AMI";
     const jaren = yearsInRange(m, config.domain, config.from, config.to, type);

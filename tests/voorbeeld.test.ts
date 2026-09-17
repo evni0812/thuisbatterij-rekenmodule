@@ -15,8 +15,9 @@
  */
 import { describe, expect, it } from "vitest";
 import { GET } from "../app/voorbeeld.json/route";
-import { MODEL_VERSIE, configSleutel } from "../lib/cache";
+import { MODEL_VERSIE, dispatchSleutel } from "../lib/cache";
 import { STANDAARD, standaardConfiguratie } from "../lib/configuratie";
+import { RASTER_CAPACITEITEN, RASTER_VERMOGENS } from "../lib/model/raster";
 import type { AnalysisResult } from "../lib/model/analysis";
 
 interface Payload {
@@ -33,7 +34,7 @@ const payload: Payload = await (await GET()).json();
 describe("het vooruitgerekende antwoord", () => {
   it("draagt de sleutel die de browser voor de standaardinvoer berekent", () => {
     // Dit is de hele afspraak. Faalt deze regel, dan is de preload dood gewicht.
-    expect(payload.sleutel).toBe(configSleutel(standaardConfiguratie()));
+    expect(payload.sleutel).toBe(dispatchSleutel(standaardConfiguratie()));
     expect(payload.versie).toBe(MODEL_VERSIE);
     // De sleutel draagt het versienummer, zodat een modelwijziging het bestand
     // vanzelf ongeldig maakt.
@@ -68,16 +69,24 @@ describe("het vooruitgerekende antwoord", () => {
      * Het scenario staat in het antwoordblok bovenaan; daarop wachten is het
      * meest zichtbaar. Het kost vier seconden bij de build en die zijn het waard.
      *
-     * Het raster zit er bewust NIET in. Tweeënveertig volledige doorrekeningen
-     * passen niet binnen de zestig seconden die Next.js een statische route
-     * gunt — de eerste poging brak daar de hele Vercel-build op af. Het raster
-     * staat ver onder de vouw en wordt in de achtergrondworker berekend.
+     * Het raster zit er sinds september 2026 óók in: met de generatietimeout
+     * op 180 seconden passen de tweeënveertig doorrekeningen, en anders rekende
+     * elke bezoeker het raster alsnog zelf. `VOORBEELD_ZONDER_RASTER=1` laat
+     * het weg als een bouwmachine te traag blijkt.
      */
     expect(payload.scenario.averageSavingEur).toBeGreaterThan(
       payload.result.averageSavingEur,
     );
     expect(payload.scenario.finance.paybackYears).not.toBeNull();
-    expect((payload as { grid?: unknown }).grid).toBeUndefined();
+    const grid = (payload as { grid?: { savingEur: number }[][] }).grid!;
+    expect(grid).toHaveLength(RASTER_CAPACITEITEN.length);
+    for (const rij of grid) expect(rij).toHaveLength(RASTER_VERMOGENS.length);
+    // Meer capaciteit levert bij gelijk vermogen niet structureel minder op.
+    for (let k = 0; k < RASTER_VERMOGENS.length; k++) {
+      for (let r = 1; r < RASTER_CAPACITEITEN.length; r++) {
+        expect(grid[r]![k]!.savingEur).toBeGreaterThanOrEqual(grid[r - 1]![k]!.savingEur * 0.97 - 0.01);
+      }
+    }
   });
 
   it("overleeft de reis door JSON", () => {

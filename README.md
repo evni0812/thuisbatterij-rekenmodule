@@ -47,6 +47,20 @@ gemount zodat het dagprofiel zijn gekozen dag houdt.
 | **Wat als** | En als het anders was? | het nettarief, een andere maat, over de looptijd |
 | **Methode** | Waar komen de cijfers vandaan? | verantwoording, controlegegevens, "wat we niet weten" |
 
+**De terugverdientijd kent de ingangsdatum van het nettarief.** Het
+tijdsafhankelijke tarief gaat pas in 2029 in, dus een batterij die je vandaag
+koopt draait eerst nog een paar jaar op de tarieven van nu. `lib/overgang.ts`
+rekent dat geval: `computeFinance` accepteert een tweede besparingscurve en het
+jaar waarin die ingaat, en leest per jaar de goede curve af terwijl de
+degradatie gewoon doorloopt — het is dezelfde batterij, alleen de prijzen
+veranderen. Dat kost geen extra simulatie, want beide doorrekeningen leveren al
+een curve van besparing tegen resterende capaciteit op. Het antwoord bovenaan,
+de kerncijfers bij het nettarief en de cashflowgrafiek gebruiken alle drie dit
+getal; in de grafiek staat het omslagjaar als stippellijn. De twee losse
+doorrekeningen leggen elk hún tarief over de hele levensduur en zijn dus te
+pessimistisch respectievelijk te optimistisch — die blijven staan als
+vergelijking van twee tariefwerelden, niet als voorspelling.
+
 **De kerncijfers leiden met percentages.** Eigen verbruik, onafhankelijkheid
 van het net en afname in de piekuren staan vooraan, elk met de verandering
 eronder in procentpunten — van 26% naar 35% is negen procentpunt, niet "35%
@@ -142,11 +156,30 @@ besparing afgetrokken, maar hij is overal zichtbaar: als tegel bij de cijfers
 rekent met dezelfde prijs als drempel: is de slijtage hoger dan wat een beurt
 oplevert, dan handelt de batterij niet.
 
-**Twee workers.** Scenario en raster draaien automatisch, zonder knop. Samen
-kosten ze een seconde of vijfentwintig; in één worker zou de dagkiezer al die
-tijd niet reageren. `lib/useAnalysis.ts` start daarom naast de hoofdworker een
-tweede, uit hetzelfde bestand: de hoofdworker doet de analyse en de dagkiezer,
-de achtergrondworker het scenario en het raster. De rasterlogica staat in
+**Een pool van workers.** Eén doorrekening bestaat uit onafhankelijke stukken:
+elk profieljaar apart (rolling én optimum), twee curvepunten en één run met
+perfecte voorspelling; het scenario idem zonder optimum; het raster in rijen.
+`lib/useAnalysis.ts` verdeelt die stukken via `lib/worker/pool.ts` over
+`min(4, kernen − 1)` workers uit hetzelfde bestand. Worker 0 is de hoofdworker:
+die voegt samen (`voegSamen` in `lib/model/analysis.ts`), bewaart de dispatches
+en beantwoordt de dagkiezer en de periodegrafiek; de rest doet vensters,
+curvepunten en rasterrijen. De samenvoeging telt in de volgorde van de vensters
+op, ongeacht welke worker het eerst klaar was, en geeft daardoor bit-voor-bit
+hetzelfde als de doorlopende `runAnalysis` (bewaakt in `tests/pool.test.ts`).
+Achter elkaar kostte de analyse vier seconden en scenario plus raster nog eens
+eenentwintig; met vier workers is het kritieke pad één profieljaar plus het
+samenvoegen, en staat het raster na een paar seconden.
+
+**Wat er niet meer gerekend wordt.** Het scenario leest de pagina alleen op
+besparing, kerncijfers, financiën en curve; `runScenario` slaat het optimum, de
+voorbeelddagen en het gat over (vijf jaarsimulaties minder). De cachesleutel
+(`dispatchSleutel` in `lib/cache.ts`) omvat alleen de velden die de dispatch
+veranderen; looptijd, rente, prijsstijging, degradatie, restwaarde en jaaropwek
+worden bij het lezen opnieuw afgeleid met `pasAfleidingToe`, zodat zo'n schuif
+geen seconde rekent. `VELDKLASSE` dwingt via het type af dat elk nieuw veld van
+`Configuration` wordt ingedeeld. De bundels in localStorage (maximaal zes, met
+een indexsleutel zodat opruimen niets hoeft te parsen) horen dus bij een
+dispatch, niet bij een exacte configuratie. De rasterlogica staat in
 `lib/model/raster.ts`, gedeeld tussen worker en build.
 
 ## Het standaardantwoord staat klaar
@@ -157,13 +190,14 @@ iedereen hetzelfde — er zit geen willekeur in het model — dus het wordt bij 
 build één keer uitgerekend en als `/voorbeeld.json` meegeleverd, samen met het
 nettariefscenario dat in het antwoordblok staat.
 
-Het **raster** van batterijmaten zit er bewust niet in. Tweeënveertig volledige
-doorrekeningen passen niet binnen de zestig seconden die Next.js een statische
-route gunt; de eerste poging brak daar de hele Vercel-build op af, drie keer
-opnieuw geprobeerd en toen gestopt. Het raster staat ver onder de vouw en wordt
-in de achtergrondworker berekend terwijl je de rest van de pagina leest.
-`staticPageGenerationTimeout` staat op 180 zodat het scenario wél de ruimte
-heeft.
+Het **raster** van batterijmaten zit er sinds september 2026 ook in. Eerder
+niet: tweeënveertig doorrekeningen pasten niet binnen de zestig seconden die
+Next.js een statische route gunt en braken de Vercel-build. Met
+`staticPageGenerationTimeout` op 180 past het ruim, en zonder het raster in het
+bestand rekende elke bezoeker het alsnog zelf (zeventien seconden in de
+achtergrondworker), ook bij een treffer op de rest. `VOORBEELD_ZONDER_RASTER=1`
+bij de build laat het weg als een bouwmachine te traag blijkt; de pagina bouwt
+dan zonder raster in plaats van helemaal niet.
 
 De route-handler in `app/voorbeeld.json/route.ts` draait tijdens de build en
 leest de assets van schijf in plaats van via `fetch`. Daarom neemt
@@ -358,9 +392,44 @@ hangt af van de vraag of de beurten vóór de kalender opraken, en dat weet je p
 achteraf; daarom kiest de gebruiker, en laat het financieringsmodel via
 `remainingCapacityFraction` (de zwaarste van kalender- en cyclusslijtage) zien
 wat de keuze doet met de terugverdientijd. Op de maximale stand is de
-terugverdientijd van de Zendure korter (5,5 tegen 5,9 jaar), omdat hij aan zijn
-kalender sterft en de extra beurten gratis waren; bij een batterij die wél aan
-zijn beurten sterft, slaat dat om.
+terugverdientijd van de Zendure korter, omdat hij aan zijn kalender sterft en de
+extra beurten gratis waren; bij een batterij die wél aan zijn beurten sterft,
+slaat dat om.
+
+**De standaard staat op 20%, niet op 100%.** Doorgerekend op vier jaar echte
+prijzen, Zendure 800 Pro 2 van EUR 699:
+
+| Deel van de slijtageprijs | Besparing/jaar | Beurten/jaar | Terugverdiend | Contante waarde |
+|---|---|---|---|---|
+| 1,0 — Zuinig | € 111,67 | 278 | 6,5 jr | € 533 |
+| 0,5 — Gebalanceerd | € 115,57 | 312 | 6,3 jr | € 576 |
+| **0,2 — Maximaal** | **€ 118,74** | **361** | **6,1 jr** | **€ 610** |
+| 0,0 — geen drempel | € 120,09 | 411 | 6,0 jr | € 624 |
+
+Zes duizend beurten over vijftien kalenderjaren is vierhonderd per jaar, en zelfs
+zonder drempel haalt de accu er 411. De beurten zijn dus niet het schaarse goed;
+de kalender is dat. Elke beurt die een hogere drempel tegenhoudt, is opbrengst
+die je laat liggen en niet inhaalt. Niet nul, want doorzet kost altijd
+capaciteit: 0,2 is precies het deel dat `remainingCapacityFraction` aan de
+beurten toerekent (lineair naar 80%), en de laatste stap naar nul levert nog
+maar € 14 contante waarde op tegen vijftig extra beurten per jaar.
+
+Het model kent **geen vervangingsmoment**: de capaciteit zakt lineair door onder
+de 80% en er komt nooit een nieuwe accu. Dat zou een te lage drempel kunnen
+belonen, maar hier gebeurt dat niet — de beurten raken niet op. Over vijftien
+jaar verbruikt de Zendure 3.833 van zijn 6.000 beurten op de zuinige stand
+(64%), 4.965 op 20% (83%) en 5.643 zonder drempel (94%). Op 20% blijft er ruim
+een zesde over; de soepelheid van het financieringsmodel wordt dus nergens
+uitgebuit. Op 0% wordt die marge krap, en dat is de tweede reden om daar niet te
+gaan zitten.
+
+Voor een accu die zijn beurten wél opmaakt binnen de looptijd mist het model die
+klif, en is "Zuinig" de veiliger stand. Daarom blijft hij kiesbaar.
+
+Let op bij het lezen van de cijfers: de slijtagepost is **geen kostenpost naast
+de besparing**. Hij is de aanschafprijs, verdeeld over de beurten, en de
+aanschafprijs zit al volledig in de terugverdientijd. "Besparing min slijtage"
+telt die prijs dus twee keer en is geen betekenisvol getal.
 
 **De figuur "Laadbeurten over de levensduur"** (`components/Laadbeurten.tsx`, in
 het tabblad Wat als vóór de cashflow) maakt die afweging zichtbaar: de
@@ -571,7 +640,7 @@ app/                    pagina, thema
 components/             invoer en visualisaties
 lib/model/              solver, strategieën, batterij, tarieven, financiën
 lib/data/               loader, DST-veilige tijdas, manifest
-lib/worker/             rekenworker en protocol
+lib/worker/             rekenworker, pool en protocol
 public/data/            manifest.json + binaire assets
 scripts/                Python, alleen voor het verversen van data
 tests/                  invarianten en integratietests
@@ -616,15 +685,23 @@ dag per IP toe; alle netgebieden over de volle periode kost er ongeveer 700.
 DYNAMIC loopt twee dagen achter en recente dagen kunnen nog wijzigen, dus ververs
 de laatste maanden opnieuw.
 
-Prestaties: ongeveer 450 ms voor de realistische strategie en 270 ms voor het
-optimum per profieljaar; vier jaar met beide strategieën, de besparingscurve en
-de ontleding van het gat met het optimum in ruim drie en een halve seconde. Er
-is geen proefrun meer om de slijtagedrempel te bepalen: die is de volle prijs en
-staat vooraf vast, zodat elk jaar en elk rasterpunt precies één realistische
-doorrekening kost.
+Prestaties: ongeveer 410 ms voor de realistische strategie en 270 tot 325 ms
+voor het optimum per profieljaar (`tests/pipeline.test.ts` drukt het af). Eén
+doorlopende `runAnalysis` over vier vensters is elf jaarsimulaties, ruim 3,9 s;
+in de browser lopen die stukken parallel over de pool. Er is geen proefrun meer
+om de slijtagedrempel te bepalen: die staat vooraf vast, zodat elk jaar en elk
+rasterpunt precies één realistische doorrekening kost.
 
 De binnenste lus van de solver is bewust niet verder geoptimaliseerd: delingen
 vervangen door vermenigvuldigingen gaf tot 30% winst maar veranderde het antwoord
 met twaalf cent per jaar, doordat het laatste bit een keuze tussen bijna gelijke
-kandidaten kan kantelen. Wie meer snelheid wil, haalt die uit parallelle workers
-per profieljaar, niet uit de rekenkunde.
+kandidaten kan kantelen. Bit-identieke ingrepen zijn ook geprobeerd, in
+september 2026: de t-invariante grootheden (lading, grenzen en tussenwaarden
+per niveau) vooraf in tabellen en de werkbuffers hergebruiken over de 366
+plannen van een jaar. Aantoonbaar hetzelfde antwoord, maar gemeten trager
+(365 plannen 371 → 401 ms, het jaarplan van het optimum 258 → 415 ms): de
+geheugenlezingen kosten meer dan de vermenigvuldigingen die ze uitsparen. Het
+harnas dat dit bewijst staat in `tests/solver-referentie.test.ts`, met een
+letterlijke kopie van de solver en vastgelegde kosten en hashes van de
+dispatch; wie het nog eens probeert, heeft daarmee de meetlat. De snelheid komt
+uit parallelle workers per profieljaar, niet uit de rekenkunde.

@@ -3,36 +3,53 @@
 /**
  * React-hook om de rekenworkers aan te sturen.
  *
- * Twee workers, uit hetzelfde bestand:
+ * Een pool van workers (lib/worker/pool.ts), zoveel als de machine kernen
+ * heeft min één, met een maximum van vier:
  *
- *   hoofdworker        de analyse en de dagkiezer
- *   achtergrondworker  het nettariefscenario en het raster van batterijmaten
+ *   worker 0     de hoofdworker: voegt samen, bewaart de dispatches en
+ *                beantwoordt de dagkiezer en de periodegrafiek
+ *   worker 1…n   helpers: profieljaren, curvepunten en rasterrijen
  *
- * ── Waarom twee ─────────────────────────────────────────────────────────────
- * Scenario en raster draaien nu automatisch, zonder knop. Samen kosten ze een
- * seconde of vijfentwintig. In één worker zou de dagkiezer al die tijd dood
- * zijn: de worker is bezet. Met een tweede worker blijft de hoofdworker vrij en
- * reageert de dagkiezer direct, terwijl de achtergrond doorrekent. Beide laden
- * dezelfde assets; dat is twee keer zestien megabyte in het geheugen, en dat
- * mag.
+ * ── Waarom een pool ─────────────────────────────────────────────────────────
+ * Eén doorrekening bestaat uit onafhankelijke stukken: elk profieljaar apart
+ * (rolling en optimum), twee curvepunten, één run met perfecte voorspelling.
+ * Achter elkaar in één worker kostte dat vier seconden; het scenario nog eens
+ * vier, en het raster van tweeënveertig maten zeventien. Verdeeld over vier
+ * workers wordt het kritieke pad één profieljaar plus het samenvoegen. De
+ * samenvoeging (`voegSamen` in lib/model/analysis.ts) telt in de volgorde van
+ * de vensters op, ongeacht welke worker het eerst klaar was, en levert
+ * daardoor bit-voor-bit hetzelfde antwoord als de doorlopende `runAnalysis`.
  *
- * Elke aanvraag krijgt een volgnummer zodat een laat antwoord op een inmiddels
- * achterhaalde configuratie genegeerd kan worden. Zonder die controle zou snel
- * schuiven met een regelaar de resultaten door elkaar kunnen gooien.
+ * Elke aanvraag krijgt een volgnummer en hoort bij een groep, zodat een laat
+ * antwoord op een inmiddels achterhaalde configuratie genegeerd kan worden.
+ * Zonder die controle zou snel schuiven met een regelaar de resultaten door
+ * elkaar kunnen gooien.
  */
 
 import { useCallback, useEffect, useRef, useState } from "react";
-import { configSleutel, leesCache, schrijfCache } from "./cache";
-import type { AnalysisResult } from "./model/analysis";
+import { dispatchSleutel, leesCache, schrijfCache } from "./cache";
+import { vensterGrenzen } from "./data/invoer";
 import type { Manifest } from "./data/manifest";
-import type { SampleDay } from "./model/analysis";
+import {
+  afleidingVanConfiguratie,
+  curveFracties,
+  pasAfleidingToe,
+  referentieIndexVan,
+  type AnalysisResult,
+  type CurveMeting,
+  type SampleDay,
+  type ScenarioResult,
+  type VensterUitkomst,
+} from "./model/analysis";
 import type { PeriodeReeks, Resolutie } from "./model/periode";
 import { RASTER_CAPACITEITEN, RASTER_VERMOGENS } from "./model/raster";
+import type { DispatchResult } from "./model/types";
 import {
   NETTARIEF_JAAR,
   scenarioConfiguratie,
   type NettariefJaar,
 } from "./nettarief";
+import { WorkerPool, poolGrootte } from "./worker/pool";
 import type {
   Configuration,
   GridPoint,
@@ -90,7 +107,7 @@ export interface AnalysisState {
   periodeBezig: boolean;
   vraagPeriode: (van: string, tot: string, resolutie: Resolutie) => void;
   /** Uitkomst van het nettariefscenario, of null zolang het nog loopt. */
-  scenario: AnalysisResult | null;
+  scenario: ScenarioResult | null;
   /** Of het scenario ook op teruglevering heft. */
   scenarioOpTeruglevering: boolean;
   /** Reken het scenario opnieuw met of zonder heffing op teruglevering. */
@@ -114,19 +131,20 @@ const DEBOUNCE_MS = 180;
  * Wie de tool opent zonder iets in te stellen, zag eerst vier seconden een leeg
  * scherm terwijl de worker vier profieljaren doorrekende. Dat antwoord is voor
  * iedereen hetzelfde, dus het staat nu als bestand klaar — inclusief het
- * scenario en het raster, die anders nog eens vijfentwintig seconden zouden
- * kosten.
+ * scenario en het raster.
  *
  * De sleutel bepaalt of het bruikbaar is. Hij bevat zowel het modelversienummer
- * als een hash van de configuratie, dus een bezoeker met een afwijkende invoer
- * of een oud bestand valt vanzelf terug op zelf rekenen.
+ * als een hash van de dispatch-velden van de configuratie, dus een bezoeker met
+ * een afwijkende invoer of een oud bestand valt vanzelf terug op zelf rekenen.
+ * Wie alleen een financiële instelling wijzigde, krijgt het antwoord wél, met
+ * de afleiding opnieuw gedaan.
  */
 interface Vooruitgerekend {
   versie: number;
   sleutel: string;
   gemaakt: string;
   result: AnalysisResult;
-  scenario?: AnalysisResult;
+  scenario?: ScenarioResult;
   grid?: GridPoint[][];
 }
 
@@ -158,16 +176,48 @@ function volRaster(rows: GridPoint[][]): GridState {
   };
 }
 
+/** De ArrayBuffers van een dispatch, om zonder kopie door te geven. */
+function buffersVan(d: DispatchResult | undefined): ArrayBuffer[] {
+  if (!d) return [];
+  return [d.gridImportKwh, d.gridExportKwh, d.chargeKwh, d.dischargeKwh, d.socKwh, d.curtailedKwh].map(
+    (a) => a.buffer as ArrayBuffer,
+  );
+}
+
+/**
+ * Eén doorrekening in stukken: de vensters, de curvepunten en (alleen voor de
+ * hoofdanalyse) de run met perfecte voorspelling. Zodra alles binnen is gaat
+ * het naar de hoofdworker om samen te voegen.
+ */
+interface Groep {
+  soort: "analyse" | "scenario";
+  nummer: number;
+  /** De configuratie van de gebruiker; de sleutel van cache en state. */
+  cfg: Configuration;
+  /** De configuratie die de workers doorrekenen (voor het scenario een andere). */
+  werkCfg: Configuration;
+  uitkomsten: (VensterUitkomst | null)[];
+  metingen: CurveMeting[];
+  verwachtMetingen: number;
+  wilPerfect: boolean;
+  perfect: number | null;
+  perfectBinnen: boolean;
+  /** Ids van alle taken van deze groep, om fouten te kunnen toewijzen. */
+  taakIds: Set<number>;
+  /** Het id van de samenvoegtaak, zodra die is geplaatst. */
+  samenvoegId: number | null;
+  start: number;
+}
+
 type InterneState = Omit<
   AnalysisState,
   "vraagDag" | "wisDag" | "herbereken" | "zetScenarioOpTeruglevering" | "zetScenarioJaar" | "vraagPeriode"
 >;
 
 export function useAnalysis(config: Configuration | null): AnalysisState {
-  const hoofdRef = useRef<Worker | null>(null);
-  const achtergrondRef = useRef<Worker | null>(null);
+  const poolRef = useRef<WorkerPool | null>(null);
+  const manifestRef = useRef<Manifest | null>(null);
   const nextId = useRef(0);
-  const pendingId = useRef<number | null>(null);
 
   const [state, setState] = useState<InterneState>({
     manifest: null,
@@ -192,93 +242,287 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
   const getoondVoor = useRef<string | null>(null);
   /** De configuratie van de lopende of laatst verstuurde aanvraag. */
   const laatsteConfig = useRef<Configuration | null>(null);
-  const gridId = useRef(0);
+  const groepTeller = useRef(0);
+  const groepen = useRef(new Map<number, Groep>());
+  /** De groep waarvan het antwoord nog wordt verwacht, per soort. */
+  const analyseGroep = useRef<number | null>(null);
+  const scenarioGroep = useRef<number | null>(null);
+  /** De ids van de rastertaken die nu mogen binnenkomen. */
+  const gridIds = useRef(new Set<number>());
+  const gridGroep = useRef<number | null>(null);
   const dagId = useRef(0);
   const periodeId = useRef(0);
-  const scenarioId = useRef(0);
   const opTerugleveringRef = useRef(false);
   const jaarRef = useRef<NettariefJaar>(NETTARIEF_JAAR);
 
+  /** De laatst gevraagde periode, zodat hij bij een nieuw resultaat opnieuw kan. */
+  const periodeVraag = useRef<{ van: string; tot: string; resolutie: Resolutie } | null>(null);
+
   /**
-   * Start scenario en raster in de achtergrondworker voor een configuratie,
-   * behalve wat er al is. Het scenario gaat eerst: het staat in de kop en kost
-   * vier seconden, het raster twintig.
+   * Stuur de laatst gevraagde periode (opnieuw) naar de hoofdworker, voor de
+   * configuratie van het getoonde resultaat. Stabiel van identiteit, zodat een
+   * component er in zijn effect op mag leunen zonder bij elke wijziging in de
+   * live invoer opnieuw te vuren.
    */
-  const startAchtergrond = useCallback(
-    (cfg: Configuration, al: { scenario?: AnalysisResult; grid?: GridPoint[][] }) => {
-      const worker = achtergrondRef.current;
-      if (!worker) return;
-      if (al.scenario) {
-        setState((s) => ({ ...s, scenario: al.scenario! }));
-      } else {
-        const id = ++scenarioId.current;
-        worker.postMessage({
-          type: "scenario",
-          id,
-          config: scenarioConfiguratie(cfg, {
-            jaar: jaarRef.current,
-            opTeruglevering: opTerugleveringRef.current,
-          }),
-        } satisfies WorkerRequest);
-      }
-      if (al.grid) {
-        setState((s) => ({ ...s, grid: volRaster(al.grid!) }));
-      } else {
-        const id = ++gridId.current;
+  const herhaalPeriode = useCallback(() => {
+    const pool = poolRef.current;
+    const cfg = laatsteConfig.current;
+    const vraag = periodeVraag.current;
+    if (!pool || !cfg || !vraag) return;
+    const id = ++periodeId.current;
+    setState((s) => ({ ...s, periodeBezig: true }));
+    pool.postDirect(0, { type: "periode", id, config: cfg, ...vraag } satisfies WorkerRequest);
+  }, []);
+
+  /**
+   * Plaats de stukken van een doorrekening in de pool. Het referentiejaar gaat
+   * als eerste: dat is het langste stuk (rolling én optimum) en bepaalt het
+   * kritieke pad.
+   */
+  const startGroep = useCallback((soort: Groep["soort"], cfg: Configuration, werkCfg: Configuration) => {
+    const pool = poolRef.current;
+    const m = manifestRef.current;
+    if (!pool || !m) return;
+    const grenzen = vensterGrenzen(m, werkCfg);
+    if (grenzen.length === 0) {
+      if (soort === "analyse") {
         setState((s) => ({
           ...s,
-          grid: {
-            rows: RASTER_CAPACITEITEN.map(() => null),
-            capacities: RASTER_CAPACITEITEN,
-            powers: RASTER_VERMOGENS,
-            klaar: false,
-            bezig: true,
-          },
+          busy: false,
+          error: `geen profieldata voor netgebied ${werkCfg.domain} tussen ${werkCfg.from} en ${werkCfg.to}`,
         }));
-        worker.postMessage({
+      }
+      return;
+    }
+    const ref = referentieIndexVan(grenzen);
+    const nummer = ++groepTeller.current;
+    const fracties = curveFracties({});
+    const groep: Groep = {
+      soort,
+      nummer,
+      cfg,
+      werkCfg,
+      uitkomsten: grenzen.map(() => null),
+      metingen: [],
+      verwachtMetingen: fracties.length,
+      wilPerfect: soort === "analyse",
+      perfect: null,
+      perfectBinnen: false,
+      taakIds: new Set(),
+      samenvoegId: null,
+      start: Date.now(),
+    };
+    groepen.current.set(nummer, groep);
+    if (soort === "analyse") analyseGroep.current = nummer;
+    else scenarioGroep.current = nummer;
+
+    type Stuk =
+      | { type: "venster"; config: Configuration; jaarIndex: number; metOptimum: boolean }
+      | { type: "quick"; config: Configuration; jaarIndex: number; fraction: number }
+      | { type: "perfect"; config: Configuration; jaarIndex: number };
+    const plaats = (stuk: Stuk) => {
+      const id = ++nextId.current;
+      groep.taakIds.add(id);
+      pool.plaats({ groep: nummer, bericht: { ...stuk, id, groep: nummer } });
+    };
+    const volgorde = [ref, ...grenzen.map((_, i) => i).filter((i) => i !== ref)];
+    for (const jaarIndex of volgorde) {
+      plaats({ type: "venster", config: werkCfg, jaarIndex, metOptimum: soort === "analyse" });
+    }
+    for (const fraction of fracties) {
+      plaats({ type: "quick", config: werkCfg, jaarIndex: ref, fraction });
+    }
+    if (soort === "analyse") plaats({ type: "perfect", config: werkCfg, jaarIndex: ref });
+  }, []);
+
+  /** Zijn alle stukken binnen? Dan naar de hoofdworker om samen te voegen. */
+  const probeerSamenvoegen = useCallback((groep: Groep) => {
+    const pool = poolRef.current;
+    if (!pool || groep.samenvoegId !== null) return;
+    if (groep.uitkomsten.some((u) => u === null)) return;
+    if (groep.metingen.length < groep.verwachtMetingen) return;
+    if (groep.wilPerfect && !groep.perfectBinnen) return;
+    const id = ++nextId.current;
+    groep.samenvoegId = id;
+    groep.taakIds.add(id);
+    const uitkomsten = groep.uitkomsten as VensterUitkomst[];
+    const transfer = uitkomsten.flatMap((u) => [...buffersVan(u.realistic), ...buffersVan(u.optimal)]);
+    if (groep.soort === "analyse") {
+      pool.plaats({
+        groep: groep.nummer,
+        worker: 0,
+        transfer,
+        bericht: {
+          type: "voegSamen",
+          id,
+          groep: groep.nummer,
+          config: groep.werkCfg,
+          uitkomsten,
+          metingen: groep.metingen,
+          perfect: groep.perfect,
+        },
+      });
+    } else {
+      pool.plaats({
+        groep: groep.nummer,
+        worker: 0,
+        transfer,
+        bericht: {
+          type: "voegSamenScenario",
+          id,
+          groep: groep.nummer,
+          config: groep.werkCfg,
+          uitkomsten,
+          metingen: groep.metingen,
+        },
+      });
+    }
+  }, []);
+
+  /** Verdeel de rijen van het raster over de helpers (of over alles als er maar één is). */
+  const startGrid = useCallback((cfg: Configuration) => {
+    const pool = poolRef.current;
+    if (!pool) return;
+    const nummer = ++groepTeller.current;
+    gridGroep.current = nummer;
+    gridIds.current = new Set();
+    setState((s) => ({
+      ...s,
+      grid: {
+        rows: RASTER_CAPACITEITEN.map(() => null),
+        capacities: RASTER_CAPACITEITEN,
+        powers: RASTER_VERMOGENS,
+        klaar: false,
+        bezig: true,
+      },
+    }));
+    // De hoofdworker blijft vrij voor de dagkiezer zolang er helpers zijn.
+    const helpers = pool.aantal > 1 ? [...Array(pool.aantal - 1).keys()].map((i) => i + 1) : [0];
+    const perWorker: number[][] = helpers.map(() => []);
+    RASTER_CAPACITEITEN.forEach((_, r) => perWorker[r % helpers.length]!.push(r));
+    helpers.forEach((worker, k) => {
+      const rijen = perWorker[k]!;
+      if (rijen.length === 0) return;
+      const id = ++nextId.current;
+      gridIds.current.add(id);
+      pool.plaats({
+        groep: nummer,
+        worker,
+        bericht: {
           type: "grid",
           id,
           config: cfg,
           capacities: RASTER_CAPACITEITEN,
           powers: RASTER_VERMOGENS,
-        } satisfies WorkerRequest);
+          rijen,
+        },
+      });
+    });
+  }, []);
+
+  /**
+   * Start scenario en raster voor een configuratie, behalve wat er al is. Het
+   * scenario gaat eerst in de wachtrij: het staat in de kop.
+   */
+  const startAchtergrond = useCallback(
+    (cfg: Configuration, al: { scenario?: ScenarioResult; grid?: GridPoint[][] }) => {
+      if (al.scenario) {
+        setState((s) => ({ ...s, scenario: al.scenario! }));
+      } else {
+        startGroep(
+          "scenario",
+          cfg,
+          scenarioConfiguratie(cfg, {
+            jaar: jaarRef.current,
+            opTeruglevering: opTerugleveringRef.current,
+          }),
+        );
+      }
+      if (al.grid) {
+        setState((s) => ({ ...s, grid: volRaster(al.grid!) }));
+      } else {
+        startGrid(cfg);
       }
     },
-    [],
+    [startGroep, startGrid],
   );
 
-  useEffect(() => {
-    const hoofd = maakWorker();
-    const achtergrond = maakWorker();
-    hoofdRef.current = hoofd;
-    achtergrondRef.current = achtergrond;
-
-    hoofd.onmessage = (event: MessageEvent<WorkerResponse>) => {
-      const msg = event.data;
+  const onBericht = useCallback(
+    (msg: WorkerResponse, worker: number) => {
       if (msg.type === "ready") {
+        // Elke worker laadt zijn eigen manifest; één keer melden is genoeg.
+        if (worker !== 0) return;
+        manifestRef.current = msg.manifest as Manifest;
         setState((s) => ({ ...s, manifest: msg.manifest as Manifest }));
         return;
       }
+      if (msg.type === "venster-uitkomst" || msg.type === "quick" || msg.type === "perfect") {
+        const groep = groepen.current.get(msg.groep);
+        if (!groep) return; // achterhaald
+        if (msg.type === "venster-uitkomst") groep.uitkomsten[msg.jaarIndex] = msg.uitkomst;
+        else if (msg.type === "quick") groep.metingen.push(msg.meting);
+        else {
+          groep.perfect = msg.besparing;
+          groep.perfectBinnen = true;
+        }
+        probeerSamenvoegen(groep);
+        return;
+      }
       if (msg.type === "result") {
+        const nummer = analyseGroep.current;
+        const groep = nummer !== null ? groepen.current.get(nummer) : undefined;
         // Een antwoord op een achterhaalde aanvraag negeren we: anders zou een
         // trage berekening een nieuwere overschrijven.
-        if (msg.id !== pendingId.current) return;
-        const cfg = laatsteConfig.current;
+        if (!groep || groep.samenvoegId !== msg.id) return;
+        groepen.current.delete(groep.nummer);
+        analyseGroep.current = null;
+        const cfg = groep.cfg;
         setState((s) => ({
           ...s,
           result: msg.result,
           busy: false,
           error: null,
-          elapsedMs: msg.elapsedMs,
+          elapsedMs: Date.now() - groep.start,
           getoondeConfig: cfg,
           uitCache: false,
           verouderd: false,
         }));
-        if (cfg) {
-          schrijfCache(cfg, { result: msg.result });
-          getoondVoor.current = JSON.stringify(cfg);
-          startAchtergrond(cfg, {});
-        }
+        schrijfCache(cfg, { result: msg.result });
+        getoondVoor.current = JSON.stringify(cfg);
+        // De periodegrafiek hoort bij dit resultaat; de hoofdworker heeft de
+        // dispatches nu al, dus dit kost alleen het optellen.
+        herhaalPeriode();
+        return;
+      }
+      if (msg.type === "scenario") {
+        const nummer = scenarioGroep.current;
+        const groep = nummer !== null ? groepen.current.get(nummer) : undefined;
+        if (!groep || groep.samenvoegId !== msg.id) return;
+        groepen.current.delete(groep.nummer);
+        scenarioGroep.current = null;
+        setState((s) => ({ ...s, scenario: msg.result }));
+        // Alleen aanvullen: schrijfCache laat een bestaand `result` staan en
+        // schrijft niets als er nog geen hoofdresultaat is.
+        schrijfCache(groep.cfg, {
+          scenario: msg.result,
+          scenarioOpTeruglevering: opTerugleveringRef.current,
+          scenarioJaar: jaarRef.current,
+        });
+        return;
+      }
+      if (msg.type === "grid-row") {
+        if (!gridIds.current.has(msg.id)) return;
+        setState((s) => {
+          if (!s.grid) return s;
+          const rows = [...s.grid.rows];
+          rows[msg.row] = msg.points;
+          const vol = rows.every((r) => r !== null);
+          const grid = { ...s.grid, rows, klaar: vol, bezig: !vol };
+          if (vol && laatsteConfig.current) {
+            schrijfCache(laatsteConfig.current, { grid: rows as GridPoint[][] });
+          }
+          return { ...s, grid };
+        });
         return;
       }
       if (msg.type === "periode") {
@@ -297,64 +541,35 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
         return;
       }
       if (msg.type === "error") {
-        if (msg.id !== null && msg.id !== pendingId.current) return;
-        setState((s) => ({ ...s, busy: false, dagBezig: false, error: msg.message }));
-      }
-    };
-
-    achtergrond.onmessage = (event: MessageEvent<WorkerResponse>) => {
-      const msg = event.data;
-      if (msg.type === "scenario") {
-        if (msg.id !== scenarioId.current) return;
-        setState((s) => ({ ...s, scenario: msg.result }));
-        const cfg = laatsteConfig.current;
-        if (cfg) {
-          schrijfCache(cfg, {
-            result: state.result ?? msg.result,
-            scenario: msg.result,
-            scenarioOpTeruglevering: opTerugleveringRef.current,
-            scenarioJaar: jaarRef.current,
-          });
+        const nummer = analyseGroep.current;
+        const groep = nummer !== null ? groepen.current.get(nummer) : undefined;
+        if (msg.id !== null && groep && groep.taakIds.has(msg.id)) {
+          // Een fout in de hoofdanalyse: melden en stoppen met wachten.
+          groepen.current.delete(groep.nummer);
+          analyseGroep.current = null;
+          setState((s) => ({ ...s, busy: false, error: msg.message }));
+          return;
         }
-        return;
-      }
-      if (msg.type === "grid-row") {
-        if (msg.id !== gridId.current) return;
-        setState((s) => {
-          if (!s.grid) return s;
-          const rows = [...s.grid.rows];
-          rows[msg.row] = msg.points;
-          const grid = { ...s.grid, rows, klaar: msg.done, bezig: !msg.done };
-          if (msg.done && laatsteConfig.current && rows.every((r) => r !== null)) {
-            schrijfCache(laatsteConfig.current, {
-              result: s.result!,
-              grid: rows as GridPoint[][],
-            });
-          }
-          return { ...s, grid };
-        });
-        return;
-      }
-      if (msg.type === "error") {
+        if (msg.id !== null && (msg.id === dagId.current || msg.id === periodeId.current)) {
+          setState((s) => ({ ...s, dagBezig: false, periodeBezig: false, error: msg.message }));
+          return;
+        }
         // Een fout in de achtergrond mag het hoofdantwoord niet raken; het
         // scenario en het raster blijven dan leeg en de pagina zegt dat.
-        setState((s) => ({ ...s, grid: s.grid ? { ...s.grid, bezig: false } : null }));
+        if (msg.id !== null && gridIds.current.has(msg.id)) {
+          setState((s) => ({ ...s, grid: s.grid ? { ...s.grid, bezig: false } : null }));
+        }
       }
-    };
+    },
+    [herhaalPeriode, probeerSamenvoegen],
+  );
 
-    const stuk = (event: ErrorEvent) => {
-      setState((s) => ({
-        ...s,
-        busy: false,
-        error: event.message || "de rekenmodule kon niet starten",
-      }));
-    };
-    hoofd.onerror = stuk;
-    achtergrond.onerror = stuk;
-
-    const init: WorkerRequest = { type: "init", baseUrl: "/data" };
-    hoofd.postMessage(init);
-    achtergrond.postMessage(init);
+  useEffect(() => {
+    const pool = new WorkerPool(poolGrootte(), maakWorker, onBericht, (bericht) => {
+      setState((s) => ({ ...s, busy: false, error: bericht }));
+    });
+    poolRef.current = pool;
+    pool.init("/data");
 
     // Meteen naast de workers starten. Het bestand is klein en de kans is groot
     // dat we het nodig hebben; zo staat het klaar tegen de tijd dat de
@@ -362,48 +577,39 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
     void haalVoorbeeld();
 
     return () => {
-      hoofd.terminate();
-      achtergrond.terminate();
-      hoofdRef.current = null;
-      achtergrondRef.current = null;
+      pool.terminate();
+      poolRef.current = null;
     };
-    // state.result in de scenario-handler is een momentopname; de cache wordt
-    // daar alleen aangevuld, nooit als enige bron gelezen.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [startAchtergrond]);
+  }, [onBericht]);
 
-  const send = useCallback((cfg: Configuration) => {
-    const worker = hoofdRef.current;
-    if (!worker) return;
-    const id = ++nextId.current;
-    pendingId.current = id;
-    laatsteConfig.current = cfg;
-    setState((s) => ({ ...s, busy: true }));
-    const msg: WorkerRequest = { type: "analyse", id, config: cfg };
-    worker.postMessage(msg);
-  }, []);
+  const send = useCallback(
+    (cfg: Configuration) => {
+      if (!poolRef.current) return;
+      laatsteConfig.current = cfg;
+      setState((s) => ({ ...s, busy: true }));
+      startGroep("analyse", cfg, cfg);
+      // Scenario en raster hangen alleen van de configuratie af, niet van het
+      // antwoord. Ze gaan dus meteen mee de wachtrij in, achter de hoofdanalyse.
+      startAchtergrond(cfg, {});
+    },
+    [startGroep, startAchtergrond],
+  );
 
   const herbereken = useCallback(() => {
     if (config) send(config);
   }, [config, send]);
 
-  const vraagDag = useCallback(
-    (datum: string) => {
-      const worker = hoofdRef.current;
-      if (!worker || !config) return;
-      const id = ++dagId.current;
-      // De configuratie gaat mee: de worker kan de analyse niet zelf hebben
-      // gedraaid als het resultaat uit de cache kwam.
-      setState((s) => ({ ...s, dagBezig: true }));
-      worker.postMessage({
-        type: "day",
-        id,
-        date: datum,
-        config,
-      } satisfies WorkerRequest);
-    },
-    [config],
-  );
+  const vraagDag = useCallback((datum: string) => {
+    const pool = poolRef.current;
+    // De configuratie van het GETOONDE resultaat, niet de live invoer: een dag
+    // hoort bij de cijfers erboven. Met de live invoer stuurde elke slidertick
+    // de worker aan het rekenen voor een configuratie die nooit getoond werd.
+    const cfg = laatsteConfig.current;
+    if (!pool || !cfg) return;
+    const id = ++dagId.current;
+    setState((s) => ({ ...s, dagBezig: true }));
+    pool.postDirect(0, { type: "day", id, date: datum, config: cfg } satisfies WorkerRequest);
+  }, []);
 
   const wisDag = useCallback(() => {
     dagId.current++;
@@ -412,38 +618,31 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
 
   const vraagPeriode = useCallback(
     (van: string, tot: string, resolutie: Resolutie) => {
-      const worker = hoofdRef.current;
-      if (!worker || !config) return;
-      const id = ++periodeId.current;
-      setState((s) => ({ ...s, periodeBezig: true }));
-      worker.postMessage({
-        type: "periode",
-        id,
-        config,
-        van,
-        tot,
-        resolutie,
-      } satisfies WorkerRequest);
+      periodeVraag.current = { van, tot, resolutie };
+      herhaalPeriode();
     },
-    [config],
+    [herhaalPeriode],
   );
 
   /** Reken het scenario opnieuw met de huidige schakelaars. */
   const herstartScenario = useCallback(() => {
-    const worker = achtergrondRef.current;
     const cfg = laatsteConfig.current;
+    const oud = scenarioGroep.current;
+    if (oud !== null) {
+      poolRef.current?.annuleer(oud);
+      groepen.current.delete(oud);
+    }
     setState((s) => ({ ...s, scenario: null }));
-    if (!worker || !cfg) return;
-    const id = ++scenarioId.current;
-    worker.postMessage({
-      type: "scenario",
-      id,
-      config: scenarioConfiguratie(cfg, {
+    if (!cfg) return;
+    startGroep(
+      "scenario",
+      cfg,
+      scenarioConfiguratie(cfg, {
         jaar: jaarRef.current,
         opTeruglevering: opTerugleveringRef.current,
       }),
-    } satisfies WorkerRequest);
-  }, []);
+    );
+  }, [startGroep]);
 
   const zetScenarioOpTeruglevering = useCallback(
     (opTeruglevering: boolean) => {
@@ -463,28 +662,69 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
     [herstartScenario],
   );
 
-  // Een wijziging in de invoer maakt raster, scenario en een opgehaalde dag
-  // achterhaald: die hoorden bij de vorige doorrekening. Lopend achtergrondwerk
-  // wordt afgebroken; de volgnummers gaan omhoog zodat een laat antwoord niet
-  // alsnog binnenvalt.
+  // Een wijziging in de dispatch maakt raster, scenario en een opgehaalde dag
+  // achterhaald: die hoorden bij de vorige doorrekening. Wachtend werk gaat
+  // uit de rij, lopend rasterwerk stopt bij de volgende rij, en de volgnummers
+  // gaan omhoog zodat een laat antwoord niet alsnog binnenvalt.
   useEffect(() => {
+    // Verandert alleen de afleiding (looptijd, rente, …), dan blijven raster,
+    // scenario, dag en periode gewoon geldig: de dispatch is dezelfde.
+    if (
+      config &&
+      laatsteConfig.current &&
+      dispatchSleutel(config) === dispatchSleutel(laatsteConfig.current)
+    ) {
+      return;
+    }
     dagId.current++;
     periodeId.current++;
-    gridId.current++;
-    scenarioId.current++;
+    gridIds.current = new Set();
+    const pool = poolRef.current;
+    for (const groep of groepen.current.values()) {
+      if (groep.soort === "analyse") continue; // die wacht op zijn eigen antwoord
+      pool?.annuleer(groep.nummer);
+      groepen.current.delete(groep.nummer);
+    }
+    scenarioGroep.current = null;
+    if (gridGroep.current !== null) pool?.annuleer(gridGroep.current);
     setState((s) =>
       s.grid || s.dag || s.dagBezig || s.scenario || s.periode || s.periodeBezig
         ? { ...s, grid: null, dag: null, dagBezig: false, dagOntbreekt: null, scenario: null, periode: null, periodeBezig: false }
         : s,
     );
-    const achtergrond = achtergrondRef.current;
-    if (achtergrond) achtergrond.postMessage({ type: "cancel" } satisfies WorkerRequest);
+    pool?.postAlle({ type: "cancel" } satisfies WorkerRequest);
   }, [JSON.stringify(config)]);
 
   useEffect(() => {
     if (!config || !state.manifest) return;
     const sleutel = JSON.stringify(config);
     if (getoondVoor.current === sleutel) return;
+
+    // Zelfde dispatch, andere afleiding: de financiën en de zelfvoorzienings-
+    // cijfers volgen uit het getoonde resultaat zonder één seconde rekenen.
+    const getoond = laatsteConfig.current;
+    if (
+      state.result &&
+      getoond &&
+      dispatchSleutel(getoond) === dispatchSleutel(config)
+    ) {
+      getoondVoor.current = sleutel;
+      laatsteConfig.current = config;
+      const scenarioCfg = scenarioConfiguratie(config, {
+        jaar: jaarRef.current,
+        opTeruglevering: opTerugleveringRef.current,
+      });
+      setState((s) => ({
+        ...s,
+        result: s.result ? pasAfleidingToe(s.result, afleidingVanConfiguratie(config)) : s.result,
+        scenario: s.scenario
+          ? pasAfleidingToe(s.scenario, afleidingVanConfiguratie(scenarioCfg))
+          : s.scenario,
+        getoondeConfig: config,
+        verouderd: false,
+      }));
+      return;
+    }
 
     // Eerst kijken of we dit al eens hebben uitgerekend. Dezelfde invoer op
     // dezelfde data geeft altijd hetzelfde antwoord — er zit geen willekeur in
@@ -494,9 +734,11 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
     if (bewaard) {
       getoondVoor.current = sleutel;
       laatsteConfig.current = config;
+      // De bundel hoort bij de dispatch; de afleiding (looptijd, rente, …)
+      // kan van een eerdere instelling zijn en wordt hier opnieuw gedaan.
       setState((s) => ({
         ...s,
-        result: bewaard.result,
+        result: pasAfleidingToe(bewaard.result, afleidingVanConfiguratie(config)),
         busy: false,
         error: null,
         getoondeConfig: config,
@@ -504,14 +746,21 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
         verouderd: false,
       }));
       // Wat er bewaard is, tonen we; wat ontbreekt, rekent de achtergrond bij.
+      const scenarioCfg = scenarioConfiguratie(config, {
+        jaar: jaarRef.current,
+        opTeruglevering: opTerugleveringRef.current,
+      });
       const scenarioPast =
         bewaard.scenario !== undefined &&
         (bewaard.scenarioOpTeruglevering ?? false) === opTerugleveringRef.current &&
         (bewaard.scenarioJaar ?? NETTARIEF_JAAR) === jaarRef.current;
       startAchtergrond(config, {
-        scenario: scenarioPast ? bewaard.scenario : undefined,
+        scenario: scenarioPast
+          ? pasAfleidingToe(bewaard.scenario!, afleidingVanConfiguratie(scenarioCfg))
+          : undefined,
         grid: bewaard.grid,
       });
+      herhaalPeriode();
       return;
     }
 
@@ -525,7 +774,7 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
         // inclusief scenario en raster, als de build die heeft meegeleverd.
         const vooruit = await haalVoorbeeld();
         if (!levend) return;
-        if (vooruit && vooruit.sleutel === configSleutel(config)) {
+        if (vooruit && vooruit.sleutel === dispatchSleutel(config)) {
           getoondVoor.current = sleutel;
           laatsteConfig.current = config;
           schrijfCache(config, {
@@ -535,9 +784,12 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
             scenarioJaar: NETTARIEF_JAAR,
             grid: vooruit.grid,
           });
+          // Het vooruitgerekende antwoord hoort bij de standaardafleiding; wie
+          // alleen een financiële instelling wijzigde krijgt het toch, met de
+          // afleiding opnieuw gedaan.
           setState((s) => ({
             ...s,
-            result: vooruit.result,
+            result: pasAfleidingToe(vooruit.result, afleidingVanConfiguratie(config)),
             busy: false,
             error: null,
             getoondeConfig: config,
@@ -546,11 +798,17 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
           }));
           startAchtergrond(config, {
             scenario:
-              opTerugleveringRef.current || jaarRef.current !== NETTARIEF_JAAR
+              opTerugleveringRef.current || jaarRef.current !== NETTARIEF_JAAR || !vooruit.scenario
                 ? undefined
-                : vooruit.scenario,
+                : pasAfleidingToe(
+                    vooruit.scenario,
+                    afleidingVanConfiguratie(
+                      scenarioConfiguratie(config, { jaar: NETTARIEF_JAAR, opTeruglevering: false }),
+                    ),
+                  ),
             grid: vooruit.grid,
           });
+          herhaalPeriode();
           return;
         }
         send(config);
@@ -564,7 +822,7 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
     return;
     // De configuratie is een gewoon object; serialiseren is de eenvoudigste
     // manier om op inhoud te vergelijken in plaats van op referentie.
-  }, [JSON.stringify(config), state.manifest, state.result, send, startAchtergrond]);
+  }, [JSON.stringify(config), state.manifest, state.result, send, startAchtergrond, herhaalPeriode]);
 
   return { ...state, vraagDag, wisDag, vraagPeriode, herbereken, zetScenarioOpTeruglevering, zetScenarioJaar };
 }

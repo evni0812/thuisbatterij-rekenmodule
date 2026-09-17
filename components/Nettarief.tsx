@@ -19,7 +19,8 @@
  */
 
 import type { ReactNode } from "react";
-import type { AnalysisResult } from "../lib/model/analysis";
+import type { AnalysisResult, ScenarioResult } from "../lib/model/analysis";
+import type { Overgang } from "../lib/overgang";
 import {
   BASISTARIEF,
   NETTARIEF_BRON,
@@ -35,11 +36,14 @@ import { Tariefblad } from "./Tariefblad";
 export function Nettarief({
   huidig,
   scenario,
+  overgang,
   actie,
 }: {
   huidig: AnalysisResult;
   /** Null zolang het scenario nog wordt doorgerekend in de achtergrond. */
-  scenario: AnalysisResult | null;
+  scenario: ScenarioResult | null;
+  /** De terugverdientijd mét de tariefwissel van 2029 erin. */
+  overgang: Overgang | null;
   /** De knop "Hoe is dit berekend?" in de kop. */
   actie?: ReactNode;
 }) {
@@ -95,11 +99,18 @@ export function Nettarief({
             </dd>
           </div>
           <div>
-            <dt>Terugverdientijd</dt>
+            <dt>Terugverdientijd als je nu koopt</dt>
             <dd>
-              {jaren(scenario.finance.paybackYears)}
+              {jaren(
+                (overgang ?? scenario).finance.paybackYears,
+              )}
               <span className="dd-noot">
-                nu {jaren(huidig.finance.paybackYears)}
+                {overgang && overgang.jarenOpHuidigTarief > 0
+                  ? `eerst ${overgang.jarenOpHuidigTarief} jaar op het tarief van nu, daarna op dat van ${overgang.ingangsjaar}`
+                  : "op het nieuwe tarief"}
+                {" · "}
+                {jaren(huidig.finance.paybackYears)} als het tarief niet zou
+                veranderen
               </span>
             </dd>
           </div>

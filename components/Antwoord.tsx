@@ -18,12 +18,14 @@
  */
 
 import type { ReactNode } from "react";
-import type { AnalysisResult } from "../lib/model/analysis";
+import type { AnalysisResult, ScenarioResult } from "../lib/model/analysis";
+import type { Overgang } from "../lib/overgang";
 import { euro, jaren } from "../lib/format";
 
 export function Antwoord({
   result,
   scenario,
+  overgang,
   investeringEur,
   bezig,
   heffingVanNu = false,
@@ -35,7 +37,15 @@ export function Antwoord({
    * null zolang die nog loopt. Dit is het inzicht dat de businesscase omslaat,
    * en het hoort dus in het antwoord — niet acht secties lager achter een knop.
    */
-  scenario: AnalysisResult | null;
+  scenario: ScenarioResult | null;
+  /**
+   * De terugverdientijd met de tariefwissel erin: de eerste jaren op het
+   * huidige tarief, daarna op dat van 2029. Dit is het getal dat geldt voor wie
+   * vandaag koopt; de twee doorrekeningen apart nemen elk hun eigen tarief voor
+   * de hele levensduur en zijn daarmee te pessimistisch respectievelijk te
+   * optimistisch.
+   */
+  overgang: Overgang | null;
   investeringEur: number;
   bezig: boolean;
   /**
@@ -99,14 +109,26 @@ export function Antwoord({
       <p className={scenario ? "antwoord-scenario" : "antwoord-scenario plaatshouder"}>
         {scenario ? (
           <>
-            Met het nettarief dat in 2029 ingaat:{" "}
-            <strong>{euro(scenario.averageSavingEur)} per jaar</strong>
-            {scenario.finance.paybackYears !== null ? (
-              <>, terugverdiend na {jaren(scenario.finance.paybackYears)}</>
-            ) : (
-              <>, en dan nog niet terugverdiend</>
-            )}
-            .
+            Vanaf {overgang?.ingangsjaar ?? 2029} gaat het tijdsafhankelijke
+            nettarief in, en wordt dat{" "}
+            <strong>{euro(scenario.averageSavingEur)} per jaar</strong>.
+            {overgang && overgang.jarenOpHuidigTarief > 0 ? (
+              <>
+                {" "}
+                Koop je nu, dan draait de batterij eerst nog{" "}
+                {overgang.jarenOpHuidigTarief === 1
+                  ? "een jaar"
+                  : `${overgang.jarenOpHuidigTarief} jaar`}{" "}
+                op de tarieven van vandaag; over beide perioden samen is de
+                aanschaf{" "}
+                {overgang.finance.paybackYears !== null ? (
+                  <>terugverdiend na {jaren(overgang.finance.paybackYears)}</>
+                ) : (
+                  <>niet terugverdiend</>
+                )}
+                .
+              </>
+            ) : null}
           </>
         ) : (
           <>Met het nettarief dat in 2029 ingaat: wordt doorgerekend…</>
