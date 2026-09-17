@@ -23,6 +23,12 @@ import { Verantwoording } from "../components/Verantwoording";
 import { Verliezen } from "../components/Verliezen";
 import { Verschuiving } from "../components/Verschuiving";
 import { Nettarief } from "../components/Nettarief";
+import { Wachtscherm } from "../components/Wachtscherm";
+import { Uitbreiden } from "../components/Uitbreiden";
+import { VoorWie } from "../components/VoorWie";
+import { huishoudensVarianten } from "../lib/model/huishoudens";
+import { Verloop } from "../components/Verloop";
+import { dagenLater, maandagVan, type PeriodeReeks } from "../lib/model/periode";
 import { Tariefblad } from "../components/Tariefblad";
 import { controleerInvoer } from "../components/Invoer";
 import { expandPricesToQuarters, loadManifest, loadPriceYear, loadProfileYear } from "../lib/data/loader";
@@ -55,6 +61,8 @@ const LEGE_INSTELLINGEN = {
   domein: DOMAIN, van: "", tot: "", spreiding: 1, terugleverkostenCt: 0,
   curtailment: true, analysejaren: 15, discontovoet: 0.03,
   prijsstijging: STANDAARD.prijsstijging, slijtageDeel: STANDAARD.slijtageDeel,
+  kostenPerKwh: STANDAARD.kostenPerKwh, kostenPerKw: STANDAARD.kostenPerKw,
+  installatieEur: STANDAARD.installatieEur,
   degradatie: 0.015, prijsEur: null, capaciteitKwh: null, vermogenKw: null,
   opwekKwh: null, zonnepanelen: true,
 };
@@ -324,13 +332,15 @@ describe("de pagina toont het antwoord", () => {
         huidigeCapaciteit={2.1}
         huidigVermogen={0.8}
         onKies={() => {}}
+        config={maakConfiguratie(LEGE_INSTELLINGEN)}
+        curve={result.curve}
       />,
     );
     expect(document.body.textContent).toMatch(/wordt doorgerekend/);
     expect(screen.queryByRole("button")).toBeNull();
   });
 
-  it("toont elk vakje van het raster met zijn bedrag als getal", () => {
+  it("toont elk vakje van het raster met zijn bedrag als getal, en kent elke maat zijn prijs", () => {
     const grid = {
       capacities: [2, 5],
       powers: [0.8, 2.5],
@@ -347,33 +357,49 @@ describe("de pagina toont het antwoord", () => {
         ],
       ],
     };
+    const config = maakConfiguratie(LEGE_INSTELLINGEN);
     render(
       <BatterijMaat
         grid={grid}
         huidigeCapaciteit={5}
         huidigVermogen={2.5}
         onKies={() => {}}
+        config={config}
+        curve={result.curve}
+        jaar={2025}
       />,
     );
     // Kleur mag nooit de enige drager zijn: elk vakje toont zijn getal.
-    // Standaard is dat de opbrengst per kWh capaciteit, want daarop is de
-    // afnemende meeropbrengst zichtbaar: 40/2 = 20, 95/5 = 19.
+    // Standaard is dat het netto resultaat over de looptijd, met teken.
     const tabel = screen.getByRole("table");
-    for (const perKwh of ["20,0", "22,5", "14,0", "19,0"]) {
-      expect(within(tabel).getByText(perKwh)).toBeDefined();
-    }
+    const cellen = () => [...tabel.querySelectorAll(".heat-cel")].map((el) => el.textContent ?? "");
+    expect(cellen()).toHaveLength(4);
+    for (const c of cellen()) expect(c, `"${c}"`).toMatch(/^[+−]\d{1,3}(\.\d{3})*$/);
 
-    // Omschakelen naar het totaal geeft de kale jaarbesparing.
-    fireEvent.click(screen.getByRole("button", { name: "Totaal" }));
+    // Elke cel kent zijn investering uit de kostenregel; die staat in het label
+    // en in de kaart bij aanwijzen.
+    const eigen = within(tabel).getByRole("button", { name: /^5 kWh bij 2.5 kW/ });
+    expect(eigen.getAttribute("aria-label")).toMatch(/investering €\s?1\.461/);
+    fireEvent.mouseEnter(eigen, { clientX: 10, clientY: 10 });
+    expect(document.body.textContent).toMatch(/Investering/);
+    expect(document.body.textContent).toMatch(/Terugverdientijd/);
+
+    // De adviesregel zegt welk type batterij past.
+    expect(document.body.textContent).toMatch(/stekkerbatterij|eigen groep/);
+
+    // De streep tussen stekker en eigen groep: één per rij, plus de kop.
+    expect(tabel.querySelectorAll("td.heat-scheiding")).toHaveLength(2);
+    expect(tabel.querySelectorAll("th.heat-scheiding")).toHaveLength(1);
+
+    // Omschakelen naar de besparing geeft de kale jaarbesparing.
+    fireEvent.click(screen.getByRole("button", { name: "Besparing per jaar" }));
     for (const totaal of ["40", "45", "70", "95"]) {
       expect(within(tabel).getByText(totaal)).toBeDefined();
     }
 
-    // En per kW deelt door het vermogen: 40/0,8 = 50, 95/2,5 = 38.
-    fireEvent.click(screen.getByRole("button", { name: "Per kW" }));
-    for (const perKw of ["50,0", "18,0", "87,5", "38,0"]) {
-      expect(within(tabel).getByText(perKw)).toBeDefined();
-    }
+    // En de terugverdientijd in jaren met één decimaal, of een streepje.
+    fireEvent.click(screen.getByRole("button", { name: "Terugverdientijd" }));
+    for (const c of cellen()) expect(c, `"${c}"`).toMatch(/^(\d+,\d|—)$/);
   });
 });
 
@@ -1030,6 +1056,9 @@ describe("het batterijraster is leesbaar", () => {
     ],
   };
 
+  /** Een Zendure als anker: 1,92 kWh bij 0,8 kW voor 699 euro. */
+  const config = maakConfiguratie({ ...LEGE_INSTELLINGEN, presetId: "zendure-800pro2" });
+
   function toon() {
     return render(
       <BatterijMaat
@@ -1037,17 +1066,20 @@ describe("het batterijraster is leesbaar", () => {
         huidigeCapaciteit={1}
         huidigVermogen={0.8}
         onKies={() => {}}
+        config={config}
+        curve={result.curve}
       />,
     );
   }
 
-  it("markeert de cel met de hoogste waarde, en maar één", () => {
+  it("markeert de cel met het hoogste netto resultaat, en maar één", () => {
     const { container } = toon();
     const beste = container.querySelectorAll(".heat-cel.beste");
     expect(beste.length).toBe(1);
-    // Per kWh is dat 2 kWh bij 0,8 kW: 104,4/2 = 52,2 tegen 47,4 bij 1 kWh.
-    expect(beste[0]!.textContent).toBe("52,2");
-    expect(beste[0]!.getAttribute("aria-label")).toMatch(/de hoogste in dit raster/);
+    // 2 kWh bij 0,8 kW: de dubbele besparing voor 320 euro meer, en geen
+    // installateur. De vaste kolom kost 300 euro extra voor minder besparing.
+    expect(beste[0]!.getAttribute("aria-label")).toMatch(/^2 kWh bij 0.8 kW/);
+    expect(beste[0]!.getAttribute("aria-label")).toMatch(/het hoogste netto resultaat in dit raster/);
   });
 
   it("geeft elk vakje dezelfde vorm, zodat de kolommen uitlijnen", () => {
@@ -1055,8 +1087,14 @@ describe("het batterijraster is leesbaar", () => {
     const cellen = [...container.querySelectorAll("table .heat-cel")].map(
       (el) => el.textContent ?? "",
     );
-    // Altijd één decimaal, ook bij een rond getal: 47,4 en niet 47,4 naast 52.
-    for (const c of cellen) expect(c, `"${c}"`).toMatch(/^\d+,\d$/);
+    // Netto met teken en duizendtallen: "+1.234" naast "−321".
+    for (const c of cellen) expect(c, `"${c}"`).toMatch(/^[+−]\d{1,3}(\.\d{3})*$/);
+  });
+
+  it("adviseert een stekkerbatterij als de eigen groep zich niet terugverdient", () => {
+    toon();
+    expect(document.body.textContent).toMatch(/Advies: een stekkerbatterij van 2 kWh bij 0,8 kW/);
+    expect(document.body.textContent).toMatch(/loont hier niet/);
   });
 
   it("legt uit waarom meer vermogen soms minder oplevert", () => {
@@ -1064,9 +1102,12 @@ describe("het batterijraster is leesbaar", () => {
      * Op rij 1 kWh zakt de besparing van 47,4 naar 46,6 als het vermogen
      * omhooggaat. Dat ziet eruit als een rekenfout en is het niet: de strategie
      * plant op een verwachting, en met meer vermogen kan ze ook harder de
-     * verkeerde kant op. Dat hoort erbij te staan waar je het ziet.
+     * verkeerde kant op. Dat hoort erbij te staan waar je het ziet — bij de
+     * besparing, want bij netto resultaat is een dip naar rechts gewoon de prijs.
      */
     toon();
+    expect(document.body.textContent).not.toMatch(/geen rekenfout/);
+    fireEvent.click(screen.getByRole("button", { name: "Besparing per jaar" }));
     expect(document.body.textContent).toMatch(/méér vermogen iets mínder/);
     expect(document.body.textContent).toMatch(/geen rekenfout/);
   });
@@ -1137,5 +1178,384 @@ describe("de lijnlabels volgen het aangewezen moment", () => {
       expect(labels[0]).not.toContain(laatsteAfname);
     }
     expect(labels.length).toBe(2);
+  });
+});
+
+describe("de figuren over dimensionering", () => {
+  const config = maakConfiguratie({ ...LEGE_INSTELLINGEN, presetId: "zendure-800pro2" });
+
+  const grid = {
+    capacities: [1, 2, 3, 5, 7.5, 10, 15],
+    powers: [0.8, 2.5],
+    klaar: true,
+    bezig: false,
+    rows: [1, 2, 3, 5, 7.5, 10, 15].map((cap) =>
+      [0.8, 2.5].map((kw) => ({
+        capacityKwh: cap,
+        powerKw: kw,
+        // Een kop die na 3 kWh omslaat, zodat er een omslagpunt te vinden is.
+        savingEur: 40 + cap * 26 - cap * cap * 1.6,
+        cyclesPerYear: 400 - cap * 8,
+      })),
+    ),
+  };
+
+  function assen(svg: SVGSVGElement) {
+    return [...svg.querySelectorAll("text.as-label")].map((e) => e.textContent ?? "");
+  }
+
+  it("houdt het laatste aslabel binnen het kader", () => {
+    /**
+     * "15 kWh" staat gecentreerd op de rechterrand van de plot. Met een marge
+     * van 16 px stak het er half buiten en knipte de browser het af: precies
+     * het uiteinde van de schaal, dat je nodig hebt om de lijn te lezen.
+     */
+    const { container } = render(<Uitbreiden grid={grid} config={config} curve={result.curve} />);
+    const svg = container.querySelector("svg")!;
+    const [, , breedte] = (svg.getAttribute("viewBox") ?? "").split(" ").map(Number);
+    for (const e of svg.querySelectorAll("text")) {
+      const x = Number(e.getAttribute("x"));
+      const halveBreedte = ((e.textContent ?? "").length * 6.4) / 2;
+      const anchor = e.getAttribute("text-anchor");
+      const rechts = anchor === "middle" ? x + halveBreedte : anchor === "end" ? x : x + halveBreedte * 2;
+      expect(rechts, `"${e.textContent}" valt rechts buiten het kader`).toBeLessThanOrEqual(breedte! + 0.5);
+      expect(x).toBeGreaterThanOrEqual(0);
+    }
+  });
+
+  it("zet geen centen op een as die in duizendtallen loopt", () => {
+    /**
+     * euro() zet centen onder een tientje, wat in een zin klopt maar niet op
+     * een as: het nullabel werd "€ 0,00" terwijl de rest van de schaal in hele
+     * duizenden stond.
+     */
+    const { container } = render(<Uitbreiden grid={grid} config={config} curve={result.curve} />);
+    const labels = assen(container.querySelector("svg")!);
+    expect(labels.length).toBeGreaterThan(2);
+    for (const l of labels) {
+      expect(l, `"${l}" heeft centen op de as`).not.toMatch(/€.*,\d\d$/);
+    }
+  });
+
+  it("geeft het huishouden zonder panelen een eigen plek buiten de reeks", () => {
+    /**
+     * Het stond als ruit op x = 0 en las daardoor als het linkeruiteinde van
+     * de lijn — "met panelen, nul teruglevering". Het is een ander gemeten
+     * profiel, en dat punt hoort niet op die as te staan.
+     */
+    const varianten = huishoudensVarianten();
+    const huishoudens = {
+      varianten,
+      punten: varianten.map((v) => ({
+        ...v,
+        afnameKwh: 2500,
+        savingEur: v.zonnepanelen ? 60 + v.terugleveringKwh / 60 : 38,
+        cyclesPerYear: 300,
+      })),
+      klaar: true,
+      bezig: false,
+    };
+    const { container } = render(
+      <VoorWie huishoudens={huishoudens} result={result} config={config} />,
+    );
+    const svg = container.querySelector("svg")!;
+    const ruit = svg.querySelector("rect[transform^='rotate(45']")!;
+    const eerstePunt = [...svg.querySelectorAll("circle")].reduce(
+      (min, c) => Math.min(min, Number(c.getAttribute("cx"))),
+      Infinity,
+    );
+    expect(Number(ruit.getAttribute("x"))).toBeLessThan(eerstePunt - 20);
+    expect(document.body.textContent).toMatch(/zonder\s*panelen/);
+  });
+
+  it("noemt jouw huishouden niet als derde reeks in de legenda", () => {
+    // Het is geen eigen categorie maar jouw plek op de blauwe lijn; in de
+    // figuur wijst het label "jij" dat al aan.
+    const varianten = huishoudensVarianten();
+    const huishoudens = {
+      varianten,
+      punten: varianten.map((v) => ({
+        ...v,
+        afnameKwh: 2500,
+        savingEur: v.zonnepanelen ? 60 + v.terugleveringKwh / 60 : 38,
+        cyclesPerYear: 300,
+      })),
+      klaar: true,
+      bezig: false,
+    };
+    const { container } = render(
+      <VoorWie huishoudens={huishoudens} result={result} config={config} />,
+    );
+    const legenda = container.querySelectorAll(".legenda li, .legenda-item");
+    expect(legenda.length).toBe(2);
+  });
+});
+
+describe("het nettarief toont de verandering", () => {
+  it("zet de oude en de nieuwe waarde naast elkaar", () => {
+    /**
+     * De cijfers stonden als losse kerncijfers met de oude waarde als voetnoot
+     * eronder ("448", klein "nu 361"), zodat je zelf moest uitrekenen wat het
+     * nettarief doet. Waar het om gaat is de verandering, dus die hoort in de
+     * hoofdregel: van → naar, met het verschil eronder.
+     */
+    /*
+     * Het scenario moet écht van het heden verschillen, anders is elke delta
+     * nul en bewijst deze test niets. Met hetzelfde object aan beide kanten
+     * glipte een schalingsfout van honderd keer er ongemerkt doorheen.
+     */
+    const scenario = {
+      ...result,
+      averageSavingEur: result.averageSavingEur * 1.43,
+      stats: {
+        ...result.stats,
+        cyclesPerYear: result.stats.cyclesPerYear * 1.24,
+        // Minder afname in de piekuren: dat is waar het nieuwe tarief op stuurt.
+        peakHourImportBatteryKwh: result.stats.peakHourImportBatteryKwh * 0.8,
+      },
+    };
+    const overgang = overgangsFinance(result, scenario, maakConfiguratie(LEGE_INSTELLINGEN), new Date("2026-09-17"));
+    const { container } = render(
+      <Nettarief huidig={result} scenario={scenario} overgang={overgang} />,
+    );
+    const verlopen = container.querySelectorAll(".stat-verloop");
+    expect(verlopen.length).toBe(4);
+    for (const v of verlopen) {
+      const van = v.querySelector(".stat-van")?.textContent ?? "";
+      const naar = v.querySelector(".stat-naar")?.textContent ?? "";
+      expect(van).not.toBe("");
+      expect(naar).not.toBe("");
+      expect(van, "van en naar tonen hetzelfde: dan valt er niets te zien").not.toBe(naar);
+    }
+    /*
+     * En de chips moeten een verschil tonen dat kán bestaan. Hier stond ooit
+     * "−573 procentpunt", omdat procentpunt() fracties verwacht en er
+     * percentages in gingen: honderd keer te veel, en net genoeg een getal om
+     * niet op te vallen. Twee percentages kunnen hoogstens honderd procentpunt
+     * uiteenlopen.
+     */
+    for (const chip of container.querySelectorAll(".stat-delta")) {
+      const tekst = chip.textContent ?? "";
+      const m = tekst.match(/([\d.,]+)\s*procentpunt/);
+      if (!m) continue;
+      const waarde = Number(m[1]!.replace(/\./g, "").replace(",", "."));
+      expect(waarde, `"${tekst}" kan geen verschil tussen twee percentages zijn`).toBeLessThanOrEqual(100);
+    }
+
+    // En de losse lijst met voetnoten is weg.
+    expect(container.querySelector("dl.kerncijfers")).toBeNull();
+  });
+});
+
+describe("de week bij het dagprofiel", () => {
+  /** Een week van 168 uurvakken rond de eerste voorbeelddag. */
+  function weekReeks(rondDatum: string): PeriodeReeks {
+    const van = maandagVan(rondDatum);
+    const vakken = [];
+    for (let d = 0; d < 7; d++) {
+      const dag = dagenLater(van, d);
+      const [y, m, dd] = dag.split("-").map(Number) as [number, number, number];
+      for (let u = 0; u < 24; u++) {
+        // 's Nachts laden, 's avonds leveren: een ritme dat in de panelen te zien is.
+        const laadt = u >= 2 && u < 5;
+        const levert = u >= 18 && u < 21;
+        vakken.push({
+          sleutel: `${dag}T${String(u).padStart(2, "0")}`,
+          dag,
+          startMs: Date.UTC(y, m - 1, dd, u) - 2 * 3600_000,
+          savingEur: levert ? 0.09 : 0,
+          wearCostEur: levert ? 0.03 : 0,
+          chargedKwh: laadt ? 0.6 : 0,
+          deliveredKwh: levert ? 0.5 : 0,
+          gridImportBaselineKwh: 0.3,
+          gridImportBatteryKwh: laadt ? 0.9 : levert ? 0 : 0.3,
+          gridExportBaselineKwh: u >= 11 && u < 15 ? 0.7 : 0,
+          gridExportBatteryKwh: u >= 11 && u < 15 ? 0.4 : 0,
+          avgImportPrice: 0.22 + (levert ? 0.14 : 0),
+          avgExportPrice: 0.09 + (levert ? 0.12 : 0),
+          kostenBasisEur: 0.07,
+          kostenBatterijEur: levert ? -0.02 : 0.07,
+          socEndKwh: laadt ? 1.7 : levert ? 0.2 : 0.9,
+          kwartieren: 4,
+        });
+      }
+    }
+    return {
+      resolutie: "uur" as const,
+      van,
+      tot: dagenLater(van, 6),
+      vakken,
+      totaal: {
+        savingEur: 1.89,
+        wearCostEur: 0.63,
+        chargedKwh: 12.6,
+        deliveredKwh: 10.5,
+        gridImportBaselineKwh: 50.4,
+        gridImportBatteryKwh: 44.1,
+      },
+    };
+  }
+
+  function toon(week: PeriodeReeks | null, bezig = false) {
+    const vraagWeek = vi.fn();
+    const r = render(
+      <Dagprofiel
+        voorbeelden={result.sampleDays}
+        losseDag={null}
+        ontbreekt={null}
+        eersteDag={result.perYear[0]?.firstDay ?? ""}
+        laatsteDag={result.perYear[result.perYear.length - 1]?.lastDay ?? ""}
+        onVraagDag={() => {}}
+        onWisDag={() => {}}
+        week={week}
+        weekBezig={bezig}
+        onVraagWeek={vraagWeek}
+      />,
+    );
+    return { ...r, vraagWeek };
+  }
+
+  it("staat standaard op de dag en vraagt de week alvast op, zodat de knop niets hoeft af te wachten", () => {
+    /**
+     * Eerst ging de week pas de deur uit als de knop om ging: een tweede
+     * optelling over de jaardispatch, en wie alleen naar een dag kijkt hoefde
+     * daar niet op te wachten. Dat voelde na de klik als wachten op data die er
+     * al was. Nu gaat hij bij het tonen van de dag al weg, en de klik zelf
+     * vraagt niets meer.
+     */
+    const { vraagWeek } = toon(null);
+    expect(document.body.textContent).toMatch(/op een dag precies doet/);
+    expect(vraagWeek).toHaveBeenCalledTimes(1);
+    const [van, tot] = vraagWeek.mock.calls[0]!;
+    expect(van).toBe(maandagVan(result.sampleDays[0]!.date));
+    expect(tot).toBe(dagenLater(van, 6));
+
+    fireEvent.click(screen.getByRole("button", { name: "Week" }));
+    expect(vraagWeek).toHaveBeenCalledTimes(1);
+  });
+
+  it("zegt dat hij bezig is zolang de week er nog niet is", () => {
+    // Anders lijkt de knop niets te doen: de dag blijft dan gewoon staan.
+    toon(null, true);
+    fireEvent.click(screen.getByRole("button", { name: "Week" }));
+    expect(document.body.textContent).toMatch(/week wordt opgeteld/i);
+  });
+
+  it("tekent de week per uur, met de dagen op de as", () => {
+    const { container } = toon(weekReeks(result.sampleDays[0]!.date));
+    fireEvent.click(screen.getByRole("button", { name: "Week" }));
+
+    expect(document.body.textContent).toMatch(/in een week precies doet/);
+
+    // Zeven daglabels op de tijdas, niet acht kloktijden.
+    const as = [...container.querySelectorAll("text.as-label")].map((e) => e.textContent ?? "");
+    expect(as.filter((l) => /^(ma|di|wo|do|vr|za|zo) \d+$/.test(l)).length).toBe(7);
+    expect(as.some((l) => /^\d\d:00$/.test(l))).toBe(false);
+
+    // En de weektotalen staan eronder in plaats van de dagcijfers.
+    expect(document.body.textContent).toMatch(/Deze week bespaard/);
+  });
+
+  it("rekent de netto uitwisseling per uur om, niet per kwartier", () => {
+    /**
+     * Een kwartier van 0,25 kWh is 1 kW; een uur van 0,25 kWh is 0,25 kW. Die
+     * factor stond als constante 4 in het bestand, wat klopte zolang er alleen
+     * kwartieren doorheen gingen. Gaat hij mis, dan staat er viermaal te veel
+     * vermogen in de uitlezing.
+     */
+    const { container } = toon(weekReeks(result.sampleDays[0]!.date));
+    fireEvent.click(screen.getByRole("button", { name: "Week" }));
+
+    const svg = container.querySelector("svg.chart")!;
+    fireEvent.mouseMove(svg, { clientX: 0, clientY: 0 });
+    // Een uur met 0,9 kWh afname is 0,9 kW — niet 3,6 kW.
+    expect(document.body.textContent).not.toMatch(/3,6 kW/);
+  });
+});
+
+describe("het verloop gaat niet meer over weken", () => {
+  it("biedt alleen nog maand en jaar", () => {
+    // De week per uur hoort bij het dagprofiel, waar al staat wat de batterij
+    // binnen een dag uitvoert.
+    render(
+      <Verloop
+        periode={null}
+        bezig={false}
+        eersteDag={result.perYear[0]?.firstDay ?? ""}
+        laatsteDag={result.perYear[result.perYear.length - 1]?.lastDay ?? ""}
+        onVraag={() => {}}
+        onKiesDag={() => {}}
+      />,
+    );
+    const groep = screen.getByRole("group", { name: "Periode" });
+    const knoppen = [...groep.querySelectorAll("button")].map((b) => b.textContent);
+    expect(knoppen).toEqual(["Maand", "Jaar"]);
+  });
+});
+
+describe("het wachtscherm", () => {
+  /**
+   * Tijdens het rekenen dimde alleen het antwoordblok en stond "Bezig met
+   * rekenen…" op een knop op het eerste tabblad. Wie op een ander tabblad
+   * stond, zag niets gebeuren. Nu staat er één kaart bovenaan met de echte
+   * stappen uit de pool, en daarna een balk zolang de invoer is gewijzigd.
+   */
+  const voortgang = {
+    vensters: { klaar: 2, totaal: 4 },
+    curve: { klaar: 1, totaal: 2 },
+    perfect: false,
+    samenvoegen: false,
+    deel: 0.45,
+    gestart: Date.now() - 3000,
+  };
+
+  it("toont tijdens het rekenen de stappen met hun stand en een voortgangsbalk", () => {
+    render(<Wachtscherm voortgang={voortgang} bezig verouderd={false} eersteKeer={false} onBereken={() => {}} />);
+    expect(document.body.textContent).toMatch(/opnieuw berekend/);
+    expect(document.body.textContent).toMatch(/2 van 4/);
+    expect(document.body.textContent).toMatch(/1 van 2/);
+    const balk = screen.getByRole("progressbar");
+    expect(balk.getAttribute("aria-valuenow")).toBe("45");
+    // De lopende stap is de eerste die nog niet klaar is: de profieljaren.
+    const stappen = [...document.querySelectorAll(".wacht-stappen li")];
+    expect(stappen[0]!.className).toBe("bezig");
+    expect(stappen[3]!.className).toBe("");
+  });
+
+  it("vinkt af wat klaar is en noemt de eerste keer anders", () => {
+    render(
+      <Wachtscherm
+        voortgang={{ ...voortgang, vensters: { klaar: 4, totaal: 4 }, curve: { klaar: 2, totaal: 2 }, perfect: true, deel: 0.9 }}
+        bezig
+        verouderd={false}
+        eersteKeer
+        onBereken={() => {}}
+      />,
+    );
+    expect(document.body.textContent).toMatch(/Je antwoord wordt berekend/);
+    const stappen = [...document.querySelectorAll(".wacht-stappen li")];
+    expect(stappen.slice(0, 3).map((s) => s.className)).toEqual(["klaar", "klaar", "klaar"]);
+    expect(stappen[3]!.className).toBe("bezig");
+  });
+
+  it("laat zonder stand een onbepaalde balk zien: de gegevens laden nog", () => {
+    render(<Wachtscherm voortgang={null} bezig verouderd={false} eersteKeer onBereken={() => {}} />);
+    expect(document.body.textContent).toMatch(/worden geladen/);
+    expect(screen.getByRole("progressbar").className).toMatch(/onbepaald/);
+  });
+
+  it("zet na een gewijzigde invoer een balk met de rekenknop neer", () => {
+    const opBereken = vi.fn();
+    render(<Wachtscherm voortgang={null} bezig={false} verouderd eersteKeer={false} onBereken={opBereken} />);
+    expect(document.body.textContent).toMatch(/Je invoer is gewijzigd/);
+    fireEvent.click(screen.getByRole("button", { name: "Reken door" }));
+    expect(opBereken).toHaveBeenCalledTimes(1);
+  });
+
+  it("is er niet als er niets te wachten of te rekenen valt", () => {
+    const { container } = render(
+      <Wachtscherm voortgang={null} bezig={false} verouderd={false} eersteKeer={false} onBereken={() => {}} />,
+    );
+    expect(container.textContent).toBe("");
   });
 });

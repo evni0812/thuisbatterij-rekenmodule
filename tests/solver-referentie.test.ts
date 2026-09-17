@@ -73,9 +73,12 @@ const GEVALLEN: {
   optimalHash: string;
 }[] = [
   { naam: "Zendure 1,92 kWh / 0,8 kW", inst: {}, rolling: 526.7709196871565, rollingHash: "5ed3145e", optimal: 517.2812897247147, optimalHash: "d4fcc7d6" },
-  { naam: "Marstek 5,1 kWh, volle slijtage", inst: { presetId: "marstek-venus-e3", slijtageDeel: 1 }, rolling: 427.43857837733515, rollingHash: "9180953d", optimal: 392.97947005046007, optimalHash: "f9759aaa" },
-  { naam: "15 kWh / 0,5 kW", inst: { capaciteitKwh: 15, vermogenKw: 0.5 }, rolling: 451.3598935342849, rollingHash: "a5f96e71", optimal: 419.31590709164783, optimalHash: "a395af2d" },
-  { naam: "15 kWh / 0,5 kW zonder afregelen", inst: { capaciteitKwh: 15, vermogenKw: 0.5, curtailment: false }, rolling: 461.456574668469, rollingHash: "2b788c65", optimal: 429.3838556342103, optimalHash: "a395af2d" },
+  { naam: "Marstek 5,1 kWh, volle slijtage", inst: { presetId: "marstek-venus-e3", slijtageDeel: 1, prijsEur: 1199 }, rolling: 427.43857837733515, rollingHash: "9180953d", optimal: 392.97947005046007, optimalHash: "f9759aaa" },
+  // De prijs staat hier vast: sinds de kostenregel krijgt een overschreven maat
+  // anders een eigen prijs, en daarmee een andere slijtagedrempel. Dit harnas
+  // gaat over de solver, niet over de prijs.
+  { naam: "15 kWh / 0,5 kW", inst: { capaciteitKwh: 15, vermogenKw: 0.5, prijsEur: 699 }, rolling: 451.3598935342849, rollingHash: "a5f96e71", optimal: 419.31590709164783, optimalHash: "a395af2d" },
+  { naam: "15 kWh / 0,5 kW zonder afregelen", inst: { capaciteitKwh: 15, vermogenKw: 0.5, prijsEur: 699, curtailment: false }, rolling: 461.456574668469, rollingHash: "2b788c65", optimal: 429.3838556342103, optimalHash: "a395af2d" },
   { naam: "zonder zonnepanelen", inst: { zonnepanelen: false }, rolling: 628.0923380665662, rollingHash: "e9a8a753", optimal: 627.6517252839958, optimalHash: "31d222b6" },
 ];
 

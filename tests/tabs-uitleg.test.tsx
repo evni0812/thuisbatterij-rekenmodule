@@ -77,6 +77,29 @@ describe("de stapper onderaan", () => {
     expect(screen.getByRole("button", { name: "Volgende: Wat als" })).toBeDefined();
   });
 
+  it("zet de chevrons in de pil, aan weerszijden van het venster", () => {
+    /**
+     * De twee knoppen en het venster horen één element te zijn. Vallen ze uit
+     * elkaar, dan staan er weer drie losse dingen in de balk en wijst de knop
+     * niet meer naar de plek waar de titel schuift.
+     */
+    const { container } = render(<TabStapper actief="waarom" onKies={() => {}} />);
+    const pil = container.querySelector(".stapper-pil")!;
+    expect(pil).not.toBeNull();
+
+    const kinderen = [...pil.children];
+    expect(kinderen.map((k) => k.className)).toEqual([
+      "stapper-pijl",
+      "stapper-venster",
+      "stapper-pijl",
+    ]);
+
+    // Beide knoppen zitten écht in de pil, niet ergens anders in de balk.
+    for (const knop of container.querySelectorAll("button")) {
+      expect(pil.contains(knop)).toBe(true);
+    }
+  });
+
   it("zet alle titels op één spoor en schuift naar de actieve", () => {
     /**
      * De pil is een venster: alle vijf de titels staan naast elkaar en het

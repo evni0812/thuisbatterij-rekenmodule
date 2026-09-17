@@ -7,10 +7,22 @@ import type {
   ScenarioResult,
   VensterUitkomst,
 } from "../model/analysis";
+import type { HuishoudenPunt, HuishoudenVariant } from "../model/huishoudens";
 import type { PeriodeReeks, Resolutie } from "../model/periode";
+
 import type { Afnametype } from "../data/manifest";
 import type { NettariefJaar } from "../nettarief";
 import type { BatterySpec, HouseholdSpec, TariffSpec } from "../model/types";
+
+/**
+ * Wie de periode opvroeg.
+ *
+ * Er zijn er twee: het verloop telt op per dag of week, het dagprofiel toont
+ * een week per uur. Ze vragen tegelijk en met verschillende resoluties, dus
+ * zonder dit label overschrijft het ene antwoord het andere — en annuleert de
+ * laatste aanvraag de vorige, omdat de worker per soort één volgnummer bijhoudt.
+ */
+export type PeriodeKanaal = "verloop" | "week";
 
 /** Alles wat de gebruiker instelt, in één object. */
 export interface Configuration {
@@ -75,6 +87,16 @@ export interface Configuration {
    * toen wordt gestapeld.
    */
   levyEurPerKwh?: number;
+  /**
+   * De kostenregel voor andere maten dan de gekozen batterij (lib/model/kosten.ts):
+   * meerprijs per kWh, per kW en de installateur boven 0,8 kW. Afleiding, geen
+   * dispatch: het raster rekent er niet mee, alleen de financiën per maat.
+   * Optioneel met de standaard als terugval, zodat een bestaande configuratie
+   * blijft werken.
+   */
+  kostenPerKwhEur?: number;
+  kostenPerKwEur?: number;
+  installatieEur?: number;
 }
 
 /** Eén doorgerekende combinatie van capaciteit en vermogen. */
@@ -104,6 +126,19 @@ export type WorkerRequest =
        * alle rijen. De pool verdeelt de rijen over de workers.
        */
       rijen?: number[];
+    }
+  | {
+      /**
+       * Reken de gekozen batterij door voor een reeks huishoudens (Voor wie).
+       * Eén jaarsimulatie per variant; de pool verdeelt de indices over de
+       * helpers zoals de rasterrijen.
+       */
+      type: "huishoudens";
+      id: number;
+      config: Configuration;
+      varianten: HuishoudenVariant[];
+      /** Welke varianten (indices in `varianten`) deze worker doet. */
+      indices: number[];
     }
   | {
       /**
@@ -141,6 +176,7 @@ export type WorkerRequest =
       van: string;
       tot: string;
       resolutie: Resolutie;
+      kanaal: PeriodeKanaal;
     }
   | {
       /**
@@ -195,6 +231,17 @@ export type WorkerRequest =
       uitkomsten: VensterUitkomst[];
       metingen: CurveMeting[];
     }
+  | {
+      /**
+       * Warm de hoofdworker op na een treffer in cache of preload: bouw de
+       * invoer en reken de jaardispatches alvast, zodat de eerste dag, week of
+       * periode niet eerst anderhalve seconde hoeft te wachten. Geen antwoord;
+       * een nieuwere configuratie of `cancel` breekt hem af.
+       */
+      type: "warm";
+      id: number;
+      config: Configuration;
+    }
   | { type: "cancel" };
 
 export type WorkerResponse =
@@ -209,9 +256,19 @@ export type WorkerResponse =
       /** De laatste rij die déze worker doet; of het raster vol is, weet de pool. */
       done: boolean;
     }
+  | {
+      type: "huishouden-punt";
+      id: number;
+      /** Index in `varianten`. */
+      index: number;
+      /** Null als de variant niet doorrekenbaar was; de rest gaat door. */
+      punt: HuishoudenPunt | null;
+      /** De laatste variant die déze worker doet. */
+      done: boolean;
+    }
   | { type: "day"; id: number; day: SampleDay | null; date: string }
   | { type: "scenario"; id: number; result: ScenarioResult }
-  | { type: "periode"; id: number; periode: PeriodeReeks }
+  | { type: "periode"; id: number; kanaal: PeriodeKanaal; periode: PeriodeReeks }
   | { type: "venster-uitkomst"; id: number; groep: number; jaarIndex: number; uitkomst: VensterUitkomst }
   | { type: "quick"; id: number; groep: number; meting: CurveMeting }
   | { type: "perfect"; id: number; groep: number; besparing: number }

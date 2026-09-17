@@ -21,6 +21,7 @@ import {
   STANDAARD_TERUGLEVERING_KWH,
   type BatteryPreset,
 } from "./presets";
+import { STANDAARD_KOSTENREGEL, kostenVan } from "./model/kosten";
 import { STANDAARD_SLIJTAGEDEEL } from "./strategie";
 import type { Instellingen } from "./url-state";
 import type { Configuration } from "./worker/protocol";
@@ -52,6 +53,9 @@ export const STANDAARD: Instellingen = {
   prijsstijging: STANDAARD_PRIJSSTIJGING,
   degradatie: STANDAARD_KALENDERDEGRADATIE,
   slijtageDeel: STANDAARD_SLIJTAGEDEEL,
+  kostenPerKwh: STANDAARD_KOSTENREGEL.perKwhEur,
+  kostenPerKw: STANDAARD_KOSTENREGEL.perKwEur,
+  installatieEur: STANDAARD_KOSTENREGEL.installatieEur,
   prijsEur: null,
   capaciteitKwh: null,
   vermogenKw: null,
@@ -67,10 +71,28 @@ export function kiesPreset(presetId: string): BatteryPreset {
  * Bouw de configuratie die de worker doorrekent.
  *
  * Capaciteit, vermogen en prijs komen uit de batterij, tenzij de gebruiker ze
- * zelf heeft overschreven.
+ * zelf heeft overschreven. Is de maat overschreven maar de prijs niet, dan
+ * volgt de prijs uit de kostenregel vanaf de preset: een Zendure van 10 kWh
+ * kost niet 699 euro. Bij de presetmaat is dat exact de presetprijs, zodat de
+ * standaardconfiguratie en haar hash niet veranderen.
  */
 export function maakConfiguratie(inst: Instellingen): Configuration {
   const preset = kiesPreset(inst.presetId);
+  const kosten = {
+    perKwhEur: inst.kostenPerKwh,
+    perKwEur: inst.kostenPerKw,
+    installatieEur: inst.installatieEur,
+  };
+  const capaciteit = inst.capaciteitKwh ?? preset.capaciteitKwh;
+  const vermogen = inst.vermogenKw ?? preset.vermogenKw;
+  const prijs =
+    inst.prijsEur ??
+    kostenVan(
+      { investmentEur: preset.prijsEur, capaciteitKwh: preset.capaciteitKwh, vermogenKw: preset.vermogenKw },
+      kosten,
+      capaciteit,
+      vermogen,
+    );
   // Zonder zonnepanelen is er niets om terug te leveren en geen eigen opwek;
   // het profiel wisselt naar de gemeten aansluitingen zonder invoeding. Het
   // veld blijft afwezig in het standaardgeval, zodat de hash niet verandert.
@@ -87,9 +109,9 @@ export function maakConfiguratie(inst: Instellingen): Configuration {
     ...(zon ? {} : { afnametype: "AZI" as const }),
     battery: {
       ...preset.spec,
-      capacityKwh: inst.capaciteitKwh ?? preset.capaciteitKwh,
-      maxChargeKw: inst.vermogenKw ?? preset.vermogenKw,
-      maxDischargeKw: inst.vermogenKw ?? preset.vermogenKw,
+      capacityKwh: capaciteit,
+      maxChargeKw: vermogen,
+      maxDischargeKw: vermogen,
       wearCostEurPerKwh: 0,
     },
     tariff: {
@@ -98,7 +120,7 @@ export function maakConfiguratie(inst: Instellingen): Configuration {
       feedInCostEurPerKwh: inst.terugleverkostenCt / 100,
       allowCurtailment: inst.curtailment,
     },
-    investmentEur: inst.prijsEur ?? preset.prijsEur,
+    investmentEur: prijs,
     cycleLife: preset.cycleLife,
     calendarLifeYears: preset.kalenderLevensduurJaren,
     analysisYears: inst.analysejaren,
@@ -112,6 +134,9 @@ export function maakConfiguratie(inst: Instellingen): Configuration {
     // waarde geschat is, staat bij de cijfers zelf.
     annualProductionKwh: zon ? (inst.opwekKwh ?? geschatteOpwekKwh(inst.terugleveringKwh)) : 0,
     useHistoricalLevy: inst.heffing === "toen",
+    kostenPerKwhEur: kosten.perKwhEur,
+    kostenPerKwEur: kosten.perKwEur,
+    installatieEur: kosten.installatieEur,
   };
 }
 

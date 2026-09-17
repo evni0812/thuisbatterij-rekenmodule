@@ -29,6 +29,8 @@ import {
   type BatteryPreset,
 } from "./presets";
 import { STRATEGIEEN, strategieVoor } from "./strategie";
+import { HUISHOUDENS_TERUGLEVERING } from "./model/huishoudens";
+import { STEKKER_GRENS_KW, kostenregelVan } from "./model/kosten";
 import type { Configuration } from "./worker/protocol";
 
 export interface UitlegBlok {
@@ -75,6 +77,8 @@ export type UitlegId =
   | "dagprofiel"
   | "nettarief"
   | "batterijmaat"
+  | "uitbreiden"
+  | "voorwie"
   | "beurten"
   | "cashflow";
 
@@ -121,6 +125,23 @@ const BATTERIJ_BRON = (p: BatteryPreset) => ({
     </>
   ),
 });
+const KOSTEN_BRON = (c: Configuration) => {
+  const k = kostenregelVan(c);
+  return {
+    naam: "Richtprijzen van uitbreiding en installatie",
+    wat: (
+      <>
+        Uitbreidingsmodules kosten bij vrijwel elk merk 310 tot 450 euro per kWh
+        (Zendure AB2000X, Anker BP2700, HomeWizard; thuisbatterijgids.net), een
+        hybride omvormer van 3 tot 5 kW 1.000 tot 2.500 euro, en een eigen groep
+        door een installateur 300 tot 1.200 euro (powerplugs.nl). Hier gerekend
+        met {euro(k.perKwhEur)} per kWh, {euro(k.perKwEur)} per kW en{" "}
+        {euro(k.installatieEur)} installatie, peildatum {PRIJSPEILDATUM}; instelbaar
+        bij de geavanceerde instellingen.
+      </>
+    ),
+  };
+};
 const CE_BRON = {
   naam: "CE Delft en Netbeheer Nederland",
   wat: (
@@ -815,17 +836,74 @@ export const UITLEG: Record<UitlegId, (ctx: UitlegContext) => UitlegBlok> = {
 
   batterijmaat: ({ result, config }) => {
     const j = referentie(result);
+    const k = kostenregelVan(config);
+    const cap = config.battery.capacityKwh;
+    const kw = config.battery.maxDischargeKw;
+    const voorbeeldCap = 5;
+    const voorbeeldKw = 2.5;
+    const stap = (voorbeeldKw > STEKKER_GRENS_KW ? 1 : 0) - (kw > STEKKER_GRENS_KW ? 1 : 0);
+    const voorbeeldPrijs =
+      config.investmentEur + k.perKwhEur * (voorbeeldCap - cap) + k.perKwEur * (voorbeeldKw - kw) + k.installatieEur * stap;
     return {
       titel: "Welke maat loont",
-      watZieJe: <>Dezelfde doorrekening voor 42 combinaties van capaciteit en vermogen, op één profieljaar, zodat je ziet waar meer batterij nog iets oplevert.</>,
-      bronnen: [PROFIEL_BRON(config), PRIJS_BRON],
+      watZieJe: <>Dezelfde doorrekening voor 42 combinaties van capaciteit en vermogen, elk met zijn eigen prijs, zodat je ziet welke maat netto het meest oplevert en waar meer batterij niets meer toevoegt.</>,
+      bronnen: [PROFIEL_BRON(config), PRIJS_BRON, KOSTEN_BRON(config)],
       stappen: [
         <>Elke cel is een volledige doorrekening van de realistische strategie voor die maat, op het meest recente volledige jaar ({j.year}). Het optimum blijft weg; dat zou de kaart minutenlang laten rekenen zonder de vraag te veranderen.</>,
-        <>De aanschafprijs schaalt mee met de capaciteit ({euro(config.investmentEur / config.battery.capacityKwh)} per kWh, uit jouw batterij), zodat de slijtageprijs per laadbeurt bij elke maat klopt.</>,
-        <>Standaard toont de kaart de besparing per kilowattuur capaciteit: dat laat zien waar de meerwaarde van een grotere batterij afvlakt.</>,
+        <><b>De prijs per maat</b> volgt één regel, verankerd aan jouw batterij: die kost {euro(config.investmentEur)}, elke kilowattuur erbij {euro(k.perKwhEur)}, elke kilowatt erbij {euro(k.perKwEur)}, en wie de grens van {getal(STEKKER_GRENS_KW, 1)} kW oversteekt betaalt eenmalig {euro(k.installatieEur)} voor een eigen groep door een installateur (aan een gewoon stopcontact mag maar 800 W). Terug naar een stekkerbatterij gaat de installateur er weer af.</>,
+        <>Geen uitbreidingspakketten per merk: die verschillen per model en bij de meeste hubs groeit het vermogen niet mee. Eén regel voor alle maten houdt de kaart vergelijkbaar; de drie getallen zijn instelbaar voor wie een offerte heeft.</>,
+        <><b>Netto resultaat</b> is dezelfde financiële doorrekening als bovenaan de pagina: de jaarbesparing herhaald over {config.analysisYears} jaar, met {procent(config.priceEscalation, 1)} prijsstijging, {procent(config.discountRate, 1)} rente die je misloopt en de slijtage van de laadbeurten, min de prijs van die maat. Hoe de besparing terugloopt bij slijtage is alleen voor jouw batterij gemeten; de andere maten lenen die vorm.</>,
+        <>De beste cel is de hoogste netto contante waarde. Terugverdientijd en jaarbesparing staan er als schakelaar naast; op besparing wint de grootste altijd, en dat is precies waarom de kaart met netto begint.</>,
+      ],
+      voorbeeld: {
+        regels: [
+          { wat: "Jouw batterij", waarde: `${getal(cap, 2)} kWh, ${getal(kw, 1)} kW, ${euro(config.investmentEur)}` },
+          { wat: `Meerprijs ${getal(voorbeeldCap - cap, 2)} kWh`, waarde: euro(k.perKwhEur * (voorbeeldCap - cap)) },
+          { wat: `Meerprijs ${getal(voorbeeldKw - kw, 1)} kW`, waarde: euro(k.perKwEur * (voorbeeldKw - kw)) },
+          { wat: "Eigen groep door installateur", waarde: euro(k.installatieEur * stap) },
+          { wat: `Prijs van ${voorbeeldCap} kWh bij ${getal(voorbeeldKw, 1)} kW`, waarde: euro(Math.max(0, voorbeeldPrijs)), uitkomst: true },
+        ],
+      },
+      letop: [
+        <>De kaart rust op één jaar ({j.year}); het antwoord bovenaan op het gemiddelde over alle volledige jaren. De cel van jouw eigen maat komt daardoor niet precies op dat antwoord uit.</>,
+        <>Meer vermogen levert soms niets op: als de batterij toch al vol raakt of leeg is, helpt sneller laden niet. Meer capaciteit helpt alleen zolang je hem ook vol krijgt.</>,
+      ],
+    };
+  },
+
+  uitbreiden: ({ result, config }) => {
+    const j = referentie(result);
+    return {
+      titel: "Tot welke maat loont uitbreiden",
+      watZieJe: <>Eén kolom uit de kaart van maten als lijn: het netto resultaat per capaciteit bij het vermogen van jouw batterij, en bij het beste vermogen uit de kaart als dat een ander is.</>,
+      bronnen: [PROFIEL_BRON(config), PRIJS_BRON, KOSTEN_BRON(config)],
+      stappen: [
+        <>Elke stip is een cel uit de kaart: dezelfde jaarsimulatie ({j.year}), dezelfde prijs uit de kostenregel, dezelfde financiële doorrekening over {config.analysisYears} jaar.</>,
+        <>Van stip naar stip is het verschil in netto resultaat gedeeld door de extra kilowatturen wat die stap per kilowattuur opleverde. Zolang dat positief is, verdient de grotere batterij zijn meerprijs terug.</>,
+        <>De streep staat bij de eerste stap waar dat omslaat: vanaf daar kost elke extra kilowattuur meer dan hij over de looptijd oplevert. Dat is het antwoord op "wanneer is uitbreiden niet logisch meer".</>,
       ],
       letop: [
-        <>Meer vermogen levert soms niets op: als de batterij toch al vol raakt of leeg is, helpt sneller laden niet. Meer capaciteit helpt alleen zolang je hem ook vol krijgt.</>,
+        <>De lijn kent alleen de capaciteiten uit het raster; het echte omslagpunt ligt ergens tussen twee stippen.</>,
+        <>Een grotere batterij bij hetzelfde vermogen loopt sneller tegen zijn vermogen aan: hij krijgt de extra ruimte niet meer vol of leeg. Dat is waarom de lijn afvlakt, los van de prijs.</>,
+      ],
+    };
+  },
+
+  voorwie: ({ result, config }) => {
+    const j = referentie(result);
+    return {
+      titel: "Voor wie deze batterij loont",
+      watZieJe: <>Jouw batterij doorgerekend voor huishoudens met jouw afname maar een andere teruglevering ({HUISHOUDENS_TERUGLEVERING.map((t) => getal(t)).join(", ")} kWh per jaar), en voor een huishouden zonder zonnepanelen.</>,
+      bronnen: [PROFIEL_BRON(config), PRIJS_BRON],
+      stappen: [
+        <>Per huishouden één jaarsimulatie met de realistische strategie op {j.year}, met dezelfde batterij, dezelfde prijs ({euro(config.investmentEur)}) en dezelfde slijtagedrempel als jouw doorrekening. Alleen de teruglevering verschuift; het profiel wordt zo geschaald dat het jaartotaal klopt.</>,
+        <>Het huishouden zonder zonnepanelen rekent met het gemeten profiel van aansluitingen zonder invoeding (MFFBAS, afnametype AZI): echt verbruik, geen bewerking van het profiel met panelen.</>,
+        <>Het netto resultaat per punt is dezelfde financiële doorrekening als bovenaan, over {config.analysisYears} jaar. Waar de lijn de nullijn kruist, komt de batterij uit de kosten; dat punt staat in de titel, lineair tussen de twee dichtstbijzijnde huishoudens.</>,
+        <>Jouw eigen huishouden staat erbij uit het hoofdresultaat op datzelfde jaar, zodat de lijn te ijken is aan de cijfers bovenaan.</>,
+      ],
+      letop: [
+        <>Alle huishoudens delen jouw afname. Wie meer of minder verbruikt, zit op een andere lijn; verander de afname en reken opnieuw om die te zien.</>,
+        GEMIDDELD_LETOP,
       ],
     };
   },

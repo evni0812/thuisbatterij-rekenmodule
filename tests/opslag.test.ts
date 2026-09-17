@@ -61,6 +61,9 @@ describe("een oude of bewerkte set", () => {
     expect(uit.prijsEur).toBeNull();
     expect(uit.spreiding).toBe(STANDAARD.spreiding);
     expect(uit.terugleveringKwh).toBe(STANDAARD.terugleveringKwh);
+    // Een set van vóór de kostenregel krijgt de standaardwaarden erbij.
+    expect(uit.kostenPerKwh).toBe(STANDAARD.kostenPerKwh);
+    expect(uit.installatieEur).toBe(STANDAARD.installatieEur);
   });
 
   it("overleeft rommel in de opslag", () => {

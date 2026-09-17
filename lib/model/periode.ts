@@ -22,6 +22,14 @@ export interface PeriodeVak {
   sleutel: string;
   /** De kalenderdag waarin het vak valt (bij week: de maandag), voor doorklikken. */
   dag: string;
+  /**
+   * Begin van het vak als epoch-ms.
+   *
+   * Het dagprofiel zet hier zijn tijdas op. Uit de sleutel terugrekenen zou
+   * kunnen, maar dan moet de zomertijd opnieuw uitgevogeld worden terwijl de
+   * bron hem gewoon bij de hand heeft.
+   */
+  startMs: number;
   /** Besparing: kosten zonder batterij min kosten met, EUR. */
   savingEur: number;
   /** Slijtage van de laadbeurten in dit vak, tegen de volle aanschafprijs per kWh, EUR. */
@@ -34,6 +42,23 @@ export interface PeriodeVak {
   gridExportBatteryKwh: number;
   /** Ongewogen gemiddelde afnameprijs in het vak, EUR/kWh. */
   avgImportPrice: number;
+  /**
+   * Idem voor teruglevering.
+   *
+   * Het dagprofiel tekent beide tarieven, want de afstand ertussen is precies
+   * wat een batterij te pakken kan krijgen. Toen de week per uur naar dat
+   * profiel verhuisde, moest die tweede lijn mee.
+   */
+  avgExportPrice: number;
+  /**
+   * Variabele stroomkosten in het vak, zonder en met batterij, EUR.
+   *
+   * `savingEur` is het verschil van deze twee. Ze staan er allebei bij omdat
+   * het dagprofiel twee cumulatieve lijnen tekent — wat je kwijt was en wat je
+   * kwijt bent — en dat verhaal is uit één verschil niet terug te bouwen.
+   */
+  kostenBasisEur: number;
+  kostenBatterijEur: number;
   /** Lading aan het einde van het vak, kWh. */
   socEndKwh: number;
   /** Aantal kwartieren in het vak; bij een uur normaal 4. */
@@ -69,10 +94,11 @@ export function dagenLater(isoDatum: string, n: number): string {
   return new Date(Date.UTC(y, m - 1, d) + n * 86_400_000).toISOString().slice(0, 10);
 }
 
-function leegVak(sleutel: string, dag: string): PeriodeVak {
+function leegVak(sleutel: string, dag: string, startMs: number): PeriodeVak {
   return {
     sleutel,
     dag,
+    startMs,
     savingEur: 0,
     wearCostEur: 0,
     chargedKwh: 0,
@@ -82,6 +108,9 @@ function leegVak(sleutel: string, dag: string): PeriodeVak {
     gridExportBaselineKwh: 0,
     gridExportBatteryKwh: 0,
     avgImportPrice: 0,
+    avgExportPrice: 0,
+    kostenBasisEur: 0,
+    kostenBatterijEur: 0,
     socEndKwh: 0,
     kwartieren: 0,
   };
@@ -129,7 +158,7 @@ export function periodeReeks(
 
     let v = vakken.get(sleutel);
     if (!v) {
-      v = leegVak(sleutel, vakDag);
+      v = leegVak(sleutel, vakDag, ms);
       vakken.set(sleutel, v);
     }
 
@@ -139,6 +168,8 @@ export function periodeReeks(
     const kostenMet = dispatch.gridImportKwh[i]! * ip - dispatch.gridExportKwh[i]! * ep;
 
     v.savingEur += kostenZonder - kostenMet;
+    v.kostenBasisEur += kostenZonder;
+    v.kostenBatterijEur += kostenMet;
     v.wearCostEur += dispatch.dischargeKwh[i]! * wearEurPerKwh;
     v.chargedKwh += dispatch.chargeKwh[i]!;
     v.deliveredKwh += dispatch.dischargeKwh[i]!;
@@ -147,12 +178,16 @@ export function periodeReeks(
     v.gridExportBaselineKwh += base.gridExportKwh[i]!;
     v.gridExportBatteryKwh += dispatch.gridExportKwh[i]!;
     v.avgImportPrice += ip;
+    v.avgExportPrice += ep;
     v.socEndKwh = dispatch.socKwh[i]!;
     v.kwartieren += 1;
   }
 
   const lijst = [...vakken.values()].sort((a, b) => (a.sleutel < b.sleutel ? -1 : 1));
-  for (const v of lijst) v.avgImportPrice = v.kwartieren > 0 ? v.avgImportPrice / v.kwartieren : 0;
+  for (const v of lijst) {
+    v.avgImportPrice = v.kwartieren > 0 ? v.avgImportPrice / v.kwartieren : 0;
+    v.avgExportPrice = v.kwartieren > 0 ? v.avgExportPrice / v.kwartieren : 0;
+  }
 
   const totaal = lijst.reduce(
     (t, v) => ({
@@ -188,8 +223,11 @@ export function voegReeksenSamen(delen: PeriodeReeks[], resolutie: Resolutie, va
       // Een week die over een jaargrens loopt komt uit twee vensters.
       const kw = al.kwartieren + v.kwartieren;
       al.avgImportPrice = kw > 0 ? (al.avgImportPrice * al.kwartieren + v.avgImportPrice * v.kwartieren) / kw : 0;
+      al.avgExportPrice = kw > 0 ? (al.avgExportPrice * al.kwartieren + v.avgExportPrice * v.kwartieren) / kw : 0;
       al.kwartieren = kw;
       al.savingEur += v.savingEur;
+      al.kostenBasisEur += v.kostenBasisEur;
+      al.kostenBatterijEur += v.kostenBatterijEur;
       al.wearCostEur += v.wearCostEur;
       al.chargedKwh += v.chargedKwh;
       al.deliveredKwh += v.deliveredKwh;

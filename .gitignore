@@ -26,10 +26,14 @@ env/
 # Node / Next.js
 node_modules/
 .next/
+.next-dev/
 .next-build/
 out/
 next-env.d.ts
 *.tsbuildinfo
+
+# Losse scripts en logs tijdens het werk; geen onderdeel van de tool
+.scratch/
 
 # Ruwe energiedata (build-time opgehaald, niet in git)
 data/raw/

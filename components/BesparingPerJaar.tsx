@@ -11,7 +11,7 @@
 import type { ReactNode } from "react";
 import { useState } from "react";
 import type { YearAnalysis } from "../lib/model/analysis";
-import { euro, getal, periode, procent } from "../lib/format";
+import { euro, euroAs, getal, periode, procent } from "../lib/format";
 import { Figure, Grafiek, Legenda, Raster, Trefvlak, kiesTicks, useTip } from "./chart-parts";
 
 const H = 260;
@@ -67,7 +67,7 @@ export function BesparingPerJaar({ jaren, actie }: { jaren: YearAnalysis[]; acti
             x1={breedte - MARGE.rechts}
             schaal={y}
             labelBreedte={MARGE.links}
-            formatter={(v) => euro(v)}
+            formatter={(v) => euroAs(v)}
           />
 
           {jaren.map((j, i) => {

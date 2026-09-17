@@ -11,7 +11,7 @@
 import { useState, type ReactNode } from "react";
 import type { FinanceResult } from "../lib/model/finance";
 import type { Overgang } from "../lib/overgang";
-import { euro, jaren, procent } from "../lib/format";
+import { euro, euroAs, jaren, procent } from "../lib/format";
 import { Figure, Grafiek, Raster, Trefvlak, kiesTicks, useTip } from "./chart-parts";
 
 const B = 720;
@@ -127,7 +127,7 @@ export function Cashflow({
             x1={B - MARGE.rechts}
             schaal={y}
             labelBreedte={MARGE.links}
-            formatter={(v) => euro(v)}
+            formatter={(v) => euroAs(v)}
           />
 
           {/* Het gebied onder nul is nog niet terugverdiend. */}

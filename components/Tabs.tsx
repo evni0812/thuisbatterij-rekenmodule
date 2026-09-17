@@ -80,13 +80,21 @@ export function Tabs({ actief, onKies }: { actief: TabId; onKies: (id: TabId) =>
  * te lezen. Een verhaal in vijf delen hoort onderaan een "en dan?" te hebben,
  * anders moet je na elke sectie terug naar de balk.
  *
- * ── De pil is een venster ───────────────────────────────────────────────────
+ * ── De pil is een venster, en bedient zichzelf ──────────────────────────────
  * Alle vijf de titels staan naast elkaar op één spoor; de pil laat er precies
  * één van zien en schuift het spoor op. Daardoor ís de beweging de navigatie:
  * je ziet de titel van waar je was naar links verdwijnen en die van waar je
  * heen gaat binnenkomen, en bij een sprong van twee schuift de tussenliggende
  * titel er zichtbaar doorheen. Een gewone tekstwissel zou hetzelfde zeggen en
  * niets laten zien.
+ *
+ * De chevrons zitten in de pil zelf, aan weerszijden van dat venster. Ze stonden
+ * eerst als losse knoppen links en rechts in de balk, met de naam van het vorige
+ * en volgende onderdeel erbij. Dat waren drie dingen die om de aandacht vroegen
+ * terwijl er één handeling is: een stap vooruit of terug. Nu wijst de knop naar
+ * de plek waar de beweging gebeurt — je duwt tegen de rand van het venster en de
+ * titel schuift. De namen zelf zijn niet verdwenen: ze zitten in het aria-label
+ * en in de tooltip, dus wie wil weten waar hij heen gaat komt er nog bij.
  *
  * Met `prefers-reduced-motion` staat de overgang uit; de titel wisselt dan
  * gewoon. De inhoud is hetzelfde, alleen de animatie vervalt.
@@ -126,51 +134,48 @@ export function TabStapper({
   return (
     <div className="stapper-balk">
     <nav className="stapper" aria-label="Verder door de onderdelen">
-      <button
-        type="button"
-        className="stapper-knop"
-        disabled={!vorige}
-        onClick={() => vorige && stap(vorige.id)}
-        aria-label={vorige ? `Vorige: ${vorige.label}` : "Geen vorig onderdeel"}
-      >
-        <Chevron kant="links" />
-        <span className="stapper-zij">
-          <span className="stapper-richting">Vorige</span>
-          <span className="stapper-naam">{vorige ? vorige.label : "—"}</span>
-        </span>
-      </button>
-
-      <div className="stapper-venster">
-        <div
-          className="stapper-spoor"
-          style={{ transform: `translateX(${-i * 100}%)` }}
+      <div className="stapper-pil">
+        <button
+          type="button"
+          className="stapper-pijl"
+          disabled={!vorige}
+          onClick={() => vorige && stap(vorige.id)}
+          aria-label={vorige ? `Vorige: ${vorige.label}` : "Geen vorig onderdeel"}
+          title={vorige ? `Vorige: ${vorige.label}` : undefined}
         >
-          {TABS.map((t) => (
-            <span key={t.id} className="stapper-titel" aria-hidden={t.id !== actief}>
-              {t.label}
-            </span>
-          ))}
+          <Chevron kant="links" />
+        </button>
+
+        <div className="stapper-venster">
+          <div
+            className="stapper-spoor"
+            style={{ transform: `translateX(${-i * 100}%)` }}
+          >
+            {TABS.map((t) => (
+              <span key={t.id} className="stapper-titel" aria-hidden={t.id !== actief}>
+                {t.label}
+              </span>
+            ))}
+          </div>
         </div>
+
+        <button
+          type="button"
+          className="stapper-pijl"
+          disabled={!volgende}
+          onClick={() => volgende && stap(volgende.id)}
+          aria-label={volgende ? `Volgende: ${volgende.label}` : "Geen volgend onderdeel"}
+          title={volgende ? `Volgende: ${volgende.label}` : undefined}
+        >
+          <Chevron kant="rechts" />
+        </button>
       </div>
+
       {/* De aankondiging staat los van het spoor: een schermlezer hoort de
           nieuwe titel één keer, niet alle vijf. */}
       <span className="visueel-verborgen" role="status">
         {TABS[i]?.label}: {TABS[i]?.vraag}
       </span>
-
-      <button
-        type="button"
-        className="stapper-knop rechts"
-        disabled={!volgende}
-        onClick={() => volgende && stap(volgende.id)}
-        aria-label={volgende ? `Volgende: ${volgende.label}` : "Geen volgend onderdeel"}
-      >
-        <span className="stapper-zij">
-          <span className="stapper-richting">Volgende</span>
-          <span className="stapper-naam">{volgende ? volgende.label : "—"}</span>
-        </span>
-        <Chevron kant="rechts" />
-      </button>
     </nav>
     </div>
   );

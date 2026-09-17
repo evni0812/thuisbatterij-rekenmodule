@@ -33,6 +33,7 @@ import {
   rasterJaar,
   rasterPunt,
 } from "../../lib/model/raster";
+import { huishoudenPunt, huishoudensVarianten, type HuishoudenPunt } from "../../lib/model/huishoudens";
 import type { GridPoint } from "../../lib/worker/protocol";
 import { scenarioConfiguratie } from "../../lib/nettarief";
 
@@ -95,6 +96,14 @@ export async function GET(): Promise<Response> {
     );
   }
 
+  // En de reeks huishoudens (Voor wie): zeven jaarsimulaties, een paar
+  // seconden, met dezelfde puntfunctie als de worker.
+  let huishoudens: HuishoudenPunt[] | undefined;
+  if (process.env.VOORBEELD_ZONDER_RASTER !== "1") {
+    huishoudens = [];
+    for (const v of huishoudensVarianten()) huishoudens.push(await huishoudenPunt(bron, config, v));
+  }
+
   return Response.json({
     versie: MODEL_VERSIE,
     sleutel: dispatchSleutel(config),
@@ -102,5 +111,6 @@ export async function GET(): Promise<Response> {
     result,
     scenario,
     grid,
+    huishoudens,
   });
 }

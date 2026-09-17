@@ -19,7 +19,7 @@
 
 import { useState, type ReactNode } from "react";
 import type { SavingBreakdown } from "../lib/model/analysis";
-import { euro, kwh } from "../lib/format";
+import { euro, euroAs, kwh } from "../lib/format";
 import { Figure, Grafiek, Raster, Trefvlak, kiesTicks, useTip } from "./chart-parts";
 
 interface Post {
@@ -191,7 +191,7 @@ export function Uitsplitsing({
             x1={B - MARGE.rechts}
             schaal={y}
             labelBreedte={MARGE.links}
-            formatter={(v) => euro(v)}
+            formatter={(v) => euroAs(v)}
           />
 
           {stappen.map((s, i) => {

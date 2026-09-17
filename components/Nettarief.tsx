@@ -30,8 +30,21 @@ import {
 } from "../lib/nettarief";
 import { centPerKwh, euro, getal, jaren, procent } from "../lib/format";
 import { Figure } from "./chart-parts";
-import { piekAandeel } from "./Statistieken";
+import { Tegel, piekAandeel, procentpunt } from "./Statistieken";
 import { Tariefblad } from "./Tariefblad";
+
+/** Het verschil tussen twee terugverdientijden, kort opgeschreven. */
+function korter(van: number | null, naar: number | null): string | undefined {
+  if (van === null || naar === null) return undefined;
+  const d = van - naar;
+  if (Math.abs(d) < 1 / 24) return "even lang";
+  const maanden = Math.round(Math.abs(d) * 12);
+  const woord =
+    maanden < 12
+      ? `${maanden} ${maanden === 1 ? "maand" : "maanden"}`
+      : jaren(Math.abs(d));
+  return `${woord} ${d > 0 ? "korter" : "langer"}`;
+}
 
 export function Nettarief({
   huidig,
@@ -83,68 +96,59 @@ export function Nettarief({
       <Tariefblad markeerPiek />
 
       {scenario ? (
-        <dl className="kerncijfers">
-          <div>
-            <dt>Besparing nu</dt>
-            <dd>{euro(huidig.averageSavingEur)}</dd>
-          </div>
-          <div>
-            <dt>Besparing met het nieuwe nettarief</dt>
-            <dd className={verschil > 0 ? "goed" : undefined}>
-              {euro(scenario.averageSavingEur)}
-              <span className="dd-noot">
-                {verschil > 0 ? "+" : ""}
-                {euro(verschil)} per jaar, {procent(relatief, 0)}
-              </span>
-            </dd>
-          </div>
-          <div>
-            <dt>Terugverdientijd als je nu koopt</dt>
-            <dd>
-              {jaren(
-                (overgang ?? scenario).finance.paybackYears,
-              )}
-              <span className="dd-noot">
-                {overgang && overgang.jarenOpHuidigTarief > 0
-                  ? `eerst ${overgang.jarenOpHuidigTarief} jaar op het tarief van nu, daarna op dat van ${overgang.ingangsjaar}`
-                  : "op het nieuwe tarief"}
-                {" · "}
-                {jaren(huidig.finance.paybackYears)} als het tarief niet zou
-                veranderen
-              </span>
-            </dd>
-          </div>
-          <div>
-            <dt>Laadbeurten per jaar</dt>
-            <dd>
-              {getal(scenario.stats.cyclesPerYear, 0)}
-              <span className="dd-noot">
-                nu {getal(huidig.stats.cyclesPerYear, 0)}
-              </span>
-            </dd>
-          </div>
-          <div>
-            <dt>Afname in de piekuren</dt>
-            <dd>
-              {procent(
-                piekAandeel(
-                  scenario.stats.peakHourImportBatteryKwh,
-                  scenario.stats.gridImportBatteryKwh,
-                ),
-              )}
-              <span className="dd-noot">
-                nu{" "}
-                {procent(
-                  piekAandeel(huidig.stats.peakHourImportBatteryKwh, huidig.stats.gridImportBatteryKwh),
-                )}
-                , zonder batterij{" "}
-                {procent(
-                  piekAandeel(huidig.stats.peakHourImportBaselineKwh, huidig.stats.gridImportBaselineKwh),
-                )}
-              </span>
-            </dd>
-          </div>
-        </dl>
+        /*
+         * Dezelfde plaat als het overzicht bovenaan, en om dezelfde reden: waar
+         * het om gaat is de verándering, niet de eindstand. Deze cijfers stonden
+         * als losse kerncijfers met de oude waarde weggestopt in een voetnoot —
+         * "448", eronder klein "nu 361" — zodat je zelf moest uitrekenen wat het
+         * nettarief doet. Van → naar zet dat verschil in de hoofdregel.
+         */
+        <div className="stat-grid">
+          <Tegel
+            label="Besparing per jaar"
+            van={euro(huidig.averageSavingEur)}
+            naar={euro(scenario.averageSavingEur)}
+            delta={`${verschil > 0 ? "+" : ""}${euro(verschil)} · ${procent(relatief, 0)}`}
+            deltaGoed={verschil > 0}
+            accent="var(--series-3)"
+            uitleg={`Dezelfde jaren en dezelfde batterij, nog een keer doorgerekend met het tarief van ${NETTARIEF_JAAR} erbij.`}
+          />
+          <Tegel
+            label="Terugverdientijd"
+            van={jaren(huidig.finance.paybackYears)}
+            naar={jaren((overgang ?? scenario).finance.paybackYears)}
+            delta={korter(huidig.finance.paybackYears, (overgang ?? scenario).finance.paybackYears)}
+            deltaGoed={
+              huidig.finance.paybackYears !== null &&
+              (overgang ?? scenario).finance.paybackYears !== null &&
+              (overgang ?? scenario).finance.paybackYears! < huidig.finance.paybackYears!
+            }
+            accent="var(--ac)"
+            uitleg={
+              overgang && overgang.jarenOpHuidigTarief > 0
+                ? `Koop je nu, dan draai je eerst ${overgang.jarenOpHuidigTarief} jaar op het tarief van vandaag en daarna op dat van ${overgang.ingangsjaar}. Links staat wat het zou worden als er niets verandert.`
+                : "Links wat het zou worden als het tarief niet verandert, rechts met het nieuwe tarief."
+            }
+          />
+          <Tegel
+            label="Laadbeurten per jaar"
+            van={getal(huidig.stats.cyclesPerYear, 0)}
+            naar={getal(scenario.stats.cyclesPerYear, 0)}
+            delta={`${scenario.stats.cyclesPerYear > huidig.stats.cyclesPerYear ? "+" : ""}${getal(scenario.stats.cyclesPerYear - huidig.stats.cyclesPerYear, 0)}`}
+            accent="var(--series-1)"
+            uitleg="Grotere prijsverschillen over de dag geven de batterij meer momenten waarop laden en leveren loont. Meer beurten is ook meer slijtage."
+          />
+          <Tegel
+            label="Afname in de piekuren"
+            van={procent(piekAandeel(huidig.stats.peakHourImportBatteryKwh, huidig.stats.gridImportBatteryKwh))}
+            naar={procent(piekAandeel(scenario.stats.peakHourImportBatteryKwh, scenario.stats.gridImportBatteryKwh))}
+            delta={procentpunt(piekAandeel(huidig.stats.peakHourImportBatteryKwh, huidig.stats.gridImportBatteryKwh), piekAandeel(scenario.stats.peakHourImportBatteryKwh, scenario.stats.gridImportBatteryKwh))}
+            deltaGoed={piekAandeel(scenario.stats.peakHourImportBatteryKwh, scenario.stats.gridImportBatteryKwh) < piekAandeel(huidig.stats.peakHourImportBatteryKwh, huidig.stats.gridImportBatteryKwh)}
+            extra={`zonder batterij ${procent(piekAandeel(huidig.stats.peakHourImportBaselineKwh, huidig.stats.gridImportBaselineKwh))}`}
+            accent="var(--series-2)"
+            uitleg="Het deel van je stroom dat je haalt op de uren waarop het net het drukst is — precies wat het nieuwe tarief wil afremmen."
+          />
+        </div>
       ) : (
         <p className="scenario-wacht">
           Dezelfde periode wordt nog een keer doorgerekend, nu met dit tarief

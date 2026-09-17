@@ -4,13 +4,13 @@
   "private": true,
   "scripts": {
     "dev": "next dev",
-    "build": "NEXT_BUILD_DIR=.next-build next build",
+    "build": "next build",
     "start": "next start",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
-    "clean": "rm -rf .next .next-build out"
+    "clean": "rm -rf .next .next-dev .next-build out"
   },
   "dependencies": {
     "next": "^15.1.6",

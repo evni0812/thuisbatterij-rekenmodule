@@ -16,6 +16,13 @@
  * waarden hier (2.500 en 4.500 euro) waren kale hardwareprijzen die de
  * businesscase te rooskleurig maakten.
  *
+ * EIGEN GROEP — boven 800 W mag een batterij niet aan een gewoon stopcontact;
+ * aan het stopcontact levert een Marstek of een Zendure 2400 dan ook maar
+ * 800 W. Voor het volle vermogen legt een installateur een eigen groep aan, en
+ * die zit bij de modellen boven 0,8 kW in de prijs: 300 euro, wat een enkele
+ * extra groep gangbaar kost (300 tot 1.200 euro afhankelijk van de meterkast).
+ * Dezelfde post zit in de kostenregel voor andere maten (lib/model/kosten.ts).
+ *
  * RENDEMENT — het rondgangsrendement is waar mogelijk een gemeten waarde uit
  * onafhankelijke tests, niet het getal van het datasheet. Die twee lopen flink
  * uiteen: fabrikanten meten de cel, de praktijk meet de wandcontactdoos.
@@ -120,8 +127,8 @@ export const PRESETS: BatteryPreset[] = [
     merk: "Zendure",
     capaciteitKwh: 2.4,
     vermogenKw: 2.4,
-    prijsEur: 879,
-    prijsNoot: "849 euro plus de P1-meter van 30",
+    prijsEur: 1179,
+    prijsNoot: "849 euro plus de P1-meter van 30 en 300 euro voor een eigen groep door een installateur, want aan het stopcontact levert hij maar 800 W",
     spec: spec(2.4, 2.4, 0.88, 0.9),
     cycleLife: 6000,
     kalenderLevensduurJaren: 15,
@@ -132,8 +139,8 @@ export const PRESETS: BatteryPreset[] = [
     merk: "Marstek",
     capaciteitKwh: 5.12,
     vermogenKw: 2.5,
-    prijsEur: 1199,
-    prijsNoot: "1.199 euro, P1-meter zit erbij",
+    prijsEur: 1499,
+    prijsNoot: "1.199 euro met de P1-meter erbij, plus 300 euro voor een eigen groep door een installateur, want aan het stopcontact levert hij maar 800 W",
     spec: spec(5.12, 2.5, 0.83, 0.9),
     cycleLife: 6000,
     kalenderLevensduurJaren: 15,
@@ -144,8 +151,8 @@ export const PRESETS: BatteryPreset[] = [
     merk: "Anker",
     capaciteitKwh: 7,
     vermogenKw: 3.5,
-    prijsEur: 2134,
-    prijsNoot: "2.099 euro plus de P1-meter van 35",
+    prijsEur: 2434,
+    prijsNoot: "2.099 euro plus de P1-meter van 35 en 300 euro voor een eigen groep door een installateur, want aan het stopcontact levert hij maar 800 W",
     spec: spec(7, 3.5, 0.85, 0.9),
     cycleLife: 6000,
     kalenderLevensduurJaren: 15,

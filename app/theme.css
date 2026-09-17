@@ -57,6 +57,9 @@
 
   --good: #1a6b40;
   --warning: #8a5a00;
+  /* De winnaar in de kaart van maten. Geel omdat het van de hele teal-schaal
+     in kleurtoon verschilt: het leest op de lichtste én de donkerste cel. */
+  --winnaar: #f2b01e;
   --critical: #b3261e;
   --success-text: #1a6b40;
 
@@ -1814,29 +1817,20 @@ details.voetnoot-uitklap .schakel {
 }
 
 /*
- * De beste cel van de gekozen weergave. Subtiel: een lichte ring in de
- * celkleur-tegenhanger plus een stipje rechtsboven, zodat hij opvalt zonder de
- * kleurschaal te verstoren — die draagt de betekenis, en een felle markering
- * zou eroverheen schreeuwen.
+ * De beste cel van de gekozen weergave: één gele ring binnen de cel.
  *
- * De ring is dun en de stip klein, want het gaat om één cel in tweeënveertig.
- * Staat de beste cel toevallig op de gekozen maat, dan zie je beide: de dikke
- * outline van `huidig` en dit stipje.
+ * Eerder was de ring `currentColor` plus een stipje rechtsboven. Die ring nam
+ * dus de tekstkleur van de cel over — wit op donker, bijna zwart op licht — en
+ * viel daardoor samen met de kleurschaal in plaats van erbovenuit te komen.
+ * Geel hoort in die schaal niet thuis en is meteen de winnaar. De stip kon weg:
+ * twee markeringen voor één cel is er een te veel.
+ *
+ * Binnen de cel (inset) en niet als outline, zodat de ring de rasterafstand
+ * niet verandert en cellen niet gaan schuiven.
  */
 .heat-cel.beste {
   position: relative;
-  box-shadow: inset 0 0 0 2px currentColor;
-}
-
-.heat-cel.beste::after {
-  content: "";
-  position: absolute;
-  top: 4px;
-  right: 4px;
-  width: 5px;
-  height: 5px;
-  border-radius: 50%;
-  background: currentColor;
+  box-shadow: inset 0 0 0 2px var(--winnaar);
 }
 
 .heat-cel.leeg {
@@ -1861,6 +1855,47 @@ details.voetnoot-uitklap .schakel {
 .heat-noot {
   color: var(--text-muted);
   font-size: 0.82rem;
+}
+
+/*
+ * De streep tussen stekkerbatterij en eigen groep. Links van de streep past
+ * de batterij in een gewoon stopcontact; rechts komt er een installateur bij,
+ * en die zit in de prijs van elke cel daar. De streep staat op de eerste
+ * kolom boven 0,8 kW, als gestreepte linkerrand op kop én cellen.
+ */
+.heat th.heat-scheiding,
+.heat td.heat-scheiding {
+  border-left: 2px dashed var(--axis);
+  padding-left: 6px;
+}
+
+/*
+ * Een cel die netto geld kost draagt geen eigen rand meer.
+ *
+ * Er stond een dunne rode rand omheen om te laten zien waar nul ligt. Bij een
+ * raster waarin de halve kaart negatief is, levert dat een veld vol rode hokjes
+ * op waar de ene markering die ertoe doet — de winnaar — in wegvalt. Het
+ * bedrag in de cel heeft al een minteken, en de kleurschaal doet de rest.
+ */
+.heat-cel.negatief {
+  box-shadow: none;
+}
+
+/* Is de beste cel er zelf een die geld kost, dan wint de gele ring. */
+.heat-cel.negatief.beste {
+  box-shadow: inset 0 0 0 2px var(--winnaar);
+}
+
+/* De adviesregel boven de kaart: één zin, met nadruk. */
+.advies {
+  margin: 0 0 14px;
+  padding: 10px 14px;
+  border-left: 3px solid var(--ac);
+  background: var(--surface-2);
+  border-radius: 4px;
+  font-size: 0.95rem;
+  color: var(--text-primary);
+  max-width: 72ch;
 }
 
 /* ── Schil: balk met tabs, voet ───────────────────────────────────────────── */
@@ -1959,11 +1994,10 @@ details.voetnoot-uitklap .schakel {
 }
 
 /*
- * De stapper onderaan: vorige — waar je bent — volgende.
+ * De stapper onderaan: één pil met een chevron aan weerszijden.
  *
- * De pil is een venster van vaste breedte waar één titel in past; alle vijf
- * staan naast elkaar op een spoor dat opschuift. Vaste breedte is de hele
- * truc: zonder dat springt de pil per titel van maat en schuift er niets.
+ * De pil is een venster waar één titel in past; alle vijf staan naast elkaar
+ * op een spoor dat opschuift als je op een chevron drukt.
  */
 /*
  * De balk plakt onderin het scherm. Sticky en niet fixed: hij houdt zijn eigen
@@ -1986,69 +2020,64 @@ details.voetnoot-uitklap .schakel {
 }
 
 .stapper {
-  /* Drie kolommen, waarvan de buitenste even breed: dan staat de pil precies
-     in het midden, ook al is "Wat als" langer dan "Start". */
-  display: grid;
-  grid-template-columns: 1fr auto 1fr;
-  align-items: center;
-  gap: 12px;
+  display: flex;
+  justify-content: center;
   margin: 0 auto;
   padding: 14px 24px;
   width: 100%;
   max-width: 980px;
 }
 
-.stapper-knop {
-  display: inline-flex;
+/*
+ * De pil is het hele bedieningselement: chevron, venster, chevron.
+ *
+ * Eerder stonden er drie losse knoppen in de balk — vorige, de pil, volgende —
+ * met de namen van de buren erbij. Dat waren drie brandpunten voor één
+ * handeling. Nu zit de knop tegen de rand waar de beweging gebeurt: je duwt
+ * tegen het venster en de titel schuift eronder weg.
+ */
+.stapper-pil {
+  display: flex;
   align-items: center;
-  gap: 10px;
-  justify-self: start;
-  max-width: 100%;
-  padding: 8px 14px;
-  border: 1px solid var(--border-strong);
   border-radius: 999px;
-  background: var(--surface-1);
-  color: var(--ac);
+  background: var(--ac);
+}
+
+.stapper-pijl {
+  /* 44px: de aanraakmaat, en meteen de hoogte van de pil. */
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  justify-content: center;
+  width: 44px;
+  height: 44px;
+  padding: 0;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: #fff;
   cursor: pointer;
-  transition: background 0.15s, border-color 0.15s, color 0.15s;
+  transition: background 0.15s, opacity 0.15s;
 }
 
-.stapper-knop:hover:not(:disabled) {
-  background: var(--acs);
-  border-color: var(--ac);
+.stapper-pijl:hover:not(:disabled) {
+  background: rgb(255 255 255 / 16%);
 }
 
-.stapper-knop:disabled {
-  opacity: 0.35;
+.stapper-pijl:active:not(:disabled) {
+  background: rgb(255 255 255 / 26%);
+}
+
+.stapper-pijl:disabled {
+  opacity: 0.3;
   cursor: default;
 }
 
-.stapper-zij {
-  display: flex;
-  flex-direction: column;
-  line-height: 1.2;
-  text-align: left;
-}
-
-.stapper-knop.rechts {
-  justify-self: end;
-}
-
-.stapper-knop.rechts .stapper-zij {
-  text-align: right;
-}
-
-.stapper-richting {
-  font-size: 0.72rem;
-  color: var(--text-muted);
-}
-
-.stapper-naam {
-  font-size: 0.92rem;
-  font-weight: 600;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+/* De algemene focusring is de accentkleur, en die verdwijnt op de pil zelf.
+   Wit, en naar binnen, zodat hij binnen de ronde rand blijft. */
+.stapper-pijl:focus-visible {
+  outline: 2px solid #fff;
+  outline-offset: -5px;
 }
 
 .stapper-chevron {
@@ -2056,12 +2085,11 @@ details.voetnoot-uitklap .schakel {
 }
 
 .stapper-venster {
+  /* Vaste breedte is de hele truc: zonder dat springt de pil per titel van
+     maat en schuift er niets. Ruim genoeg voor "Wanneer" en "Methode". */
   flex: none;
-  width: 11rem;
+  width: 8.5rem;
   overflow: hidden;
-  border-radius: 999px;
-  background: var(--ac);
-  padding: 9px 0;
 }
 
 .stapper-spoor {
@@ -2085,23 +2113,13 @@ details.voetnoot-uitklap .schakel {
   }
 }
 
-/* Op smalle schermen alleen de chevrons: de namen eromheen passen niet naast
-   een pil van elf rem, en de pil zegt al waar je bent. */
 @media (max-width: 599px) {
   .stapper {
     padding: 10px 16px;
   }
 
-  .stapper-zij {
-    display: none;
-  }
-
-  .stapper-knop {
-    padding: 8px 10px;
-  }
-
   .stapper-venster {
-    width: 9rem;
+    width: 7.5rem;
   }
 }
 
@@ -2731,4 +2749,165 @@ details.uitklap[open] > summary {
   .pagina {
     padding: 20px 14px 48px;
   }
+}
+
+
+/* ── Wachtscherm en herbereken-balk ──────────────────────────────────────── */
+
+/*
+ * Bovenaan de pagina, op elk tabblad. Tijdens het rekenen een kaart met een
+ * balk die vult naarmate de stukken uit de pool binnenkomen; daarna, zolang de
+ * invoer is gewijzigd zonder nieuwe berekening, een balk met de knop erin.
+ * Eerder dimde alleen het antwoordblok en stond de knop op het eerste tabblad.
+ */
+.wachtscherm {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-left: 4px solid var(--ac);
+  border-radius: var(--radius);
+  padding: 18px 22px;
+  margin: 0 0 20px;
+}
+
+.wachtscherm-kop {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 12px;
+}
+
+.wachtscherm-kop h2 {
+  margin: 0;
+  font-size: 1.1rem;
+}
+
+.wachtscherm-tijd {
+  font-variant-numeric: tabular-nums;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
+.wachtscherm-uitleg {
+  margin: 6px 0 12px;
+  color: var(--text-secondary);
+  font-size: 0.92rem;
+  max-width: 72ch;
+}
+
+.voortgang {
+  height: 8px;
+  border-radius: 4px;
+  background: var(--surface-2);
+  overflow: hidden;
+}
+
+.voortgang-balk {
+  height: 100%;
+  width: 2%;
+  border-radius: 4px;
+  background: var(--ac);
+  transition: width 0.3s ease;
+}
+
+/* Nog geen stukken bekend: een lopend blokje in plaats van een lege balk. */
+.voortgang.onbepaald .voortgang-balk {
+  width: 30%;
+  animation: voortgang-loop 1.2s ease-in-out infinite alternate;
+}
+
+@keyframes voortgang-loop {
+  from { transform: translateX(0); }
+  to { transform: translateX(233%); }
+}
+
+.wacht-stappen {
+  list-style: none;
+  margin: 12px 0 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 6px 18px;
+  font-size: 0.9rem;
+  color: var(--text-muted);
+}
+
+.wacht-stappen li {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  padding-left: 20px;
+  position: relative;
+}
+
+.wacht-stappen li::before {
+  content: "";
+  position: absolute;
+  left: 0;
+  top: 0.35em;
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--border);
+  box-sizing: border-box;
+}
+
+.wacht-stappen li.bezig {
+  color: var(--text-primary);
+}
+
+.wacht-stappen li.bezig::before {
+  border-color: var(--ac);
+  animation: wacht-puls 1s ease-in-out infinite alternate;
+}
+
+.wacht-stappen li.klaar {
+  color: var(--text-secondary);
+}
+
+.wacht-stappen li.klaar::before {
+  background: var(--ac);
+  border-color: var(--ac);
+}
+
+.wacht-stap-teller {
+  font-variant-numeric: tabular-nums;
+}
+
+@keyframes wacht-puls {
+  from { opacity: 0.4; }
+  to { opacity: 1; }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .voortgang.onbepaald .voortgang-balk,
+  .wacht-stappen li.bezig::before {
+    animation: none;
+  }
+}
+
+.herbereken-balk {
+  /* Onder de vaste balk blijven hangen, niet erachter verdwijnen. */
+  position: sticky;
+  top: calc(var(--nav-h) + 8px);
+  z-index: 5;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+  margin: 0 0 20px;
+  padding: 12px 18px;
+  border-radius: var(--radius);
+  background: var(--surface-1);
+  border: 1px solid var(--ac);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.08);
+}
+
+.herbereken-balk p {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.herbereken-balk b {
+  color: var(--text-primary);
 }

@@ -33,6 +33,18 @@ export function euro(value: number): string {
   return Math.abs(value) >= 10 ? euro0.format(value) : euro2.format(value);
 }
 
+/**
+ * Bedragen op een as: altijd zonder centen.
+ *
+ * `euro()` zet centen onder een tientje, wat voor een bedrag in een zin klopt
+ * maar niet voor een as. Een schaal die in stappen van duizend loopt kreeg zo
+ * "€ 0,00" als nullabel, met twee decimalen die nergens anders op die as
+ * staan. Een tick is een schaalpunt, geen bedrag dat je overmaakt.
+ */
+export function euroAs(value: number): string {
+  return euro0.format(value);
+}
+
 export function euroPrecies(value: number): string {
   return euro2.format(value);
 }

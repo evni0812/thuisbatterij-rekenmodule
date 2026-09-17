@@ -23,8 +23,11 @@ import {
   isTabId,
   type TabId,
 } from "../components/Tabs";
+import { Uitbreiden } from "../components/Uitbreiden";
 import { Uitleg } from "../components/Uitleg";
 import { Uitsplitsing } from "../components/Uitsplitsing";
+import { VoorWie } from "../components/VoorWie";
+import { Wachtscherm } from "../components/Wachtscherm";
 import { Verantwoording } from "../components/Verantwoording";
 import { Verloop } from "../components/Verloop";
 import { Verliezen } from "../components/Verliezen";
@@ -33,6 +36,8 @@ import { datum, periode } from "../lib/format";
 import { leesLaatste, leesProfielen, type Profiel } from "../lib/opslag";
 import { PRIJSPEILDATUM, geschatteOpwekKwh } from "../lib/presets";
 import { STANDAARD, kiesPreset, maakConfiguratie } from "../lib/configuratie";
+import { referentieJaar } from "../lib/model/analysis";
+import { ankerVan, kostenVan, kostenregelVan } from "../lib/model/kosten";
 import { UITLEG, type UitlegContext } from "../lib/uitleg";
 import { overgangsFinance } from "../lib/overgang";
 import { useAnalysis } from "../lib/useAnalysis";
@@ -103,7 +108,9 @@ export default function Page() {
     result,
     busy,
     error,
+    voortgang,
     grid,
+    huishoudens,
     dag,
     dagBezig,
     scenario,
@@ -114,6 +121,9 @@ export default function Page() {
     periode: periodeReeks,
     periodeBezig,
     vraagPeriode,
+    week,
+    weekBezig,
+    vraagWeek,
     herbereken,
     getoondeConfig,
     verouderd,
@@ -211,6 +221,16 @@ export default function Page() {
       </header>
 
       <main className="pagina">
+        {/* Eén plek, op elk tabblad: wat er gebeurt terwijl er gerekend wordt,
+            of dat er nog gerekend móet worden. */}
+        <Wachtscherm
+          voortgang={voortgang}
+          bezig={busy}
+          verouderd={verouderd}
+          eersteKeer={!result}
+          onBereken={herbereken}
+        />
+
         {/* ── Start ──────────────────────────────────────────────────────── */}
         <Paneel id="start" actief={tab}>
           <div className="sectiekop">
@@ -402,6 +422,9 @@ export default function Page() {
                 laatsteDag={result.perYear[result.perYear.length - 1]?.lastDay ?? ""}
                 onVraagDag={vraagDag}
                 onWisDag={wisDag}
+                week={week}
+                weekBezig={weekBezig}
+                onVraagWeek={vraagWeek}
                 actie={uitleg("dagprofiel")}
               />
             </>
@@ -414,10 +437,11 @@ export default function Page() {
             <span className="eyebrow">Wat als · {TABS[3].vraag}</span>
             <h2>Het nettarief van 2029 gooit de businesscase om</h2>
             <p>
-              Vier wat-als-vragen: wat doet het tijdsafhankelijke nettarief dat
-              vanaf 2029 gaat gelden, welke maat batterij loont eigenlijk, hoe
-              zuinig gaat hij met zijn laadbeurten om, en hoe ziet de investering
-              er over de looptijd uit.
+              Wat doet het tijdsafhankelijke nettarief dat vanaf 2029 gaat
+              gelden, welke maat batterij loont netto en tot waar loont
+              uitbreiden, voor wie kan deze batterij uit, hoe zuinig gaat hij met
+              zijn laadbeurten om, en hoe ziet de investering er over de
+              looptijd uit.
             </p>
           </div>
           {wachtOpResultaat}
@@ -429,19 +453,33 @@ export default function Page() {
                 overgang={overgang}
                 actie={uitleg("nettarief")}
               />
-              <BatterijMaat
-                grid={grid}
-                huidigeCapaciteit={toonCapaciteit}
-                huidigVermogen={toonVermogen}
-                onKies={(cap, kw) => {
-                  // Een klik op een vakje is een expliciete opdracht: meteen
-                  // doorrekenen. Anders kost de klik je het raster en levert hij
-                  // niets op, want de rekenknop staat op een ander tabblad.
-                  setInst((s) => ({ ...s, capaciteitKwh: cap, vermogenKw: kw }));
-                  setRekenNa(true);
-                }}
-                actie={uitleg("batterijmaat")}
-              />
+              {toon ? (
+                <>
+                  <BatterijMaat
+                    grid={grid}
+                    huidigeCapaciteit={toonCapaciteit}
+                    huidigVermogen={toonVermogen}
+                    config={toon}
+                    curve={result.curve}
+                    jaar={referentieJaar(result).year}
+                    onKies={(cap, kw) => {
+                      // Een klik op een vakje is een expliciete opdracht: meteen
+                      // doorrekenen. Anders kost de klik je het raster en levert
+                      // hij niets op, want de rekenknop staat op een ander
+                      // tabblad. De prijs gaat mee: de maat uit de kaart met de
+                      // prijs die de kaart ervoor rekende, anders rekent de
+                      // hoofddoorrekening een grote batterij voor de prijs van de
+                      // kleine.
+                      const prijs = Math.round(kostenVan(ankerVan(toon), kostenregelVan(toon), cap, kw));
+                      setInst((s) => ({ ...s, capaciteitKwh: cap, vermogenKw: kw, prijsEur: prijs }));
+                      setRekenNa(true);
+                    }}
+                    actie={uitleg("batterijmaat")}
+                  />
+                  <Uitbreiden grid={grid} config={toon} curve={result.curve} actie={uitleg("uitbreiden")} />
+                  <VoorWie huishoudens={huishoudens} result={result} config={toon} actie={uitleg("voorwie")} />
+                </>
+              ) : null}
               {toon ? (
                 <Laadbeurten
                   finance={result.finance}

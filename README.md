@@ -21,11 +21,13 @@ npm run build        # statische export naar out/
 npm run clean        # bij een vastgelopen build-cache
 ```
 
-**Stop de dev-server voordat je bouwt.** Ze delen state, en een build onder een
-draaiende dev-server laat die omvallen met `Cannot find module './833.js'` of een
-fout over het React Client Manifest. De build schrijft naar een eigen map
-(`.next-build`), wat de ergste chunk-corruptie voorkomt, maar niet alles.
-Loopt het toch vast: `npm run clean`.
+**Bouwen naast een draaiende dev-server mag.** `next.config.mjs` leest de fase
+die Next meegeeft en kiest daarop de map: de dev-server krijgt `.next-dev`, elk
+buildcommando `.next`. Ze kunnen elkaars chunks dus niet meer overschrijven,
+ongeacht hoe de build wordt gestart. Eerder hing dat aan een omgevingsvariabele
+in `npm run build`, en dan viel de dev-server om met `Cannot find module
+'./873.js'` zodra iemand `npx next build` of `vercel build` gebruikte. Zie je
+die fout toch nog, dan is er oude rommel blijven staan: `npm run clean`.
 
 **Breekt de build af zonder foutmelding?** Als `next build` stopt na
 `Creating an optimized production build ...` en exitcode 0 geeft zonder `out/`
@@ -92,7 +94,7 @@ en is eruit: het voorstel beprijst uitsluitend afname, er ís geen
 terugleverheffing, en de tool rekent met een dynamisch contract zonder. Een
 schakelaar voor iets wat niet bestaat kost de lezer meer dan hij oplevert.
 
-**Slijtage staat er, maar niet vooraan.** In het verloop per week, maand of jaar
+**Slijtage staat er, maar niet vooraan.** In het verloop per maand of jaar
 was ze eerst een grijs blokje onder elke staaf én een getal in de kop. Dat geeft
 haar een gewicht dat ze niet heeft: het is afschrijving op een investering die
 al gedaan is, geen kostenpost van die week. Ze staat nu als één zacht gezet
@@ -152,14 +154,37 @@ naam om te laden of te verwijderen. Een URL met parameters wint altijd van de
 bewaarde set, zodat een gedeelde link laat zien wat de afzender zag. Een set van
 vóór een nieuw veld wordt aangevuld met de standaard.
 
-**Week, maand en jaar.** Boven het dagprofiel staat het verloop over een
-periode (`components/Verloop.tsx`): een week per uur, een maand per dag, een
-jaar per week, met bladeren naar de vorige of volgende periode. Dezelfde
-dispatch als het dagprofiel, opgeteld in wandkloktijd door
-`lib/model/periode.ts`; de worker levert het op aanvraag uit de bewaarde
-jaardispatch (bericht `periode`). Per vak staat de besparing en, onder de
-nullijn, de slijtage van de laadbeurten. Een klik op een dag opent die dag in
-het dagprofiel.
+**Maand en jaar.** Boven het dagprofiel staat het verloop over een periode
+(`components/Verloop.tsx`): een maand per dag, een jaar per week, met bladeren
+naar de vorige of volgende periode. Dezelfde dispatch als het dagprofiel,
+opgeteld in wandkloktijd door `lib/model/periode.ts`; de worker levert het op
+aanvraag uit de bewaarde jaardispatch (bericht `periode`). Per vak staat de
+besparing. Een klik op een dag opent die dag in het dagprofiel.
+
+**De week zit bij het dagprofiel.** Die stond hier eerst ook, als staafjes per
+uur. Maar wat een week laat zien — wanneer de batterij laadt en levert, en hoe
+dat ritme zich per dag herhaalt — is dezelfde vraag als die van het dagprofiel,
+alleen over zeven dagen. Het verloop gaat over optellen; het profiel over
+uitvoeren. Dus schakelt `components/Dagprofiel.tsx` nu tussen **Dag** en
+**Week**, en tekent in de weekstand dezelfde vier panelen met 168 uurpunten in
+plaats van 96 kwartieren.
+
+Dat kon zonder de tekencode te verdubbelen. De x-as schaalt al op de lengte van
+de reeks, dus die trok zich niets aan van het verschil. Wat wel moest: de
+panelen werken nu op een `Profiel` — de vorm die ze echt nodig hebben — in
+plaats van op een `SampleDay`, en de omrekening van kilowattuur naar kilowatt
+is een parameter geworden. Die stond als constante `4` in het bestand, wat
+klopte zolang er alleen kwartieren doorheen gingen; een uur van 0,25 kWh is
+0,25 kW en geen 1 kW.
+
+De week loopt over een **eigen workerkanaal**. Verloop en dagprofiel vragen
+tegelijk een periode op, met verschillende resoluties, en de worker houdt per
+soort bericht één volgnummer bij om verouderde aanvragen te laten vallen.
+Deelden ze dat, dan annuleerde de ene figuur de andere en zag je bij allebei om
+beurten "wordt opgeteld…". Vandaar `PeriodeKanaal` in het protocol en twee
+slots in `lib/useAnalysis.ts`. De week wordt pas opgevraagd als je de knop
+omzet: het is een tweede optelling over de jaardispatch, en wie alleen naar één
+dag kijkt hoeft daar niet op te wachten.
 
 **Slijtage staat ernaast, niet erin.** Elke geleverde kilowattuur gebruikt een
 stukje van de levensduur; tegen de aanschafprijs is dat `investering ÷
@@ -185,6 +210,30 @@ Achter elkaar kostte de analyse vier seconden en scenario plus raster nog eens
 eenentwintig; met vier workers is het kritieke pad één profieljaar plus het
 samenvoegen, en staat het raster na een paar seconden.
 
+**Wat je ziet terwijl er gerekend wordt.** Bovenaan de pagina, op elk
+tabblad, staat tijdens een doorrekening één kaart (`components/Wachtscherm.tsx`)
+met een balk die vult naarmate de stukken uit de pool binnenkomen en de echte
+stappen erbij: profieljaren (n van m), besparing bij slijtage, perfecte
+voorspelling, samenvoegen. `useAnalysis` houdt daarvoor een `Voortgang` bij,
+met gewichten die ruwweg de rekentijd volgen. Eerder dimde alleen het
+antwoordblok en stond "Bezig met rekenen…" op een knop op het eerste tabblad;
+wie ergens anders stond zag niets gebeuren. Is de invoer gewijzigd zonder
+nieuwe berekening, dan staat op dezelfde plek een balk met de rekenknop erin,
+die onder de vaste kop blijft hangen.
+
+**Opwarmen na een treffer.** Komt het antwoord uit de cache of de preload, dan
+heeft de hoofdworker nooit gerekend, en kostte de eerste dag-, week- of
+periodeaanvraag het laden van alle profielen plus een jaarsimulatie: ruim een
+seconde "wordt opgeteld…" over data die er al leek te zijn. Direct na zo'n
+treffer krijgt de hoofdworker nu een `warm`-bericht: hij bouwt de invoer en
+rekent de jaardispatches vooraf, het referentiejaar eerst (realistisch, basis
+én optimum, want de dagweergave toont het optimum), daarna de andere jaren, in
+stukken met een adempauze ertussen zodat een echte aanvraag er altijd
+tussendoor kan en alleen nog rekent wat ontbreekt. Een nieuwere configuratie of
+`cancel` breekt hem af. De week in het dagprofiel wordt bovendien vooruit
+opgevraagd voor elke getoonde dag, in plaats van pas bij de klik op Week: het
+wachten na de klik was zichtbaarder dan het werk vooraf.
+
 **Wat er niet meer gerekend wordt.** Het scenario leest de pagina alleen op
 besparing, kerncijfers, financiën en curve; `runScenario` slaat het optimum, de
 voorbeelddagen en het gat over (vijf jaarsimulaties minder). De cachesleutel
@@ -195,7 +244,9 @@ geen seconde rekent. `VELDKLASSE` dwingt via het type af dat elk nieuw veld van
 `Configuration` wordt ingedeeld. De bundels in localStorage (maximaal zes, met
 een indexsleutel zodat opruimen niets hoeft te parsen) horen dus bij een
 dispatch, niet bij een exacte configuratie. De rasterlogica staat in
-`lib/model/raster.ts`, gedeeld tussen worker en build.
+`lib/model/raster.ts`, gedeeld tussen worker en build; de reeks huishoudens
+(zeven jaarsimulaties, taak `huishoudens`) in `lib/model/huishoudens.ts`, op
+dezelfde manier over de helpers verdeeld en in dezelfde bundel bewaard.
 
 ## Het standaardantwoord staat klaar
 
@@ -212,7 +263,8 @@ Next.js een statische route gunt en braken de Vercel-build. Met
 bestand rekende elke bezoeker het alsnog zelf (zeventien seconden in de
 achtergrondworker), ook bij een treffer op de rest. `VOORBEELD_ZONDER_RASTER=1`
 bij de build laat het weg als een bouwmachine te traag blijkt; de pagina bouwt
-dan zonder raster in plaats van helemaal niet.
+dan zonder raster in plaats van helemaal niet. De reeks huishoudens (Voor wie)
+gaat onder dezelfde vlag mee: zeven jaarsimulaties, een paar seconden.
 
 De route-handler in `app/voorbeeld.json/route.ts` draait tijdens de build en
 leest de assets van schijf in plaats van via `fetch`. Daarom neemt
@@ -228,11 +280,10 @@ hij alleen weer traag — een regressie die niemand opmerkt.
 
 ## Publiceren
 
-De app staat op Vercel en bouwt bij elke push naar `main`. `vercel.json`
-overschrijft het buildcommando bewust met `next build` in plaats van
-`npm run build`: dat laatste zet `NEXT_BUILD_DIR=.next-build`, en die map vindt
-Vercel niet terug omdat het zijn eigen configuratie leest zonder die variabele.
-Zo blijft alles op `.next` staan en komt de export in `out/`.
+De app staat op Vercel en bouwt bij elke push naar `main`. `vercel.json` houdt
+het op `next build`; de configuratie regelt zelf dat een build in `.next` landt
+en de export in `out/`, dus Vercel hoeft niets te weten van hoe wij lokaal onze
+mappen scheiden.
 
 De data staat al in `public/data/`. Alleen als je die wilt verversen zijn de
 Python-scripts nodig — zie [Data verversen](#data-verversen).
@@ -364,6 +415,79 @@ SoC-grid, met **lineaire interpolatie van de waardefunctie**. Dat laatste is gee
 detail — zonder interpolatie moet elke laadstap een geheel aantal gridstappen
 zijn, en bij 15 kWh op 0,8 kW verdwijnt dan een kwart van het laadvermogen in
 afronding, met een niet-monotone besparing tot gevolg.
+
+### Welke maat loont, en voor wie
+
+De kaart van batterijmaten rekende lang alleen de besparing per maat uit, en
+daarop wint de grootste batterij altijd. De weergaven "per kWh" en "per kW"
+waren een omweg om de afnemende meeropbrengst zichtbaar te maken zonder te
+weten wat een maat kost. Sinds september 2026 weet de kaart dat wél, en
+beantwoordt ze de vraag direct: wat blijft er netto over.
+
+**De kostenregel** (`lib/model/kosten.ts`) is één generieke regel, verankerd
+aan de gekozen batterij:
+
+```
+kosten(cap, kW) = prijs van jouw batterij
+                + 320 €/kWh × (cap − jouw cap)
+                + 250 €/kW  × (kW − jouw kW)
+                + 300 €     zodra je de grens van 0,8 kW oversteekt
+```
+
+Waarom generiek en niet per model: uitbreidingspakketten verschillen per merk
+(Zendure 1,92 kWh per module, Anker 2,69, HomeWizard en Marstek per hele unit)
+en bij de meeste hubs groeit het vermogen niet mee. Per model narekenen maakt de
+kaart onvergelijkbaar tussen batterijen. De moduleprijzen liggen bovendien
+dicht bij elkaar: 312 €/kWh (Zendure AB2000X), 316 (Anker BP2700), 443
+(HomeWizard-unit), 234 (Marstek). De grens van 0,8 kW is de stopcontactlimiet
+van 800 W: daarboven legt een installateur een eigen groep aan, gangbaar 300
+euro voor één extra groep (tot 1.200 als de meterkast op de schop moet). Die
+post zit ook in de presetprijs van de modellen boven 0,8 kW (Marstek Venus E,
+Zendure 2400 AC+, Anker Solarbank Max), want aan het stopcontact leveren die
+maar 800 W. De drie getallen zijn instelbaar onder Geavanceerd, met bron.
+
+Verankeren aan de gekozen batterij respecteert een eigen offerteprijs, en maakt
+de regel padonafhankelijk: in stappen naar een maat toe klikken geeft dezelfde
+prijs als in één keer. Een klik in de kaart zet daarom ook de prijs; eerder
+rekende de hoofddoorrekening een Zendure van 10 kWh door voor 699 euro. Wie de
+maat overschrijft zonder prijs, krijgt nu de kostenregelprijs vanaf de preset.
+
+**Netto resultaat per cel** (`lib/model/dimensionering.ts`) is dezelfde
+financiële doorrekening als het antwoord bovenaan: `computeFinance` met
+looptijd, prijsstijging, rente, degradatie en cycluslevensduur. Hoe de
+besparing terugloopt bij slijtage is alleen voor de gekozen batterij gemeten
+(drie curvepunten); de andere cellen lenen de vórm van die curve en schalen hem
+op hun eigen niveau. Voor de cel van de eigen batterij is dat exact de gemeten
+curve. Het raster zelf is niet veranderd — elke cel is nog steeds één
+jaarsimulatie met de lineair geschaalde slijtagedrempel — dus het bewaarde en
+vooruitgerekende raster bleef geldig, en looptijd, rente of de kostenregel
+verschuiven werkt de kaart direct bij zonder rekenen.
+
+Eén jaar tegenover een gemiddelde: een cel rust op het meest recente volledige
+jaar, het hoofdantwoord op het gemiddelde over alle volledige jaren. De cel van
+de eigen maat komt daardoor niet precies op het hoofdantwoord uit; de teksten
+noemen het jaar.
+
+**Uitbreiden** zet één kolom van de kaart als lijn: netto resultaat tegen
+capaciteit bij het vermogen van de eigen batterij, en bij het beste vermogen
+uit de kaart als dat een ander is. Het verschil tussen twee stippen gedeeld
+door de extra kilowatturen is wat die stap per kilowattuur opleverde; de streep
+staat bij de eerste stap waar dat negatief wordt. Dat is het antwoord op
+"wanneer is uitbreiden niet logisch meer".
+
+**Voor wie** (`lib/model/huishoudens.ts`) rekent de gekozen batterij door voor
+zes terugleverniveaus (0 tot 6.000 kWh) bij de eigen afname, plus één
+huishouden zonder zonnepanelen op het gemeten AZI-profiel. Zeven jaarsimulaties
+op het rasterjaar, als workertaak `huishoudens` verdeeld over de helpers, en
+meegebakken in `/voorbeeld.json`. De ijk: het punt met de eigen teruglevering
+is exact de jaarbesparing van het referentiejaar in het hoofdresultaat (test in
+`tests/huishoudens.test.ts`). Het eigen huishouden staat als apart punt in de
+figuur; waar de lijn de nullijn kruist, komt de batterij uit de kosten.
+
+De adviesregel boven de kaart volgt uit de cel met de hoogste netto contante
+waarde: een stekkerbatterij als de beste maat op of onder 0,8 kW ligt, anders
+een batterij met eigen groep, met erbij wat de beste maat aan de andere kant
+van de streep oplevert.
 
 ### Conventies die vastliggen
 

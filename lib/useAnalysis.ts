@@ -41,6 +41,12 @@ import {
   type ScenarioResult,
   type VensterUitkomst,
 } from "./model/analysis";
+import {
+  huishoudensVarianten,
+  pastBijVarianten,
+  type HuishoudenPunt,
+  type HuishoudenVariant,
+} from "./model/huishoudens";
 import type { PeriodeReeks, Resolutie } from "./model/periode";
 import { RASTER_CAPACITEITEN, RASTER_VERMOGENS } from "./model/raster";
 import type { DispatchResult } from "./model/types";
@@ -53,6 +59,7 @@ import { WorkerPool, poolGrootte } from "./worker/pool";
 import type {
   Configuration,
   GridPoint,
+  PeriodeKanaal,
   WorkerRequest,
   WorkerResponse,
 } from "./worker/protocol";
@@ -62,6 +69,45 @@ export interface GridState {
   rows: (GridPoint[] | null)[];
   capacities: number[];
   powers: number[];
+  klaar: boolean;
+  bezig: boolean;
+}
+
+/**
+ * Hoe ver de hoofddoorrekening is, voor het wachtscherm.
+ *
+ * De stukken zijn de taken van de pool: elk profieljaar (rolling én optimum),
+ * de curvepunten, de run met perfecte voorspelling en het samenvoegen. De
+ * gewichten volgen ruwweg de rekentijd, zodat de balk gelijkmatig loopt.
+ */
+export interface Voortgang {
+  vensters: { klaar: number; totaal: number };
+  curve: { klaar: number; totaal: number };
+  perfect: boolean;
+  samenvoegen: boolean;
+  /** 0 tot 1. */
+  deel: number;
+  /** Wanneer de doorrekening begon, ms sinds epoch. */
+  gestart: number;
+}
+
+export function voortgangDeel(v: Omit<Voortgang, "deel">): number {
+  const gewichten = { venster: 1, curve: 0.3, perfect: 0.8, samenvoegen: 0.4 };
+  const totaal =
+    v.vensters.totaal * gewichten.venster + v.curve.totaal * gewichten.curve + gewichten.perfect + gewichten.samenvoegen;
+  const klaar =
+    v.vensters.klaar * gewichten.venster +
+    v.curve.klaar * gewichten.curve +
+    (v.perfect ? gewichten.perfect : 0) +
+    (v.samenvoegen ? gewichten.samenvoegen : 0);
+  return totaal > 0 ? Math.min(1, klaar / totaal) : 0;
+}
+
+/** De gekozen batterij voor een reeks huishoudens (Voor wie). */
+export interface HuishoudensState {
+  varianten: HuishoudenVariant[];
+  /** Per variant: het punt, null als niet doorrekenbaar, undefined als nog onderweg. */
+  punten: (HuishoudenPunt | null | undefined)[];
   klaar: boolean;
   bezig: boolean;
 }
@@ -88,8 +134,12 @@ export interface AnalysisState {
   verouderd: boolean;
   /** Reken opnieuw door, ook als er een bewaard resultaat is. */
   herbereken: () => void;
+  /** Hoe ver de lopende hoofddoorrekening is; null als er geen loopt. */
+  voortgang: Voortgang | null;
   /** Het raster van maten; null zolang het nog loopt of nog niet is gestart. */
   grid: GridState | null;
+  /** De reeks huishoudens; null zolang hij nog niet is gestart. */
+  huishoudens: HuishoudensState | null;
   /** Een opgevraagde losse dag, of null zolang er geen is opgehaald. */
   dag: SampleDay | null;
   /**
@@ -102,10 +152,21 @@ export interface AnalysisState {
   /** Vraag het batterijgedrag van één kalenderdag op. */
   vraagDag: (datum: string) => void;
   wisDag: () => void;
-  /** Het resultaat over een periode, per uur, dag of week; null zolang er geen is. */
+  /** Het resultaat over een periode, per dag of week; null zolang er geen is. */
   periode: PeriodeReeks | null;
   periodeBezig: boolean;
   vraagPeriode: (van: string, tot: string, resolutie: Resolutie) => void;
+  /**
+   * Eén week, opgeteld per uur, voor het dagprofiel.
+   *
+   * Een eigen slot en niet hetzelfde als `periode`: het verloop vraagt op
+   * hetzelfde moment een maand of jaar op. Deelden ze er één, dan zou het ene
+   * antwoord het andere overschrijven en zag je bij beide figuren afwisselend
+   * "wordt opgeteld…".
+   */
+  week: PeriodeReeks | null;
+  weekBezig: boolean;
+  vraagWeek: (van: string, tot: string) => void;
   /** Uitkomst van het nettariefscenario, of null zolang het nog loopt. */
   scenario: ScenarioResult | null;
   /** Of het scenario ook op teruglevering heft. */
@@ -146,6 +207,7 @@ interface Vooruitgerekend {
   result: AnalysisResult;
   scenario?: ScenarioResult;
   grid?: GridPoint[][];
+  huishoudens?: (HuishoudenPunt | null)[];
 }
 
 let voorbeeldBelofte: Promise<Vooruitgerekend | null> | null = null;
@@ -174,6 +236,10 @@ function volRaster(rows: GridPoint[][]): GridState {
     klaar: true,
     bezig: false,
   };
+}
+
+function volHuishoudens(punten: (HuishoudenPunt | null)[]): HuishoudensState {
+  return { varianten: huishoudensVarianten(), punten, klaar: true, bezig: false };
 }
 
 /** De ArrayBuffers van een dispatch, om zonder kopie door te geven. */
@@ -211,7 +277,13 @@ interface Groep {
 
 type InterneState = Omit<
   AnalysisState,
-  "vraagDag" | "wisDag" | "herbereken" | "zetScenarioOpTeruglevering" | "zetScenarioJaar" | "vraagPeriode"
+  | "vraagDag"
+  | "wisDag"
+  | "herbereken"
+  | "zetScenarioOpTeruglevering"
+  | "zetScenarioJaar"
+  | "vraagPeriode"
+  | "vraagWeek"
 >;
 
 export function useAnalysis(config: Configuration | null): AnalysisState {
@@ -228,12 +300,16 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
     getoondeConfig: null,
     uitCache: false,
     verouderd: false,
+    voortgang: null,
     grid: null,
+    huishoudens: null,
     dag: null,
     dagBezig: false,
     dagOntbreekt: null,
     periode: null,
     periodeBezig: false,
+    week: null,
+    weekBezig: false,
     scenario: null,
     scenarioOpTeruglevering: false,
     scenarioJaar: NETTARIEF_JAAR,
@@ -250,13 +326,28 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
   /** De ids van de rastertaken die nu mogen binnenkomen. */
   const gridIds = useRef(new Set<number>());
   const gridGroep = useRef<number | null>(null);
+  /** Idem voor de reeks huishoudens. */
+  const huishoudensIds = useRef(new Set<number>());
+  const huishoudensGroep = useRef<number | null>(null);
   const dagId = useRef(0);
-  const periodeId = useRef(0);
+  const periodeId = useRef<Record<PeriodeKanaal, number>>({ verloop: 0, week: 0 });
   const opTerugleveringRef = useRef(false);
   const jaarRef = useRef<NettariefJaar>(NETTARIEF_JAAR);
 
   /** De laatst gevraagde periode, zodat hij bij een nieuw resultaat opnieuw kan. */
-  const periodeVraag = useRef<{ van: string; tot: string; resolutie: Resolutie } | null>(null);
+  const periodeVraag = useRef<Record<PeriodeKanaal, { van: string; tot: string; resolutie: Resolutie } | null>>({
+    verloop: null,
+    week: null,
+  });
+
+  /**
+   * Warm de hoofdworker op voor een resultaat dat hij niet zelf rekende (cache
+   * of preload): dag, week en verloop komen dan meteen in plaats van na
+   * anderhalve seconde. Zie `warmOp` in lib/worker/sim.worker.ts.
+   */
+  const warmOp = useCallback((cfg: Configuration) => {
+    poolRef.current?.postDirect(0, { type: "warm", id: ++nextId.current, config: cfg } satisfies WorkerRequest);
+  }, []);
 
   /**
    * Stuur de laatst gevraagde periode (opnieuw) naar de hoofdworker, voor de
@@ -264,14 +355,19 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
    * component er in zijn effect op mag leunen zonder bij elke wijziging in de
    * live invoer opnieuw te vuren.
    */
-  const herhaalPeriode = useCallback(() => {
+  const herhaalPeriode = useCallback((kanaal?: PeriodeKanaal) => {
     const pool = poolRef.current;
     const cfg = laatsteConfig.current;
-    const vraag = periodeVraag.current;
-    if (!pool || !cfg || !vraag) return;
-    const id = ++periodeId.current;
-    setState((s) => ({ ...s, periodeBezig: true }));
-    pool.postDirect(0, { type: "periode", id, config: cfg, ...vraag } satisfies WorkerRequest);
+    if (!pool || !cfg) return;
+    // Zonder kanaal: allebei opnieuw. Dat is het geval na een nieuwe
+    // doorrekening, want dan is elke openstaande reeks verouderd.
+    for (const k of kanaal ? [kanaal] : (["verloop", "week"] as PeriodeKanaal[])) {
+      const vraag = periodeVraag.current[k];
+      if (!vraag) continue;
+      const id = ++periodeId.current[k];
+      setState((s) => (k === "week" ? { ...s, weekBezig: true } : { ...s, periodeBezig: true }));
+      pool.postDirect(0, { type: "periode", id, kanaal: k, config: cfg, ...vraag } satisfies WorkerRequest);
+    }
   }, []);
 
   /**
@@ -313,8 +409,17 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
       start: Date.now(),
     };
     groepen.current.set(nummer, groep);
-    if (soort === "analyse") analyseGroep.current = nummer;
-    else scenarioGroep.current = nummer;
+    if (soort === "analyse") {
+      analyseGroep.current = nummer;
+      const v = {
+        vensters: { klaar: 0, totaal: grenzen.length },
+        curve: { klaar: 0, totaal: fracties.length },
+        perfect: false,
+        samenvoegen: false,
+        gestart: groep.start,
+      };
+      setState((s) => ({ ...s, voortgang: { ...v, deel: voortgangDeel(v) } }));
+    } else scenarioGroep.current = nummer;
 
     type Stuk =
       | { type: "venster"; config: Configuration; jaarIndex: number; metOptimum: boolean }
@@ -335,6 +440,18 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
     if (soort === "analyse") plaats({ type: "perfect", config: werkCfg, jaarIndex: ref });
   }, []);
 
+  /** Zet de stand van de hoofddoorrekening in de state, voor het wachtscherm. */
+  const werkVoortgangBij = useCallback((groep: Groep) => {
+    const v = {
+      vensters: { klaar: groep.uitkomsten.filter((u) => u !== null).length, totaal: groep.uitkomsten.length },
+      curve: { klaar: Math.min(groep.metingen.length, groep.verwachtMetingen), totaal: groep.verwachtMetingen },
+      perfect: groep.perfectBinnen,
+      samenvoegen: groep.samenvoegId !== null,
+      gestart: groep.start,
+    };
+    setState((s) => ({ ...s, voortgang: { ...v, deel: voortgangDeel(v) } }));
+  }, []);
+
   /** Zijn alle stukken binnen? Dan naar de hoofdworker om samen te voegen. */
   const probeerSamenvoegen = useCallback((groep: Groep) => {
     const pool = poolRef.current;
@@ -345,6 +462,7 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
     const id = ++nextId.current;
     groep.samenvoegId = id;
     groep.taakIds.add(id);
+    if (groep.soort === "analyse") werkVoortgangBij(groep);
     const uitkomsten = groep.uitkomsten as VensterUitkomst[];
     const transfer = uitkomsten.flatMap((u) => [...buffersVan(u.realistic), ...buffersVan(u.optimal)]);
     if (groep.soort === "analyse") {
@@ -421,11 +539,46 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
   }, []);
 
   /**
-   * Start scenario en raster voor een configuratie, behalve wat er al is. Het
-   * scenario gaat eerst in de wachtrij: het staat in de kop.
+   * Verdeel de huishoudens over de helpers, net als de rasterrijen. Zeven
+   * jaarsimulaties; ze gaan vóór het raster de rij in omdat het er zo weinig
+   * zijn en de figuur direct onder de kaart staat.
+   */
+  const startHuishoudens = useCallback((cfg: Configuration) => {
+    const pool = poolRef.current;
+    if (!pool) return;
+    const nummer = ++groepTeller.current;
+    huishoudensGroep.current = nummer;
+    huishoudensIds.current = new Set();
+    const varianten = huishoudensVarianten();
+    setState((s) => ({
+      ...s,
+      huishoudens: { varianten, punten: varianten.map(() => undefined), klaar: false, bezig: true },
+    }));
+    const helpers = pool.aantal > 1 ? [...Array(pool.aantal - 1).keys()].map((i) => i + 1) : [0];
+    const perWorker: number[][] = helpers.map(() => []);
+    varianten.forEach((_, i) => perWorker[i % helpers.length]!.push(i));
+    helpers.forEach((worker, k) => {
+      const indices = perWorker[k]!;
+      if (indices.length === 0) return;
+      const id = ++nextId.current;
+      huishoudensIds.current.add(id);
+      pool.plaats({
+        groep: nummer,
+        worker,
+        bericht: { type: "huishoudens", id, config: cfg, varianten, indices },
+      });
+    });
+  }, []);
+
+  /**
+   * Start scenario, huishoudens en raster voor een configuratie, behalve wat er
+   * al is. Het scenario gaat eerst in de wachtrij: het staat in de kop.
    */
   const startAchtergrond = useCallback(
-    (cfg: Configuration, al: { scenario?: ScenarioResult; grid?: GridPoint[][] }) => {
+    (
+      cfg: Configuration,
+      al: { scenario?: ScenarioResult; grid?: GridPoint[][]; huishoudens?: (HuishoudenPunt | null)[] },
+    ) => {
       if (al.scenario) {
         setState((s) => ({ ...s, scenario: al.scenario! }));
       } else {
@@ -438,13 +591,20 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
           }),
         );
       }
+      // Een bewaarde reeks telt alleen als het nog dezelfde reeks is; anders
+      // zouden oude punten onder nieuwe labels komen te staan.
+      if (pastBijVarianten(al.huishoudens)) {
+        setState((s) => ({ ...s, huishoudens: volHuishoudens(al.huishoudens!) }));
+      } else {
+        startHuishoudens(cfg);
+      }
       if (al.grid) {
         setState((s) => ({ ...s, grid: volRaster(al.grid!) }));
       } else {
         startGrid(cfg);
       }
     },
-    [startGroep, startGrid],
+    [startGroep, startGrid, startHuishoudens],
   );
 
   const onBericht = useCallback(
@@ -465,6 +625,7 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
           groep.perfect = msg.besparing;
           groep.perfectBinnen = true;
         }
+        if (groep.soort === "analyse") werkVoortgangBij(groep);
         probeerSamenvoegen(groep);
         return;
       }
@@ -481,6 +642,7 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
           ...s,
           result: msg.result,
           busy: false,
+          voortgang: null,
           error: null,
           elapsedMs: Date.now() - groep.start,
           getoondeConfig: cfg,
@@ -525,9 +687,27 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
         });
         return;
       }
+      if (msg.type === "huishouden-punt") {
+        if (!huishoudensIds.current.has(msg.id)) return;
+        setState((s) => {
+          if (!s.huishoudens) return s;
+          const punten = [...s.huishoudens.punten];
+          punten[msg.index] = msg.punt;
+          const vol = punten.every((p) => p !== undefined);
+          if (vol && laatsteConfig.current) {
+            schrijfCache(laatsteConfig.current, { huishoudens: punten as (HuishoudenPunt | null)[] });
+          }
+          return { ...s, huishoudens: { ...s.huishoudens, punten, klaar: vol, bezig: !vol } };
+        });
+        return;
+      }
       if (msg.type === "periode") {
-        if (msg.id !== periodeId.current) return;
-        setState((s) => ({ ...s, periode: msg.periode, periodeBezig: false }));
+        if (msg.id !== periodeId.current[msg.kanaal]) return;
+        setState((s) =>
+          msg.kanaal === "week"
+            ? { ...s, week: msg.periode, weekBezig: false }
+            : { ...s, periode: msg.periode, periodeBezig: false },
+        );
         return;
       }
       if (msg.type === "day") {
@@ -547,11 +727,22 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
           // Een fout in de hoofdanalyse: melden en stoppen met wachten.
           groepen.current.delete(groep.nummer);
           analyseGroep.current = null;
-          setState((s) => ({ ...s, busy: false, error: msg.message }));
+          setState((s) => ({ ...s, busy: false, voortgang: null, error: msg.message }));
           return;
         }
-        if (msg.id !== null && (msg.id === dagId.current || msg.id === periodeId.current)) {
-          setState((s) => ({ ...s, dagBezig: false, periodeBezig: false, error: msg.message }));
+        if (
+          msg.id !== null &&
+          (msg.id === dagId.current ||
+            msg.id === periodeId.current.verloop ||
+            msg.id === periodeId.current.week)
+        ) {
+          setState((s) => ({
+            ...s,
+            dagBezig: false,
+            periodeBezig: false,
+            weekBezig: false,
+            error: msg.message,
+          }));
           return;
         }
         // Een fout in de achtergrond mag het hoofdantwoord niet raken; het
@@ -559,14 +750,20 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
         if (msg.id !== null && gridIds.current.has(msg.id)) {
           setState((s) => ({ ...s, grid: s.grid ? { ...s.grid, bezig: false } : null }));
         }
+        if (msg.id !== null && huishoudensIds.current.has(msg.id)) {
+          setState((s) => ({
+            ...s,
+            huishoudens: s.huishoudens ? { ...s.huishoudens, bezig: false } : null,
+          }));
+        }
       }
     },
-    [herhaalPeriode, probeerSamenvoegen],
+    [herhaalPeriode, probeerSamenvoegen, werkVoortgangBij],
   );
 
   useEffect(() => {
     const pool = new WorkerPool(poolGrootte(), maakWorker, onBericht, (bericht) => {
-      setState((s) => ({ ...s, busy: false, error: bericht }));
+      setState((s) => ({ ...s, busy: false, voortgang: null, error: bericht }));
     });
     poolRef.current = pool;
     pool.init("/data");
@@ -618,8 +815,16 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
 
   const vraagPeriode = useCallback(
     (van: string, tot: string, resolutie: Resolutie) => {
-      periodeVraag.current = { van, tot, resolutie };
-      herhaalPeriode();
+      periodeVraag.current.verloop = { van, tot, resolutie };
+      herhaalPeriode("verloop");
+    },
+    [herhaalPeriode],
+  );
+
+  const vraagWeek = useCallback(
+    (van: string, tot: string) => {
+      periodeVraag.current.week = { van, tot, resolutie: "uur" };
+      herhaalPeriode("week");
     },
     [herhaalPeriode],
   );
@@ -677,8 +882,10 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
       return;
     }
     dagId.current++;
-    periodeId.current++;
+    periodeId.current.verloop++;
+    periodeId.current.week++;
     gridIds.current = new Set();
+    huishoudensIds.current = new Set();
     const pool = poolRef.current;
     for (const groep of groepen.current.values()) {
       if (groep.soort === "analyse") continue; // die wacht op zijn eigen antwoord
@@ -687,9 +894,30 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
     }
     scenarioGroep.current = null;
     if (gridGroep.current !== null) pool?.annuleer(gridGroep.current);
+    if (huishoudensGroep.current !== null) pool?.annuleer(huishoudensGroep.current);
     setState((s) =>
-      s.grid || s.dag || s.dagBezig || s.scenario || s.periode || s.periodeBezig
-        ? { ...s, grid: null, dag: null, dagBezig: false, dagOntbreekt: null, scenario: null, periode: null, periodeBezig: false }
+      s.grid ||
+      s.huishoudens ||
+      s.dag ||
+      s.dagBezig ||
+      s.scenario ||
+      s.periode ||
+      s.periodeBezig ||
+      s.week ||
+      s.weekBezig
+        ? {
+            ...s,
+            grid: null,
+            huishoudens: null,
+            dag: null,
+            dagBezig: false,
+            dagOntbreekt: null,
+            scenario: null,
+            periode: null,
+            periodeBezig: false,
+            week: null,
+            weekBezig: false,
+          }
         : s,
     );
     pool?.postAlle({ type: "cancel" } satisfies WorkerRequest);
@@ -759,7 +987,9 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
           ? pasAfleidingToe(bewaard.scenario!, afleidingVanConfiguratie(scenarioCfg))
           : undefined,
         grid: bewaard.grid,
+        huishoudens: bewaard.huishoudens,
       });
+      warmOp(config);
       herhaalPeriode();
       return;
     }
@@ -783,6 +1013,7 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
             scenarioOpTeruglevering: false,
             scenarioJaar: NETTARIEF_JAAR,
             grid: vooruit.grid,
+            huishoudens: vooruit.huishoudens,
           });
           // Het vooruitgerekende antwoord hoort bij de standaardafleiding; wie
           // alleen een financiële instelling wijzigde krijgt het toch, met de
@@ -807,7 +1038,9 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
                     ),
                   ),
             grid: vooruit.grid,
+            huishoudens: vooruit.huishoudens,
           });
+          warmOp(config);
           herhaalPeriode();
           return;
         }
@@ -822,7 +1055,16 @@ export function useAnalysis(config: Configuration | null): AnalysisState {
     return;
     // De configuratie is een gewoon object; serialiseren is de eenvoudigste
     // manier om op inhoud te vergelijken in plaats van op referentie.
-  }, [JSON.stringify(config), state.manifest, state.result, send, startAchtergrond, herhaalPeriode]);
+  }, [JSON.stringify(config), state.manifest, state.result, send, startAchtergrond, herhaalPeriode, warmOp]);
 
-  return { ...state, vraagDag, wisDag, vraagPeriode, herbereken, zetScenarioOpTeruglevering, zetScenarioJaar };
+  return {
+    ...state,
+    vraagDag,
+    wisDag,
+    vraagPeriode,
+    vraagWeek,
+    herbereken,
+    zetScenarioOpTeruglevering,
+    zetScenarioJaar,
+  };
 }

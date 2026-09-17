@@ -31,10 +31,85 @@
  */
 
 import { useCallback, useEffect, useState, type ReactNode } from "react";
-import type { SampleDay } from "../lib/model/analysis";
+import type { SampleDay, SampleDayStats } from "../lib/model/analysis";
+import { dagenLater, maandagVan, type PeriodeReeks } from "../lib/model/periode";
 import { addDays } from "../lib/data/timeaxis";
 import { centPerKwh, datum, euroPrecies, getal, procent } from "../lib/format";
 import { Figure, Grafiek, kiesTicks, useTip, type TipInhoud } from "./chart-parts";
+
+/**
+ * Wat de vier panelen nodig hebben om getekend te worden.
+ *
+ * Een `SampleDay` voldoet hieraan, en een week per uur ook. Door de tekencode
+ * op deze vorm te zetten in plaats van op `SampleDay` gaan er twee resoluties
+ * doorheen zonder dat er iets gedupliceerd hoeft te worden: het verschil zit in
+ * de lengte van de reeksen en in hoeveel kilowattuur er in één punt past.
+ *
+ * `stats` is optioneel, want dat is een dagstatistiek; een week heeft zijn
+ * eigen totalen.
+ */
+interface Profiel {
+  date: string;
+  startMs: number[];
+  residualKwh: number[];
+  netKwh: number[];
+  curtailedKwh: number[];
+  socKwh: number[];
+  chargeKwh: number[];
+  dischargeKwh: number[];
+  importPrice: number[];
+  exportPrice: number[];
+  meterExportKwh: number[];
+  cumulatiefBasisEur: number[];
+  cumulatiefBatterijEur: number[];
+  usableCapacityKwh: number;
+  stats?: SampleDayStats;
+}
+
+/**
+ * Een week per uur, in de vorm die de panelen verwachten.
+ *
+ * Alles komt uit de vakken van de reeks; niets wordt hier opnieuw uitgerekend.
+ * De netto uitwisseling is afname min teruglevering, en de twee geldlijnen
+ * lopen op uit de kosten per uur.
+ *
+ * Wat ontbreekt is de zonnereeks — hoeveel zon de meter haalde los van wat het
+ * huis er meteen van opsnoepte. Dat zit niet in de periodevakken, en op
+ * weekschaal zou die lijn toch vrijwel samenvallen met het overschot. De
+ * panelen slaan hem over als de reeks leeg is.
+ */
+function weekAlsProfiel(reeks: PeriodeReeks, capaciteitKwh: number): Profiel | null {
+  const v = reeks.vakken;
+  if (reeks.resolutie !== "uur" || v.length === 0) return null;
+
+  const cumBasis: number[] = [];
+  const cumBat: number[] = [];
+  let b = 0;
+  let m = 0;
+  for (const k of v) {
+    b += k.kostenBasisEur;
+    m += k.kostenBatterijEur;
+    cumBasis.push(b);
+    cumBat.push(m);
+  }
+
+  return {
+    date: reeks.van,
+    startMs: v.map((k) => k.startMs),
+    residualKwh: v.map((k) => k.gridImportBaselineKwh - k.gridExportBaselineKwh),
+    netKwh: v.map((k) => k.gridImportBatteryKwh - k.gridExportBatteryKwh),
+    curtailedKwh: v.map(() => 0),
+    socKwh: v.map((k) => k.socEndKwh),
+    chargeKwh: v.map((k) => k.chargedKwh),
+    dischargeKwh: v.map((k) => k.deliveredKwh),
+    importPrice: v.map((k) => k.avgImportPrice),
+    exportPrice: v.map((k) => k.avgExportPrice),
+    meterExportKwh: [],
+    cumulatiefBasisEur: cumBasis,
+    cumulatiefBatterijEur: cumBat,
+    usableCapacityKwh: capaciteitKwh,
+  };
+}
 
 const B = 860;
 
@@ -90,7 +165,16 @@ const Y = {
 const H_TOTAAL = Y.net + HOOGTE.net + TIJDAS_HOOGTE;
 
 /** Kwartier-kWh naar vermogen in kW: 0,25 kWh in een kwartier is 1 kW. */
+/**
+ * Van kilowattuur per punt naar kilowatt.
+ *
+ * Een kwartier van 0,25 kWh is 1 kW; een uur van 0,25 kWh is 0,25 kW. Deze
+ * factor stond hier als constante 4, wat klopte zolang er alleen kwartieren
+ * door de panelen gingen. Nu de week per uur meedoet, hoort hij bij het
+ * profiel en niet bij de module.
+ */
 const KWH_NAAR_KW = 4;
+const KWH_NAAR_KW_UUR = 1;
 
 /**
  * Minimale verticale afstand tussen twee lijnlabels, in SVG-eenheden.
@@ -120,7 +204,7 @@ function lijn(punten: [number, number][]): string {
  *   ontladen — zolang er tekort is, gaat de lading daarheen; wat je meer ontlaadt
  *            dan je zelf verbruikt, gaat het net op
  */
-function splitsActies(dag: SampleDay): {
+function splitsActies(dag: Profiel, perKw: number): {
   uitZon: number[];
   uitNet: number[];
   naarHuis: number[];
@@ -138,14 +222,27 @@ function splitsActies(dag: SampleDay): {
     const tekort = Math.max(0, dag.residualKwh[i]!);
 
     const zon = Math.min(laden, overschot);
-    uitZon.push(zon * KWH_NAAR_KW);
-    uitNet.push((laden - zon) * KWH_NAAR_KW);
+    uitZon.push(zon * perKw);
+    uitNet.push((laden - zon) * perKw);
 
     const huis = Math.min(ontladen, tekort);
-    naarHuis.push(huis * KWH_NAAR_KW);
-    naarNet.push((ontladen - huis) * KWH_NAAR_KW);
+    naarHuis.push(huis * perKw);
+    naarNet.push((ontladen - huis) * perKw);
   }
   return { uitZon, uitNet, naarHuis, naarNet };
+}
+
+/** "13:15" binnen een dag, "wo 13:00" binnen een week. */
+function momentLabel(ms: number, perUur: boolean): string {
+  const d = new Date(ms);
+  const klok = d.toLocaleTimeString("nl-NL", {
+    hour: "2-digit",
+    minute: "2-digit",
+    timeZone: "Europe/Amsterdam",
+  });
+  if (!perUur) return klok;
+  const dag = d.toLocaleDateString("nl-NL", { weekday: "short", timeZone: "Europe/Amsterdam" });
+  return `${dag} ${klok}`;
 }
 
 /**
@@ -221,6 +318,9 @@ export function Dagprofiel({
   laatsteDag,
   onVraagDag,
   onWisDag,
+  week,
+  weekBezig = false,
+  onVraagWeek,
   actie,
 }: {
   voorbeelden: SampleDay[];
@@ -232,16 +332,45 @@ export function Dagprofiel({
   laatsteDag: string;
   onVraagDag: (datum: string) => void;
   onWisDag: () => void;
+  /** De week waar de gekozen dag in valt, opgeteld per uur. */
+  week?: PeriodeReeks | null;
+  weekBezig?: boolean;
+  onVraagWeek?: (van: string, tot: string) => void;
   /** De knop "Hoe is dit berekend?" in de kop. */
   actie?: ReactNode;
 }) {
   const [gekozen, setGekozen] = useState(0);
   const [cursor, setCursor] = useState<number | null>(null);
+  const [perUur, setPerUur] = useState(false);
   const { kader, tip, toon, wis } = useTip();
 
-  const dag = losseDag ?? voorbeelden[gekozen];
-  const huidigeDatum = dag?.date ?? "";
-  useEffect(() => setCursor(null), [dag?.date]);
+  const losDag = losseDag ?? voorbeelden[gekozen];
+  const huidigeDatum = losDag?.date ?? "";
+
+  /*
+   * De week waar de getoonde dag in valt, vooruit opgevraagd.
+   *
+   * Eerst ging hij pas de deur uit als je de knop op Week zette: een tweede
+   * optelling over de jaardispatch, en wie alleen naar één dag kijkt hoefde
+   * daar niet op te wachten. In de praktijk zag je na de klik "wordt
+   * opgeteld…" terwijl het om data ging die er al was. Het wachten ná de klik
+   * is zichtbaarder dan het werk vooraf, dus nu wordt de week van elke getoonde
+   * dag alvast opgehaald; de hoofdworker telt hem in milliseconden op.
+   */
+  const weekVan = huidigeDatum ? maandagVan(huidigeDatum) : "";
+  useEffect(() => {
+    if (!weekVan || !onVraagWeek) return;
+    onVraagWeek(weekVan, dagenLater(weekVan, 6));
+  }, [weekVan, onVraagWeek]);
+
+  const weekProfiel =
+    perUur && week && week.van === weekVan && losDag
+      ? weekAlsProfiel(week, losDag.usableCapacityKwh)
+      : null;
+  const dag: Profiel | undefined = weekProfiel ?? losDag;
+  const toontWeek = weekProfiel !== null;
+
+  useEffect(() => setCursor(null), [losDag?.date, toontWeek]);
 
   // Doorbladeren gaat altijd vanaf de dag die nu op het scherm staat, ook als
   // dat een van de voorbeelddagen is. Zo kun je vanuit een doorsnee zomerdag
@@ -276,18 +405,19 @@ export function Dagprofiel({
     Y.prijs + (1 - (v - pLo) / Math.max(1e-9, pHi - pLo)) * HOOGTE.prijs;
 
   // ── Paneel 2: wat de batterij doet ──
-  const acties = splitsActies(dag);
+  const perKw = toontWeek ? KWH_NAAR_KW_UUR : KWH_NAAR_KW;
+  const acties = splitsActies(dag, perKw);
   // Wat er te halen viel: overschot om op te slaan, en eigen verbruik om te
   // dekken. Zonder deze context lijkt het laden willekeurig — je kunt niet zien
   // of de batterij het overschot opvangt of dat er iets blijft liggen.
-  const overschotKw = dag.residualKwh.map((v) => Math.max(0, -v) * KWH_NAAR_KW);
-  const tekortKw = dag.residualKwh.map((v) => Math.max(0, v) * KWH_NAAR_KW);
+  const overschotKw = dag.residualKwh.map((v) => Math.max(0, -v) * perKw);
+  const tekortKw = dag.residualKwh.map((v) => Math.max(0, v) * perKw);
   // De zon die de meter haalde, los van wat het huis er op dat moment van
   // opsnoepte. Op een zonnige dag ligt die lijn vlak boven het netto overschot;
   // waar ze uiteenlopen, gebruikte het huis op dat moment zelf stroom.
-  const zonKw = dag.meterExportKwh.map((v) => v * KWH_NAAR_KW);
+  const zonKw = dag.meterExportKwh.map((v) => v * perKw);
   const heeftZonReeks = zonKw.length === dag.residualKwh.length;
-  const zonTotaal = dag.stats.meterExportKwh;
+  const zonTotaal = dag.stats?.meterExportKwh ?? null;
   const aMax = Math.max(
     ...acties.uitZon.map((v, k) => v + acties.uitNet[k]!),
     ...acties.naarHuis.map((v, k) => v + acties.naarNet[k]!),
@@ -300,12 +430,12 @@ export function Dagprofiel({
   const staafB = Math.max(2, (PLOT_BREEDTE / n) * 0.8);
 
   // Totalen over de dag, voor de labels: die dragen het verhaal van dit paneel.
-  const som = (a: number[]) => a.reduce((x, y) => x + y, 0) / KWH_NAAR_KW;
+  const som = (a: number[]) => a.reduce((x, y) => x + y, 0) / perKw;
   const totaalZon = som(acties.uitZon);
   const totaalNet = som(acties.uitNet);
   const totaalHuis = som(acties.naarHuis);
   const totaalVerkocht = som(acties.naarNet);
-  const totaalOverschot = overschotKw.reduce((a, b) => a + b, 0) / KWH_NAAR_KW;
+  const totaalOverschot = overschotKw.reduce((a, b) => a + b, 0) / perKw;
 
   // ── Paneel 3: lading ──
   const cap = Math.max(dag.usableCapacityKwh, 0.001);
@@ -365,17 +495,46 @@ export function Dagprofiel({
 
   return (
     <Figure
-      titel="Wat de batterij op een dag precies doet"
+      titel={toontWeek ? "Wat de batterij in een week precies doet" : "Wat de batterij op een dag precies doet"}
       toelichting={
-        <>
-          {datum(dag.date)}, een dag met een middelmatig prijsverschil. Niet de dag
-          waarop de batterij het best presteerde. Wijs een moment aan voor de
-          waarden op dat kwartier.
-        </>
+        toontWeek ? (
+          <>
+            De week van {datum(dag.date)}, opgeteld per uur. Dezelfde vier panelen
+            als bij een dag, maar over zeven dagen: je ziet het ritme terug —
+            welke dagen wat opleverden en welke nacht de batterij oversloeg. Wijs
+            een uur aan voor de waarden op dat moment.
+          </>
+        ) : (
+          <>
+            {datum(dag.date)}, een dag met een middelmatig prijsverschil. Niet de dag
+            waarop de batterij het best presteerde. Wijs een moment aan voor de
+            waarden op dat kwartier.
+          </>
+        )
       }
       actie={
         <div className="dagkiezer">
           {actie}
+          {onVraagWeek ? (
+            <div className="segment" role="group" aria-label="Dag of week">
+              <button
+                type="button"
+                aria-pressed={!perUur}
+                className={perUur ? "segment-knop" : "segment-knop actief"}
+                onClick={() => setPerUur(false)}
+              >
+                Dag
+              </button>
+              <button
+                type="button"
+                aria-pressed={perUur}
+                className={perUur ? "segment-knop actief" : "segment-knop"}
+                onClick={() => setPerUur(true)}
+              >
+                Week
+              </button>
+            </div>
+          ) : null}
           {voorbeelden.length > 1 ? (
             <div className="segment" role="tablist" aria-label="Kies een dag">
               {voorbeelden.map((d, k) => (
@@ -453,7 +612,13 @@ export function Dagprofiel({
         </p>
       ) : null}
 
-      <DagCijfers dag={dag} />
+      {perUur && !toontWeek ? (
+        <p className="scenario-wacht" aria-live="polite">
+          {weekBezig ? "De week wordt opgeteld…" : "De week is nog niet opgehaald."}
+        </p>
+      ) : null}
+
+      {toontWeek ? <WeekCijfers reeks={week!} /> : <DagCijfers dag={losDag!} />}
 
       <Grafiek
         kader={kader}
@@ -480,7 +645,7 @@ export function Dagprofiel({
             const k = Math.round(((rel - PLOT_LINKS) / PLOT_BREEDTE) * (n - 1));
             const geldig = k >= 0 && k < n;
             setCursor(geldig ? k : null);
-            if (geldig) toon(e, momentTip(dag, k));
+            if (geldig) toon(e, momentTip(dag, k, perKw, toontWeek));
             else wis();
           }}
           onTouchMove={(e) => {
@@ -491,7 +656,7 @@ export function Dagprofiel({
             const k = Math.round(((rel - PLOT_LINKS) / PLOT_BREEDTE) * (n - 1));
             const geldig = k >= 0 && k < n;
             setCursor(geldig ? k : null);
-            if (geldig) toon(t, momentTip(dag, k));
+            if (geldig) toon(t, momentTip(dag, k, perKw, toontWeek));
             else wis();
           }}
         >
@@ -894,14 +1059,55 @@ export function Dagprofiel({
           ) : null}
 
           {/* ══ Tijdas ══ */}
-          {[0, 3, 6, 9, 12, 15, 18, 21].map((u) => {
-            const k = Math.round((u / 24) * (n - 1));
-            return (
-              <text key={u} x={x(k)} y={H_TOTAAL - 9} textAnchor="middle" className="as-label">
-                {String(u).padStart(2, "0")}:00
-              </text>
-            );
-          })}
+          {toontWeek
+            ? /* Zeven dagnamen, elk in het midden van zijn eigen etmaal: met
+                 uurlabels zouden het er 168 zijn, en de vraag is hier welke dag
+                 je ziet, niet welk uur. */
+              dag.startMs.map((ms, k) => {
+                const d = new Date(ms);
+                const uur = Number(
+                  d.toLocaleString("nl-NL", { hour: "numeric", hour12: false, timeZone: "Europe/Amsterdam" }),
+                );
+                if (uur !== 12) return null;
+                return (
+                  <text key={ms} x={x(k)} y={H_TOTAAL - 9} textAnchor="middle" className="as-label">
+                    {d.toLocaleDateString("nl-NL", { weekday: "short", day: "numeric", timeZone: "Europe/Amsterdam" })}
+                  </text>
+                );
+              })
+            : [0, 3, 6, 9, 12, 15, 18, 21].map((u) => {
+                const k = Math.round((u / 24) * (n - 1));
+                return (
+                  <text key={u} x={x(k)} y={H_TOTAAL - 9} textAnchor="middle" className="as-label">
+                    {String(u).padStart(2, "0")}:00
+                  </text>
+                );
+              })}
+          {/* Een streep bij elke middernacht, zodat de dagen uit elkaar vallen. */}
+          {toontWeek
+            ? dag.startMs.map((ms, k) => {
+                if (k === 0) return null;
+                const uur = Number(
+                  new Date(ms).toLocaleString("nl-NL", {
+                    hour: "numeric",
+                    hour12: false,
+                    timeZone: "Europe/Amsterdam",
+                  }),
+                );
+                if (uur !== 0) return null;
+                return (
+                  <line
+                    key={`scheiding-${ms}`}
+                    x1={x(k)}
+                    x2={x(k)}
+                    y1={Y.prijs}
+                    y2={Y.net + HOOGTE.net}
+                    stroke="var(--border)"
+                    strokeWidth={1}
+                  />
+                );
+              })
+            : null}
 
           {/* ══ Cursor ══ */}
           {i !== null ? (
@@ -926,7 +1132,7 @@ export function Dagprofiel({
         </svg>
       </Grafiek>
 
-      <Uitlezing dag={dag} i={i} />
+      <Uitlezing dag={dag} i={i} perKw={perKw} perUur={toontWeek} />
     </Figure>
   );
 }
@@ -945,6 +1151,45 @@ export function Dagprofiel({
  * vandaan komt: op een vlakke dag zijn ze gelijk, op een dag met een misgelopen
  * piek loopt het uiteen.
  */
+/**
+ * De totalen van een week, in dezelfde vorm als de dagcijfers eronder.
+ *
+ * Minder dan bij een dag: een week heeft geen "hoogste lading" of "beste uur"
+ * die nog ergens op slaat, en wat een week wél zegt is of het optelt.
+ */
+function WeekCijfers({ reeks }: { reeks: PeriodeReeks }) {
+  const t = reeks.totaal;
+  return (
+    <dl className="kerncijfers">
+      <div>
+        <dt>Deze week bespaard</dt>
+        <dd className={t.savingEur >= 0 ? "goed" : "slecht"}>{euroPrecies(t.savingEur)}</dd>
+      </div>
+      <div>
+        <dt>Door de batterij</dt>
+        <dd>
+          {getal(t.deliveredKwh, 1)} kWh
+          <span className="dd-noot">{getal(t.chargedKwh, 1)} kWh erin</span>
+        </dd>
+      </div>
+      <div>
+        <dt>Van het net</dt>
+        <dd>
+          {getal(t.gridImportBatteryKwh, 1)} kWh
+          <span className="dd-noot">zonder batterij {getal(t.gridImportBaselineKwh, 1)} kWh</span>
+        </dd>
+      </div>
+      <div>
+        <dt>Waarvan afschrijving</dt>
+        <dd className="zacht">
+          {euroPrecies(t.wearCostEur)}
+          <span className="dd-noot">al betaald bij de aanschaf, gaat er niet nóg een keer af</span>
+        </dd>
+      </div>
+    </dl>
+  );
+}
+
 function DagCijfers({ dag }: { dag: SampleDay }) {
   const s = dag.stats;
   const minderAfname = s.gridImportBaselineKwh - s.gridImportBatteryKwh;
@@ -1088,15 +1333,11 @@ function DagCijfers({ dag }: { dag: SampleDay }) {
  * Korter dan de balk eronder, want die blijft staan en kan uitweiden; deze
  * moet in één oogopslag te lezen zijn terwijl je over de grafiek beweegt.
  */
-function momentTip(dag: SampleDay, i: number): TipInhoud {
-  const tijd = new Date(dag.startMs[i]!).toLocaleTimeString("nl-NL", {
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "Europe/Amsterdam",
-  });
-  const netKw = dag.netKwh[i]! * KWH_NAAR_KW;
-  const laden = dag.chargeKwh[i]! * KWH_NAAR_KW;
-  const ontladen = dag.dischargeKwh[i]! * KWH_NAAR_KW;
+function momentTip(dag: Profiel, i: number, perKw: number, perUur: boolean): TipInhoud {
+  const tijd = momentLabel(dag.startMs[i]!, perUur);
+  const netKw = dag.netKwh[i]! * perKw;
+  const laden = dag.chargeKwh[i]! * perKw;
+  const ontladen = dag.dischargeKwh[i]! * perKw;
   const batterij =
     laden > 0.02
       ? `laadt ${getal(laden, 1)} kW`
@@ -1126,7 +1367,17 @@ function momentTip(dag: SampleDay, i: number): TipInhoud {
  * Vaste hoogte, ook zonder cursor: anders springt de pagina op en neer zodra je
  * de muis over de grafiek beweegt.
  */
-function Uitlezing({ dag, i }: { dag: SampleDay; i: number | null }) {
+function Uitlezing({
+  dag,
+  i,
+  perKw,
+  perUur,
+}: {
+  dag: Profiel;
+  i: number | null;
+  perKw: number;
+  perUur: boolean;
+}) {
   if (i === null) {
     return (
       <p className="uitlezing-leeg">
@@ -1135,15 +1386,11 @@ function Uitlezing({ dag, i }: { dag: SampleDay; i: number | null }) {
     );
   }
 
-  const tijd = new Date(dag.startMs[i]!).toLocaleTimeString("nl-NL", {
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "Europe/Amsterdam",
-  });
+  const tijd = momentLabel(dag.startMs[i]!, perUur);
 
-  const netKw = dag.netKwh[i]! * KWH_NAAR_KW;
-  const afgeregeld = dag.curtailedKwh[i]! * KWH_NAAR_KW;
-  const a = splitsActies(dag);
+  const netKw = dag.netKwh[i]! * perKw;
+  const afgeregeld = dag.curtailedKwh[i]! * perKw;
+  const a = splitsActies(dag, perKw);
 
   const netTekst =
     Math.abs(netKw) < 0.02
@@ -1155,7 +1402,7 @@ function Uitlezing({ dag, i }: { dag: SampleDay; i: number | null }) {
   // Zeg niet alleen dát hij laadt, maar waarvandaan en waarheen: dat is het
   // verschil tussen zelf verbruiken en handelen, en dus tussen veel en weinig
   // opbrengst.
-  const overschot = Math.max(0, -dag.residualKwh[i]!) * KWH_NAAR_KW;
+  const overschot = Math.max(0, -dag.residualKwh[i]!) * perKw;
   const zon = a.uitZon[i]!;
   const uitNet = a.uitNet[i]!;
   const huis = a.naarHuis[i]!;

@@ -23,6 +23,7 @@ export default defineConfig({
       ["tests/opslag.test.ts", "jsdom"],
       ["tests/strategie.test.tsx", "jsdom"],
       ["tests/cache.test.ts", "jsdom"],
+      ["tests/url-state.test.ts", "jsdom"],
     ],
   },
   esbuild: {

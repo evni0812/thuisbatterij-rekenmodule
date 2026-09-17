@@ -10,6 +10,7 @@ import { Invoerbron } from "../data/invoer";
 import type { Manifest } from "../data/manifest";
 import { wearCostPerKwh } from "../model/battery";
 import { prijsPerKwhVan, rasterJaar, rasterPunt } from "../model/raster";
+import { huishoudenPunt, type HuishoudenPunt, type HuishoudenVariant } from "../model/huishoudens";
 import { dispatchBaseline } from "../model/dispatch-baseline";
 import { dispatchOptimal } from "../model/dispatch-optimal";
 import { dispatchRolling } from "../model/dispatch-rolling";
@@ -19,6 +20,7 @@ import {
   findDay,
   meetCurvePunt,
   perfectVoorspellingBesparing,
+  referentieIndexVan,
   runAnalysis,
   runScenario,
   slijtageVoor,
@@ -119,8 +121,73 @@ async function runGrid(
   }
 }
 
+/**
+ * De gekozen batterij voor een reeks huishoudens, punt voor punt. Een variant
+ * die niet doorrekenbaar is (geen profiel voor dat netgebied) levert null en
+ * houdt de rest niet op.
+ */
+async function runHuishoudens(
+  id: number,
+  config: Configuration,
+  varianten: HuishoudenVariant[],
+  indices: number[],
+): Promise<void> {
+  for (let k = 0; k < indices.length; k++) {
+    if (huidigeHuishoudens !== id) return; // een nieuwere aanvraag heeft voorrang
+    const index = indices[k]!;
+    let punt: HuishoudenPunt | null;
+    try {
+      punt = await huishoudenPunt(bron, config, varianten[index]!);
+    } catch {
+      punt = null;
+    }
+    post({ type: "huishouden-punt", id, index, punt, done: k === indices.length - 1 });
+    await adempauze();
+  }
+}
+
+/**
+ * Warm de hoofdworker op voor de dagkiezer, de week en het verloop.
+ *
+ * Na een treffer in cache of preload heeft deze worker nooit gerekend: de
+ * eerste dag- of periodeaanvraag moest dan eerst alle profielen laden en een
+ * jaar doorrekenen, ruim een seconde waarin de figuur "wordt opgeteld…" zei
+ * over data die er al leek te zijn. Dit doet dat werk vooraf, in stukken met
+ * een adempauze ertussen zodat een echte aanvraag er altijd tussendoor kan;
+ * die vindt dan wat al klaar is en rekent alleen wat nog ontbreekt.
+ *
+ * Volgorde: het referentiejaar eerst (daar staan de voorbeelddagen en het
+ * verloop opent er), met de realistische dispatch, de basis en het optimum
+ * (de dagweergave toont ook het optimum); daarna de andere jaren, alleen
+ * realistisch en basis. Een nieuwere aanvraag, een andere configuratie of een
+ * `cancel` breekt hem af; wat al gerekend is, blijft staan.
+ */
+async function warmOp(id: number, config: Configuration): Promise<void> {
+  const staat = await zorgVoorInvoer(config);
+  const ref = referentieIndexVan(staat.invoer.windows);
+  const volgorde = [ref, ...staat.invoer.windows.map((_, i) => i).filter((i) => i !== ref)];
+  const nogGeldig = () => huidigeWarm === id && (laatste === staat || vorige === staat);
+  for (const i of volgorde) {
+    const entry = staat.invoer.windows[i]!;
+    if (!nogGeldig()) return;
+    if (!staat.dispatches.has(i)) staat.dispatches.set(i, dispatchRolling(entry.window, staat.spec, staat.invoer.tariff));
+    await adempauze();
+    if (!nogGeldig()) return;
+    if (!staat.basis.has(i)) staat.basis.set(i, dispatchBaseline(entry.window, staat.invoer.tariff));
+    await adempauze();
+    if (i !== ref) continue;
+    if (!nogGeldig()) return;
+    if (!staat.optimaal.has(i)) staat.optimaal.set(i, dispatchOptimal(entry.window, staat.spec, staat.invoer.tariff));
+    await adempauze();
+  }
+}
+
 /** Volgnummer van het raster dat nu mag draaien; ouder werk stopt vanzelf. */
 let huidigeGrid = -1;
+/** Volgnummer van de opwarming die nu mag doorlopen. */
+let huidigeWarm = -1;
+/** Idem voor de huishoudens. */
+let huidigeHuishoudens = -1;
 /**
  * Volgnummers van de laatst ontvangen dag-, periode- en scenario-aanvraag.
  *
@@ -131,7 +198,8 @@ let huidigeGrid = -1;
  * van twintig aanvragen één berekening in plaats van twintig.
  */
 let huidigeDag = -1;
-let huidigePeriode = -1;
+/** Per kanaal een eigen volgnummer: anders annuleert de week het verloop. */
+const huidigePeriode: Record<string, number> = { verloop: -1, week: -1 };
 let huidigScenario = -1;
 
 /** Geef de beurt terug aan de berichtenlus, zodat wachtende berichten binnenkomen. */
@@ -295,7 +363,23 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
     }
     if (msg.type === "cancel") {
       huidigeGrid = -1;
+      huidigeHuishoudens = -1;
       huidigScenario = -1;
+      huidigeWarm = -1;
+      return;
+    }
+    if (msg.type === "warm") {
+      if (!manifest) throw new Error("worker is nog niet geïnitialiseerd");
+      huidigeWarm = msg.id;
+      await adempauze();
+      if (huidigeWarm !== msg.id) return;
+      await warmOp(msg.id, msg.config);
+      return;
+    }
+    if (msg.type === "huishoudens") {
+      if (!manifest) throw new Error("worker is nog niet geïnitialiseerd");
+      huidigeHuishoudens = msg.id;
+      await pooltaak(msg.id, () => runHuishoudens(msg.id, msg.config, msg.varianten, msg.indices));
       return;
     }
     if (msg.type === "grid") {
@@ -385,11 +469,16 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
     }
     if (msg.type === "periode") {
       if (!manifest) throw new Error("worker is nog niet geïnitialiseerd");
-      huidigePeriode = msg.id;
+      huidigePeriode[msg.kanaal] = msg.id;
       await adempauze();
-      if (huidigePeriode !== msg.id) return;
+      if (huidigePeriode[msg.kanaal] !== msg.id) return;
       const staat = await zorgVoorInvoer(msg.config);
-      post({ type: "periode", id: msg.id, periode: haalPeriode(staat, msg.van, msg.tot, msg.resolutie) });
+      post({
+        type: "periode",
+        id: msg.id,
+        kanaal: msg.kanaal,
+        periode: haalPeriode(staat, msg.van, msg.tot, msg.resolutie),
+      });
       return;
     }
     if (msg.type === "analyse") {

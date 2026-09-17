@@ -18,7 +18,8 @@ import { GET } from "../app/voorbeeld.json/route";
 import { MODEL_VERSIE, dispatchSleutel } from "../lib/cache";
 import { STANDAARD, standaardConfiguratie } from "../lib/configuratie";
 import { RASTER_CAPACITEITEN, RASTER_VERMOGENS } from "../lib/model/raster";
-import type { AnalysisResult } from "../lib/model/analysis";
+import { huishoudensVarianten, type HuishoudenPunt } from "../lib/model/huishoudens";
+import { referentieJaar, type AnalysisResult } from "../lib/model/analysis";
 
 interface Payload {
   versie: number;
@@ -26,6 +27,7 @@ interface Payload {
   gemaakt: string;
   result: AnalysisResult;
   scenario: AnalysisResult;
+  huishoudens?: HuishoudenPunt[];
 }
 
 /** De route draait de volledige analyse; dat kost een paar seconden. */
@@ -87,6 +89,25 @@ describe("het vooruitgerekende antwoord", () => {
         expect(grid[r]![k]!.savingEur).toBeGreaterThanOrEqual(grid[r - 1]![k]!.savingEur * 0.97 - 0.01);
       }
     }
+  });
+
+  it("levert de reeks huishoudens mee, geijkt aan het hoofdresultaat", () => {
+    const h = payload.huishoudens!;
+    const varianten = huishoudensVarianten();
+    expect(h).toHaveLength(varianten.length);
+    expect(h.map((p) => [p.terugleveringKwh, p.zonnepanelen])).toEqual(
+      varianten.map((v) => [v.terugleveringKwh, v.zonnepanelen]),
+    );
+    // Het huishouden met de eigen teruglevering is exact het referentiejaar van
+    // het hoofdresultaat: dezelfde simulatie, dezelfde drempel, hetzelfde jaar.
+    const eigen = h.find((p) => p.zonnepanelen && p.terugleveringKwh === STANDAARD.terugleveringKwh)!;
+    expect(eigen.savingEur).toBeCloseTo(referentieJaar(payload.result).realisticSavingEur, 6);
+    expect(eigen.afnameKwh).toBe(STANDAARD.afnameKwh);
+    // Zonder zonnepanelen levert de batterij nog wel iets op, maar veel minder.
+    const zonder = h.at(-1)!;
+    expect(zonder.zonnepanelen).toBe(false);
+    expect(zonder.savingEur).toBeGreaterThan(0);
+    expect(zonder.savingEur).toBeLessThan(eigen.savingEur);
   });
 
   it("overleeft de reis door JSON", () => {

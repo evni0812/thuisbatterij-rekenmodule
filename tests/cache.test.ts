@@ -55,6 +55,10 @@ describe("de splitsing dispatch/afleiding", () => {
       { residualValueEur: basis.residualValueEur + 100 },
       { annualProductionKwh: (basis.annualProductionKwh ?? 0) + 500 },
       { calendarLifeYears: basis.calendarLifeYears + 1 },
+      // De kostenregel raakt alleen de financiën per maat, niet de dispatch.
+      { kostenPerKwhEur: (basis.kostenPerKwhEur ?? 0) + 100 },
+      { kostenPerKwEur: (basis.kostenPerKwEur ?? 0) + 100 },
+      { installatieEur: (basis.installatieEur ?? 0) + 100 },
     ];
     for (const patch of afleiding) {
       expect(dispatchSleutel({ ...basis, ...patch }), JSON.stringify(patch)).toBe(dispatchSleutel(basis));
@@ -91,11 +95,13 @@ describe("aanvullen zonder overschrijven", () => {
     schrijfCache(cfg, { result: nep("hoofd") });
     schrijfCache(cfg, { scenario: nep("scenario"), scenarioJaar: 2029 });
     schrijfCache(cfg, { grid: [[{ capacityKwh: 1, powerKw: 1, savingEur: 1, cyclesPerYear: 1 }]] });
+    schrijfCache(cfg, { huishoudens: [null] });
     const bundel = leesCache(cfg)!;
     expect((bundel.result as unknown as { merk: string }).merk).toBe("hoofd");
     expect((bundel.scenario as unknown as { merk: string }).merk).toBe("scenario");
     expect(bundel.scenarioJaar).toBe(2029);
     expect(bundel.grid).toHaveLength(1);
+    expect(bundel.huishoudens).toEqual([null]);
   });
 
   it("vervangt het hoofdresultaat wél als er een nieuw resultaat komt", () => {

@@ -1,15 +1,23 @@
-/** @type {import('next').NextConfig} */
-const nextConfig = {
-  /*
-   * Productiebuilds krijgen hun eigen map.
-   *
-   * `next build` en `next dev` schrijven anders allebei naar .next en
-   * overschrijven elkaars chunks. Draai je een build terwijl de dev-server
-   * loopt, dan valt die om met "Cannot find module './833.js'" — de chunk waar
-   * hij naar verwijst is onder zijn handen vervangen.
-   */
-  distDir: process.env.NEXT_BUILD_DIR || ".next",
+import { PHASE_DEVELOPMENT_SERVER } from "next/constants.js";
 
+/**
+ * De configuratie is een functie van de fase, en dat is geen detail.
+ *
+ * `next build` en `next dev` schrijven allebei naar dezelfde map en overschrijven
+ * elkaars chunks. Draai je een build terwijl de dev-server loopt, dan valt die
+ * om met "Cannot find module './873.js'" of een fout over het React Client
+ * Manifest: het bestand waar hij naar verwijst is onder zijn handen vervangen.
+ *
+ * Eerder hing de scheiding aan een omgevingsvariabele die `npm run build` zette.
+ * Dat lekte langs elke andere ingang: `vercel.json` roept bewust `next build`
+ * aan zonder die variabele, en de README noemt `npx next build --turbopack` als
+ * uitweg bij geheugendruk. Beide landen dan alsnog in de map van de dev-server.
+ *
+ * Door de fase te lezen die Next zelf meegeeft, kán het niet meer botsen. De
+ * dev-server krijgt altijd zijn eigen map, elk buildcommando altijd `.next` —
+ * ongeacht hoe of door wie het wordt aangeroepen.
+ */
+const nextConfig = {
   /*
    * Ruimte voor /voorbeeld.json, dat bij de build het standaardantwoord en het
    * nettariefscenario doorrekent. Next.js kapt een statische route standaard af
@@ -31,4 +39,7 @@ const nextConfig = {
   },
 };
 
-export default nextConfig;
+export default (phase) => ({
+  ...nextConfig,
+  distDir: phase === PHASE_DEVELOPMENT_SERVER ? ".next-dev" : ".next",
+});

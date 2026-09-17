@@ -377,6 +377,42 @@ export function Geavanceerd({
                 stap={10}
                 onChange={(v) => onChange({ prijsEur: v })}
               />
+              {/* De kostenregel voor de kaart van maten: wat een andere maat dan
+                  deze batterij zou kosten. Verankerd aan de aanschafprijs
+                  hierboven; deze drie zeggen wat er per stap bijkomt. */}
+              <Getal
+                label="Meerprijs per kWh"
+                uitleg="Wat elke kilowattuur extra capaciteit kost in de kaart van maten. Uitbreidingsmodules kosten bij vrijwel elk merk 310 tot 450 euro per kWh (peildatum september 2026)."
+                waarde={inst.kostenPerKwh}
+                eenheid="€"
+                eenheidVoor
+                min={0}
+                max={2000}
+                stap={10}
+                onChange={(v) => onChange({ kostenPerKwh: v })}
+              />
+              <Getal
+                label="Meerprijs per kW"
+                uitleg="Wat elke kilowatt extra vermogen kost: een grotere omvormer. Een hybride omvormer van 3 tot 5 kW kost 1.000 tot 2.500 euro."
+                waarde={inst.kostenPerKw}
+                eenheid="€"
+                eenheidVoor
+                min={0}
+                max={2000}
+                stap={10}
+                onChange={(v) => onChange({ kostenPerKw: v })}
+              />
+              <Getal
+                label="Eigen groep door installateur"
+                uitleg="Boven 800 W mag een batterij niet aan een gewoon stopcontact; dit is wat een installateur rekent voor een eigen groep. Gangbaar 300 euro, tot 1.200 als de meterkast op de schop moet."
+                waarde={inst.installatieEur}
+                eenheid="€"
+                eenheidVoor
+                min={0}
+                max={3000}
+                stap={50}
+                onChange={(v) => onChange({ installatieEur: v })}
+              />
               {/* De strategie is een keuze, geen eigenschap van de accu, maar hij
                   hoort hier omdat hij bepaalt hoe de accu met zijn beurten omgaat.
                   Drie standen met een naam, en een schuif voor wie er tussenin

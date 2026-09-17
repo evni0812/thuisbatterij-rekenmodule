@@ -1,8 +1,13 @@
 "use client";
 
 /**
- * Het resultaat over een periode: een week per uur, een maand per dag, een jaar
- * per week. De stap omhoog vanaf het dagprofiel, met dezelfde dispatch.
+ * Het resultaat over een periode: een maand per dag, een jaar per week. De stap
+ * omhoog vanaf het dagprofiel, met dezelfde dispatch.
+ *
+ * De week zat hier ook, als staafjes per uur. Die is naar het dagprofiel
+ * verhuisd: daar staat al wat de batterij binnen een dag uitvoert, en een week
+ * per uur hoort bij dat verhaal in plaats van bij het optellen over maanden en
+ * jaren. Wat hier overblijft is de vraag hoe het over langere tijd uitpakt.
  *
  * Per vak één ding: wat de batterij die periode opleverde.
  *
@@ -17,27 +22,21 @@
 
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { datum, euro, euroPrecies, getal, kwh } from "../lib/format";
-import { dagenLater, maandagVan, type PeriodeReeks, type PeriodeVak, type Resolutie } from "../lib/model/periode";
+import { dagenLater, type PeriodeReeks, type PeriodeVak, type Resolutie } from "../lib/model/periode";
 import { Figure, Legenda } from "./chart-parts";
 
-export type Weergave = "week" | "maand" | "jaar";
+export type Weergave = "maand" | "jaar";
 
 const WEERGAVEN: { id: Weergave; label: string; resolutie: Resolutie; per: string }[] = [
-  { id: "week", label: "Week", resolutie: "uur", per: "per uur" },
   { id: "maand", label: "Maand", resolutie: "dag", per: "per dag" },
   { id: "jaar", label: "Jaar", resolutie: "week", per: "per week" },
 ];
 
 const MAANDEN = ["jan", "feb", "mrt", "apr", "mei", "jun", "jul", "aug", "sep", "okt", "nov", "dec"];
-const DAGEN = ["ma", "di", "wo", "do", "vr", "za", "zo"];
 
 /** Begin en einde (inclusief) van de periode waar `anker` in valt. */
 export function periodeVan(weergave: Weergave, anker: string): { van: string; tot: string } {
   const [y, m] = anker.split("-").map(Number) as [number, number];
-  if (weergave === "week") {
-    const van = maandagVan(anker);
-    return { van, tot: dagenLater(van, 6) };
-  }
   if (weergave === "maand") {
     const van = `${y}-${String(m).padStart(2, "0")}-01`;
     const laatste = new Date(Date.UTC(y, m, 0)).getUTCDate();
@@ -49,7 +48,6 @@ export function periodeVan(weergave: Weergave, anker: string): { van: string; to
 /** Eén periode verder of terug. */
 function verschuif(weergave: Weergave, anker: string, richting: 1 | -1): string {
   const [y, m, d] = anker.split("-").map(Number) as [number, number, number];
-  if (weergave === "week") return dagenLater(anker, 7 * richting);
   if (weergave === "maand") {
     const dt = new Date(Date.UTC(y, m - 1 + richting, 1));
     return dt.toISOString().slice(0, 10);
@@ -57,13 +55,7 @@ function verschuif(weergave: Weergave, anker: string, richting: 1 | -1): string 
   return `${y + richting}-${String(m).padStart(2, "0")}-${String(d).padStart(2, "0")}`;
 }
 
-function weekdag(iso: string): number {
-  const [y, m, d] = iso.split("-").map(Number) as [number, number, number];
-  return (new Date(Date.UTC(y, m - 1, d)).getUTCDay() + 6) % 7;
-}
-
 function periodeLabel(weergave: Weergave, van: string, tot: string): string {
-  if (weergave === "week") return `week van ${datum(van)} tot ${datum(tot)}`;
   if (weergave === "maand") {
     const [y, m] = van.split("-").map(Number) as [number, number];
     return `${["januari", "februari", "maart", "april", "mei", "juni", "juli", "augustus", "september", "oktober", "november", "december"][m - 1]} ${y}`;
@@ -131,9 +123,7 @@ export function Verloop({
   // As-labels: per dag in de week, om de vijf dagen in de maand, per maand in het jaar.
   const labels: { x: number; tekst: string }[] = [];
   vakken.forEach((v, i) => {
-    if (resolutie === "uur") {
-      if (v.sleutel.endsWith("T00") || i === 0) labels.push({ x: x(i), tekst: `${DAGEN[weekdag(v.dag)]} ${Number(v.dag.slice(8))}` });
-    } else if (resolutie === "dag") {
+    if (resolutie === "dag") {
       const d = Number(v.dag.slice(8));
       if (d === 1 || d % 5 === 0) labels.push({ x: x(i) + staaf / 2, tekst: String(d) });
     } else {
@@ -226,17 +216,11 @@ export function Verloop({
           {vakken.map((v, i) => {
             const top = Math.min(nul, y(v.savingEur));
             const hoog = Math.abs(y(v.savingEur) - nul);
-            const klikbaar = resolutie !== "uur" || true;
-            const titelTekst =
-              resolutie === "uur"
-                ? `${datum(v.dag)} ${v.sleutel.slice(11)}:00`
-                : resolutie === "dag"
-                  ? datum(v.dag)
-                  : `week van ${datum(v.dag)}`;
+            const titelTekst = resolutie === "dag" ? datum(v.dag) : `week van ${datum(v.dag)}`;
             return (
               <g
                 key={v.sleutel}
-                className={klikbaar ? "verloop-vak" : undefined}
+                className="verloop-vak"
                 onClick={() => onKiesDag(v.dag)}
                 role="button"
                 tabIndex={-1}

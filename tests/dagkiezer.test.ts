@@ -300,7 +300,7 @@ describe("wat er van het dak kwam", () => {
 describe("het resultaat over een periode via de worker", () => {
   it("telt een week per uur op uit de bewaarde jaardispatch", async () => {
     ontvangen = [];
-    await stuur({ type: "periode", id: 21, config: config(), van: "2025-12-15", tot: "2025-12-21", resolutie: "uur" });
+    await stuur({ type: "periode", id: 21, config: config(), van: "2025-12-15", tot: "2025-12-21", resolutie: "uur", kanaal: "week" });
     const fout = ontvangen.find((m) => m.type === "error");
     if (fout && fout.type === "error") throw new Error(fout.message);
     const res = ontvangen.find((m) => m.type === "periode");
@@ -310,7 +310,7 @@ describe("het resultaat over een periode via de worker", () => {
     expect(res.periode.totaal.wearCostEur).toBeGreaterThan(0);
     // De som van de uren is de som van de dagen.
     ontvangen = [];
-    await stuur({ type: "periode", id: 22, config: config(), van: "2025-12-15", tot: "2025-12-21", resolutie: "dag" });
+    await stuur({ type: "periode", id: 22, config: config(), van: "2025-12-15", tot: "2025-12-21", resolutie: "dag", kanaal: "verloop" });
     const dagen = ontvangen.find((m) => m.type === "periode");
     if (!dagen || dagen.type !== "periode") throw new Error("geen periode-antwoord");
     expect(dagen.periode.vakken.length).toBe(7);
@@ -327,9 +327,9 @@ describe("het resultaat over een periode via de worker", () => {
     ontvangen = [];
     const cfg = config();
     const vragen = [
-      stuur({ type: "periode", id: 31, config: cfg, van: "2025-03-01", tot: "2025-03-31", resolutie: "dag" }),
-      stuur({ type: "periode", id: 32, config: cfg, van: "2025-04-01", tot: "2025-04-30", resolutie: "dag" }),
-      stuur({ type: "periode", id: 33, config: cfg, van: "2025-05-01", tot: "2025-05-31", resolutie: "dag" }),
+      stuur({ type: "periode", id: 31, config: cfg, van: "2025-03-01", tot: "2025-03-31", resolutie: "dag", kanaal: "verloop" }),
+      stuur({ type: "periode", id: 32, config: cfg, van: "2025-04-01", tot: "2025-04-30", resolutie: "dag", kanaal: "verloop" }),
+      stuur({ type: "periode", id: 33, config: cfg, van: "2025-05-01", tot: "2025-05-31", resolutie: "dag", kanaal: "verloop" }),
     ];
     await Promise.all(vragen);
     const antwoorden = ontvangen.filter((m) => m.type === "periode");
@@ -345,4 +345,41 @@ describe("het resultaat over een periode via de worker", () => {
     expect(dag.stats.wearCostEur).toBeGreaterThan(0);
     expect(dag.stats.wearCostEur).toBeLessThan(dag.stats.deliveredKwh);
   }, 60_000);
+});
+
+describe("opwarmen na een treffer in cache of preload", () => {
+  /**
+   * Na zo'n treffer heeft de hoofdworker nooit gerekend, en kostte de eerste
+   * dag- of weekaanvraag het laden van alle profielen plus een jaarsimulatie:
+   * ruim een seconde "wordt opgeteld…" over data die er al leek te zijn. De
+   * opwarmtaak doet dat werk vooraf; daarna zijn dag en week een optelling.
+   */
+  it("maakt dag en week daarna een kwestie van milliseconden", async () => {
+    const cfg = config({ from: "2024-01-01", to: "2025-12-31", household: { annualGridImportKwh: 3100, annualGridExportKwh: 1500, spreadFactor: 1 } });
+    ontvangen = [];
+    await stuur({ type: "warm", id: 700, config: cfg });
+    // Geen antwoord op het opwarmen zelf, en zeker geen fout.
+    expect(ontvangen.find((m) => m.type === "error")).toBeUndefined();
+
+    ontvangen = [];
+    const t0 = performance.now();
+    await stuur({ type: "day", id: 701, date: "2025-06-15", config: cfg });
+    await stuur({ type: "periode", id: 702, kanaal: "week", config: cfg, van: "2025-06-09", tot: "2025-06-15", resolutie: "uur" });
+    const duur = performance.now() - t0;
+    const dag = ontvangen.find((m) => m.type === "day");
+    const week = ontvangen.find((m) => m.type === "periode");
+    expect(dag && dag.type === "day" && dag.day?.date).toBe("2025-06-15");
+    expect(week && week.type === "periode" && week.periode.vakken.length).toBe(168);
+    // Ruim onder één jaarsimulatie: alles stond al klaar.
+    expect(duur).toBeLessThan(250);
+  }, 120_000);
+
+  it("stopt zodra er een andere configuratie komt, zonder fout", async () => {
+    ontvangen = [];
+    // Twee opwarmingen achter elkaar: de tweede maakt de eerste achterhaald.
+    const a = stuur({ type: "warm", id: 710, config: config({ from: "2025-01-01", to: "2025-12-31" }) });
+    await stuur({ type: "cancel" });
+    await a;
+    expect(ontvangen.find((m) => m.type === "error")).toBeUndefined();
+  }, 120_000);
 });

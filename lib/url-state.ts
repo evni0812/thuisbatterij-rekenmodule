@@ -38,6 +38,13 @@ export interface Instellingen {
    * 0–1. Zie lib/strategie.ts voor de drie standen.
    */
   slijtageDeel: number;
+  /**
+   * De kostenregel voor andere maten dan de gekozen batterij: meerprijs per
+   * kWh, per kW en de installateur boven 0,8 kW. Zie lib/model/kosten.ts.
+   */
+  kostenPerKwh: number;
+  kostenPerKw: number;
+  installatieEur: number;
   /** Null betekent: neem de waarde van de gekozen batterij over. */
   prijsEur: number | null;
   capaciteitKwh: number | null;
@@ -64,6 +71,9 @@ const SLEUTELS: Record<keyof Instellingen, string> = {
   prijsstijging: "stg",
   degradatie: "deg",
   slijtageDeel: "slt",
+  kostenPerKwh: "pkwh",
+  kostenPerKw: "pkw",
+  installatieEur: "inst",
   prijsEur: "prijs",
   capaciteitKwh: "cap",
   vermogenKw: "kw",
@@ -95,6 +105,9 @@ export function leesUrl(): Partial<Instellingen> {
   zetGetal("prijsstijging", getal(SLEUTELS.prijsstijging));
   zetGetal("degradatie", getal(SLEUTELS.degradatie));
   zetGetal("slijtageDeel", getal(SLEUTELS.slijtageDeel));
+  zetGetal("kostenPerKwh", getal(SLEUTELS.kostenPerKwh));
+  zetGetal("kostenPerKw", getal(SLEUTELS.kostenPerKw));
+  zetGetal("installatieEur", getal(SLEUTELS.installatieEur));
   zetGetal("prijsEur", getal(SLEUTELS.prijsEur));
   zetGetal("capaciteitKwh", getal(SLEUTELS.capaciteitKwh));
   zetGetal("vermogenKw", getal(SLEUTELS.vermogenKw));

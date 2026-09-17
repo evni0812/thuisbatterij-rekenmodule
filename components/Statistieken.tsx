@@ -38,14 +38,18 @@ export function piekAandeel(piekKwh: number, afnameKwh: number): number {
  * Bewust niet als percentage van een percentage: van 26% naar 35% is negen
  * procentpunt, niet "35% meer". Dat tweede getal klopt rekenkundig en zegt
  * niets.
+ *
+ * `van` en `naar` zijn fracties (0,34), geen procenten (34): deze functie
+ * schaalt zelf. Wie er procenten in stopt krijgt honderd keer te veel — en
+ * "−573 procentpunt" ziet er net genoeg uit als een getal om niet op te vallen.
  */
-function procentpunt(van: number, naar: number): string {
+export function procentpunt(van: number, naar: number): string {
   const d = (naar - van) * 100;
   const teken = d > 0 ? "+" : d < 0 ? "−" : "";
   return `${teken}${getal(Math.abs(d), Math.abs(d) < 10 ? 1 : 0)} procentpunt`;
 }
 
-function Tegel({
+export function Tegel({
   label,
   waarde,
   van,

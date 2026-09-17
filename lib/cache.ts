@@ -15,6 +15,7 @@
  */
 
 import type { AnalysisResult, ScenarioResult } from "./model/analysis";
+import type { HuishoudenPunt } from "./model/huishoudens";
 import type { Configuration, GridPoint } from "./worker/protocol";
 
 /**
@@ -28,6 +29,12 @@ export interface Bundel {
   /** Voor welk jaar het basistarief in het scenario gold; ontbreekt = 2029. */
   scenarioJaar?: number;
   grid?: GridPoint[][];
+  /**
+   * De gekozen batterij voor een reeks huishoudens (lib/model/huishoudens.ts);
+   * null op een plek die niet doorrekenbaar was. Optioneel: een bundel van
+   * vóór dit veld blijft geldig, de achtergrond rekent het dan bij.
+   */
+  huishoudens?: (HuishoudenPunt | null)[];
 }
 
 /**
@@ -149,6 +156,9 @@ export const VELDKLASSE: Record<keyof Configuration, "dispatch" | "afleiding"> =
   residualValueEur: "afleiding",
   annualProductionKwh: "afleiding",
   calendarLifeYears: "afleiding",
+  kostenPerKwhEur: "afleiding",
+  kostenPerKwEur: "afleiding",
+  installatieEur: "afleiding",
 };
 
 /** De configuratie zonder de afleidingsvelden. */
@@ -189,8 +199,8 @@ export function leesCache(config: Configuration): Bundel | null {
   try {
     const ruw = window.localStorage.getItem(dispatchSleutel(config));
     if (!ruw) return null;
-    const { result, scenario, scenarioOpTeruglevering, scenarioJaar, grid } = JSON.parse(ruw) as Bewaard;
-    return { result, scenario, scenarioOpTeruglevering, scenarioJaar, grid };
+    const { result, scenario, scenarioOpTeruglevering, scenarioJaar, grid, huishoudens } = JSON.parse(ruw) as Bewaard;
+    return { result, scenario, scenarioOpTeruglevering, scenarioJaar, grid, huishoudens };
   } catch {
     // Een volle of geblokkeerde opslag mag de tool nooit stukmaken; dan rekenen
     // we gewoon opnieuw.

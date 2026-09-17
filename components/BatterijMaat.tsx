@@ -3,51 +3,53 @@
 /**
  * Welke batterijmaat loont?
  *
- * Een raster van capaciteit tegen vermogen, gekleurd naar jaarbesparing. Dit
- * vervangt de optimalisatiepagina van het prototype, die drie problemen had:
- * de besparing daalde er bij een grotere batterij, de batterijspecificaties
- * werden overschreven door hardcoded waarden, en de aanschafprijs werd op één
- * euro gezet — waardoor de slijtagekosten wegvielen en de batterij in het model
- * veel agressiever ging handelen dan hij in werkelijkheid zou doen.
+ * Een raster van capaciteit tegen vermogen, gekleurd naar wat elke maat netto
+ * oplevert over de looptijd. Elke cel is één doorrekening van een jaar; de
+ * investering per cel komt uit de kostenregel (lib/model/kosten.ts), de rest
+ * uit dezelfde financiële doorrekening als het antwoord bovenaan
+ * (lib/model/dimensionering.ts).
  *
- * Hier gelden de ingestelde specificaties, inclusief de echte prijs, en is de
- * uitkomst monotoon: meer capaciteit of meer vermogen levert nooit minder op.
+ * ── Waarom netto resultaat voorop ───────────────────────────────────────────
+ * Op besparing wint de grootste batterij altijd, en dat is misleidend: de
+ * aanschafprijs loopt mee omhoog. De eerdere weergaven "per kWh" en "per kW"
+ * waren een omweg om dat zichtbaar te maken zonder de prijs te kennen. Nu de
+ * kaart wél weet wat elke maat kost, is de vraag direct te beantwoorden: wat
+ * blijft er over. Terugverdientijd en jaarbesparing blijven als schakelaars.
  *
- * ── Waarom er drie weergaven zijn ───────────────────────────────────────────
- * Het totaal beantwoordt "hoeveel levert deze maat op", en daarop wint de
- * grootste batterij altijd. Dat is waar, en het is misleidend: de aanschafprijs
- * loopt mee omhoog. De vraag die een koper werkelijk heeft is wat elke
- * kilowattuur bijdraagt, en dan draait het beeld om — de eerste kilowattuur
- * doet het meeste werk, de laatste vult alleen nog de randen op. Daarom staat
- * die weergave voorop.
+ * De streep tussen 0,8 en 1,5 kW is de grens tussen een stekkerbatterij en een
+ * batterij met een eigen groep: daar komt een installateur bij, en die zit in
+ * de prijs van elke cel rechts van de streep.
  */
 
-import { useState, type ReactNode } from "react";
+import { useMemo, useState, type ReactNode } from "react";
 import type { GridState } from "../lib/useAnalysis";
-import type { GridPoint } from "../lib/worker/protocol";
-import { euro, euroPrecies, getal } from "../lib/format";
+import type { Configuration, GridPoint } from "../lib/worker/protocol";
+import type { SavingCurvePoint } from "../lib/model/finance";
+import { advies, rasterFinance, type CelFinance } from "../lib/model/dimensionering";
+import { STEKKER_GRENS_KW, isVasteAansluiting, kostenregelVan } from "../lib/model/kosten";
+import { euro, getal, jaren, procent } from "../lib/format";
 import { Figure, TipLaag, useTip, type TipInhoud } from "./chart-parts";
 
-type Weergave = "perKwh" | "perKw" | "totaal";
+type Weergave = "ncw" | "tvt" | "besparing";
 
 interface Modus {
   /** Wat er op de schakelknop staat. */
   knop: string;
-  /** De grootheid die het vakje toont. */
-  waarde: (p: GridPoint) => number;
+  /** De grootheid die het vakje toont; null als die er niet is (nooit terugverdiend). */
+  waarde: (c: CelFinance) => number | null;
   /** Het getal in het vakje: kort, want de ruimte is krap. */
-  cel: (n: number) => string;
+  cel: (n: number | null) => string;
   /** Hetzelfde bedrag in lopende tekst, met eenheid. */
-  bedrag: (n: number) => string;
-  /** Waar het getal per stuk over gaat, voor schermlezers en de voetregel. */
+  bedrag: (n: number | null) => string;
+  /** Hoger is beter (netto, besparing) of lager is beter (terugverdientijd). */
+  hoogIsGoed: boolean;
   eenheid: string;
-  noot: string;
 }
 
 /**
  * Eén vaste decimaal, ook bij een rond getal.
  *
- * `getal(n, 1)` laat een nul weg, en dan staat "51" naast "51,8" en zakken de
+ * `getal(n, 1)` laat een nul weg, en dan staat "6" naast "6,8" en zakken de
  * kolommen uit elkaar. In een raster van tweeënveertig getallen die je met
  * elkaar vergelijkt, telt die uitlijning.
  */
@@ -56,70 +58,63 @@ const eenDecimaal = new Intl.NumberFormat("nl-NL", {
   maximumFractionDigits: 1,
 });
 
+/** Een heel bedrag met teken, zonder euroteken: "+1.234" of "−321". */
+function netto(n: number): string {
+  const r = Math.round(n);
+  return r < 0 ? `−${getal(-r)}` : `+${getal(r)}`;
+}
+
 const MODI: Record<Weergave, Modus> = {
-  perKwh: {
-    knop: "Per kWh",
-    // Delen door de capaciteit maakt de afnemende meeropbrengst direct
-    // zichtbaar: hetzelfde bedrag, maar afgezet tegen wat je ervoor koopt.
-    waarde: (p) => (p.capacityKwh > 0 ? p.savingEur / p.capacityKwh : 0),
-    cel: (n) => eenDecimaal.format(n),
-    bedrag: (n) => `${euroPrecies(n)} per kWh`,
-    eenheid: "per kilowattuur capaciteit",
-    noot:
-      "Bedragen in euro per kilowattuur capaciteit per jaar, doorgerekend over " +
-      "het meest recente volledige jaar met de realistische regelstrategie.",
+  ncw: {
+    knop: "Netto resultaat",
+    waarde: (c) => c.npvEur,
+    cel: (n) => (n === null ? "—" : netto(n)),
+    bedrag: (n) => (n === null ? "—" : `${euro(n)} netto`),
+    hoogIsGoed: true,
+    eenheid: "netto over de looptijd",
   },
-  perKw: {
-    knop: "Per kW",
-    waarde: (p) => (p.powerKw > 0 ? p.savingEur / p.powerKw : 0),
-    cel: (n) => eenDecimaal.format(n),
-    bedrag: (n) => `${euroPrecies(n)} per kW`,
-    eenheid: "per kilowatt vermogen",
-    noot:
-      "Bedragen in euro per kilowatt vermogen per jaar, doorgerekend over het " +
-      "meest recente volledige jaar met de realistische regelstrategie.",
+  tvt: {
+    knop: "Terugverdientijd",
+    waarde: (c) => c.paybackYears,
+    cel: (n) => (n === null ? "—" : eenDecimaal.format(n)),
+    bedrag: (n) => (n === null ? "verdient zich niet terug" : `terugverdiend na ${jaren(n)}`),
+    hoogIsGoed: false,
+    eenheid: "jaar tot de aanschaf terug is",
   },
-  totaal: {
-    knop: "Totaal",
-    waarde: (p) => p.savingEur,
-    cel: (n) => String(Math.round(n)),
-    bedrag: (n) => `${euro(n)} per jaar`,
-    eenheid: "per jaar",
-    noot:
-      "Bedragen in euro per jaar, doorgerekend over het meest recente " +
-      "volledige jaar met de realistische regelstrategie.",
+  besparing: {
+    knop: "Besparing per jaar",
+    waarde: (c) => c.besparingEur,
+    cel: (n) => (n === null ? "—" : String(Math.round(n))),
+    bedrag: (n) => (n === null ? "—" : `${euro(n)} per jaar`),
+    hoogIsGoed: true,
+    eenheid: "besparing per jaar",
   },
 };
 
 /** Wat er in de kaart staat als je een vakje aanwijst. */
 function tipVoor(
-  punt: GridPoint,
-  modus: Modus,
+  cap: number,
+  kw: number,
+  fin: CelFinance,
   isBeste: boolean,
   isHuidig: boolean,
+  jaar: number | null,
 ): TipInhoud {
   return {
-    titel: `${getal(punt.capacityKwh, 1)} kWh bij ${getal(punt.powerKw, 1)} kW`,
+    titel: `${getal(cap, 1)} kWh bij ${getal(kw, 1)} kW`,
     regels: [
-      { label: "Besparing per jaar", waarde: euro(punt.savingEur), uitkomst: true },
-      { label: "Per kWh capaciteit", waarde: euroPrecies(punt.savingEur / Math.max(0.01, punt.capacityKwh)) },
-      { label: "Per kW vermogen", waarde: euroPrecies(punt.savingEur / Math.max(0.01, punt.powerKw)) },
-      { label: "Laadbeurten per jaar", waarde: String(Math.round(punt.cyclesPerYear)) },
+      { label: "Investering", waarde: euro(fin.investeringEur) },
+      { label: "Netto resultaat", waarde: euro(fin.npvEur), uitkomst: true },
+      { label: "Terugverdientijd", waarde: jaren(fin.paybackYears) },
+      { label: "Besparing per jaar", waarde: euro(fin.besparingEur) },
+      { label: "Laadbeurten per jaar", waarde: String(Math.round(fin.cyclesPerYear)) },
     ],
     noot: isHuidig
       ? "Dit is de batterij die je nu hebt ingesteld."
       : isBeste
-        ? `De hoogste ${modus.eenheid} in dit raster. Klik om hiermee door te rekenen.`
-        : "Klik om met deze maat door te rekenen.",
+        ? "Het hoogste netto resultaat in dit raster. Klik om hiermee door te rekenen."
+        : `Als ${jaar ?? "het doorgerekende jaar"} zich herhaalt. Klik om met deze maat door te rekenen.`,
   };
-}
-
-/** Het beste punt volgens de gekozen grootheid. */
-function besteVan(punten: GridPoint[], modus: Modus): GridPoint | null {
-  return punten.reduce<GridPoint | null>(
-    (b, p) => (b === null || modus.waarde(p) > modus.waarde(b) ? p : b),
-    null,
-  );
 }
 
 export function BatterijMaat({
@@ -128,6 +123,9 @@ export function BatterijMaat({
   huidigVermogen,
   onKies,
   actie,
+  config,
+  curve,
+  jaar = null,
 }: {
   /** Null zolang het raster nog wordt doorgerekend in de achtergrond. */
   grid: GridState | null;
@@ -136,25 +134,32 @@ export function BatterijMaat({
   onKies: (capaciteit: number, vermogen: number) => void;
   /** De knop "Hoe is dit berekend?" in de kop. */
   actie?: ReactNode;
+  /** De configuratie van het getoonde resultaat: anker van de kostenregel en de financiële aannames. */
+  config: Configuration;
+  /** De besparingscurve van de gekozen batterij; elke cel leent er de vorm van. */
+  curve: SavingCurvePoint[];
+  /** Het jaar waarop het raster rekent, voor de teksten. */
+  jaar?: number | null;
 }) {
   const [gehoverd, setGehoverd] = useState<{ r: number; k: number } | null>(null);
-  const [weergave, setWeergave] = useState<Weergave>("perKwh");
+  const [weergave, setWeergave] = useState<Weergave>("ncw");
   const { kader, tip, toon, wis } = useTip();
 
-  if (!grid) {
+  const fin = useMemo(() => (grid ? rasterFinance(grid, config, curve) : null), [grid, config, curve]);
+  const raad = useMemo(() => (grid && grid.klaar ? advies(grid, config, curve) : null), [grid, config, curve]);
+
+  if (!grid || !fin) {
     // Het raster draait automatisch in de achtergrond zodra het hoofdantwoord
-    // er is; hier staat alleen wat er komt. Geen knop meer: die stond de meeste
-    // bezoekers in de weg, en het is juist de kaart die laat zien of een
-    // andere maat beter was geweest.
+    // er is; hier staat alleen wat er komt.
     return (
       <Figure
-      actie={actie}
+        actie={actie}
         titel="Welke maat batterij loont eigenlijk?"
         toelichting={
           <>
             Tweeënveertig combinaties van capaciteit en vermogen, elk een
-            volledige doorrekening van een jaar aan kwartierdata. Dat kost een
-            paar seconden en gebeurt op de achtergrond.
+            volledige doorrekening van een jaar aan kwartierdata, elk met zijn
+            eigen prijs. Dat kost een paar seconden en gebeurt op de achtergrond.
           </>
         }
       >
@@ -164,88 +169,104 @@ export function BatterijMaat({
   }
 
   const modus = MODI[weergave];
-  const alle = grid.rows.flatMap((r) => r ?? []);
-  const max = Math.max(...alle.map(modus.waarde), Number.MIN_VALUE);
-  const beste = besteVan(alle, modus);
+  const regel = kostenregelVan(config);
+  const alle = fin.flatMap((r) => r ?? []);
+  const waarden = alle.map(modus.waarde).filter((v): v is number => v !== null);
+  const min = Math.min(...waarden, 0);
+  const max = Math.max(...waarden, Number.MIN_VALUE);
 
-  // Sequentiële schaal: één hue, licht naar donker, want dit is magnitude.
-  // De stap bepaalt ook de tekstkleur: wit op elke stap zetten maakte het
-  // bedrag op de lichtste cellen onleesbaar (1,3:1). De eerste drie stappen
-  // krijgen donkere tekst, de rest wit.
+  // Sequentiële schaal over het bereik van de getoonde grootheid: één hue,
+  // licht naar donker. Bij terugverdientijd is kort goed, dus keert hij om, en
+  // een cel die zich nooit terugverdient krijgt de lichtste stap.
   const STAPPEN = 7;
-  const stap = (waarde: number): number =>
-    Math.min(STAPPEN - 1, Math.floor(Math.max(0, Math.min(1, waarde / max)) * STAPPEN));
+  const stap = (waarde: number | null): number => {
+    if (waarde === null) return 0;
+    const t = max > min ? (waarde - min) / (max - min) : 1;
+    const u = modus.hoogIsGoed ? t : 1 - t;
+    return Math.min(STAPPEN - 1, Math.floor(Math.max(0, Math.min(1, u)) * STAPPEN));
+  };
 
-  const actief = gehoverd ? grid.rows[gehoverd.r]?.[gehoverd.k] ?? null : null;
+  /** De cel met het hoogste netto resultaat, ongeacht de weergave. */
+  const beste = raad?.beste ?? null;
+  const isBesteCel = (cap: number, kw: number) =>
+    beste !== null && Math.abs(cap - beste.capacityKwh) < 1e-9 && Math.abs(kw - beste.powerKw) < 1e-9;
 
-  // Het beste punt van de kleinste en de grootste rij: daarmee is te zeggen of
-  // de opbrengst per eenheid daalt, in plaats van dat aan te nemen.
-  const eersteRij = besteVan(grid.rows[0] ?? [], modus);
-  const laatsteRij = besteVan(grid.rows[grid.rows.length - 1] ?? [], modus);
-  const daalt =
-    eersteRij !== null &&
-    laatsteRij !== null &&
-    modus.waarde(eersteRij) > modus.waarde(laatsteRij);
+  const actief = gehoverd ? fin[gehoverd.r]?.[gehoverd.k] ?? null : null;
+  const actiefPunt: GridPoint | null = gehoverd ? grid.rows[gehoverd.r]?.[gehoverd.k] ?? null : null;
+
+  /** De eerste kolom die een eigen groep vraagt: daar staat de streep. */
+  const scheiding = grid.powers.findIndex((kw) => isVasteAansluiting(kw));
 
   const titel = ((): string => {
     if (!beste || !grid.klaar) return "Welke maat batterij loont eigenlijk?";
-    if (weergave === "totaal") {
-      return "Meer capaciteit helpt, maar het loopt dood zonder vermogen";
-    }
-    if (weergave === "perKwh") {
-      return daalt
-        ? "De eerste kilowattuur levert het meeste op"
-        : "Wat elke kilowattuur capaciteit oplevert";
-    }
-    return daalt
-      ? "Vermogen betaalt zich alleen terug tot een zeker punt"
-      : "Wat elke kilowatt vermogen oplevert";
+    if (weergave === "besparing") return "Meer capaciteit helpt, maar het loopt dood zonder vermogen";
+    if (weergave === "tvt") return "Zo snel verdient elke maat zich terug";
+    return beste.fin.npvEur > 0
+      ? `Netto levert ${getal(beste.capacityKwh, 1)} kWh bij ${getal(beste.powerKw, 1)} kW het meest op`
+      : "Geen enkele maat komt netto uit de kosten";
   })();
 
   /**
-   * Levert meer vermogen ergens in het raster minder op? Dat gebeurt, en het
-   * ziet eruit als een rekenfout. Dat is het niet, maar het verdient uitleg
-   * waar de lezer het ziet.
+   * Levert meer vermogen ergens in het raster minder besparing op? Dat gebeurt,
+   * en het ziet eruit als een rekenfout. Dat is het niet, maar het verdient
+   * uitleg waar de lezer het ziet. Alleen bij de besparing: bij netto resultaat
+   * en terugverdientijd is een dip naar rechts gewoon de prijs van het vermogen.
    */
-  const vermogenDipt = grid.rows.some((rij) => {
-    if (!rij) return false;
-    const top = Math.max(...rij.map(modus.waarde));
-    // Een halve procent. Daaronder is het discretisatieruis van het SoC-rooster;
-    // de echte dip door voorspelfouten is op de kleinste maten zo'n twee procent.
-    return modus.waarde(rij[rij.length - 1]!) < top * 0.995;
-  });
+  const vermogenDipt =
+    weergave === "besparing" &&
+    grid.rows.some((rij) => {
+      if (!rij) return false;
+      const top = Math.max(...rij.map((p) => p.savingEur));
+      // Een halve procent. Daaronder is het discretisatieruis van het SoC-rooster;
+      // de echte dip door voorspelfouten is op de kleinste maten zo'n twee procent.
+      return rij[rij.length - 1]!.savingEur < top * 0.995;
+    });
 
-  const besteZin = ((): ReactNode => {
-    if (!beste) return null;
-    const plek = (
-      <>
-        {getal(beste.capacityKwh, 1)} kWh en {getal(beste.powerKw, 1)} kW
-      </>
-    );
-    if (weergave === "totaal") {
+  const adviesZin = ((): ReactNode => {
+    if (!raad) return null;
+    const { beste: b, besteStekker, besteVast, vasteLoont } = raad;
+    const plek = (k: { capacityKwh: number; powerKw: number }) =>
+      `${getal(k.capacityKwh, 1)} kWh bij ${getal(k.powerKw, 1)} kW`;
+    if (b.fin.npvEur <= 0) {
       return (
         <>
-          De hoogste besparing in dit raster is {euro(beste.savingEur)} bij {plek}.
-          Meer is niet altijd beter: elke extra kilowattuur levert minder op dan
-          de vorige, terwijl de aanschafprijs gewoon doorloopt.
+          In deze situatie komt geen enkele maat netto uit de kosten; het minst
+          verlies maakt een {isVasteAansluiting(b.powerKw) ? "batterij met eigen groep" : "stekkerbatterij"} van{" "}
+          {plek(b)} ({euro(b.fin.npvEur)}).
         </>
       );
     }
-    return (
-      <>
-        De hoogste opbrengst {modus.eenheid} is{" "}
-        {modus.bedrag(modus.waarde(beste))} bij {plek}.
-        {daalt && laatsteRij ? (
-          <>
-            {" "}
-            Bij {getal(laatsteRij.capacityKwh, 1)} kWh is dat nog{" "}
-            {modus.bedrag(modus.waarde(laatsteRij))}. Dat is de kern van de
-            afweging: het totaal groeit nog wel, maar elke euro aanschaf koopt
-            steeds minder besparing.
-          </>
-        ) : null}
-      </>
-    );
+    if (vasteLoont && besteVast) {
+      return (
+        <>
+          Advies: een batterij met een eigen groep van {plek(besteVast)}, netto{" "}
+          {euro(besteVast.fin.npvEur)} over {config.analysisYears} jaar.
+          {besteStekker ? (
+            <>
+              {" "}
+              De installateur verdient zich hier terug: de beste stekkerbatterij ({plek(besteStekker)})
+              komt op {euro(besteStekker.fin.npvEur)}.
+            </>
+          ) : null}
+        </>
+      );
+    }
+    if (besteStekker) {
+      return (
+        <>
+          Advies: een stekkerbatterij van {plek(besteStekker)}, netto {euro(besteStekker.fin.npvEur)} over{" "}
+          {config.analysisYears} jaar.
+          {besteVast ? (
+            <>
+              {" "}
+              Een eigen groep door een installateur loont hier niet: de beste maat met meer vermogen ({plek(besteVast)})
+              komt op {euro(besteVast.fin.npvEur)}.
+            </>
+          ) : null}
+        </>
+      );
+    }
+    return <>Advies: {plek(b)}, netto {euro(b.fin.npvEur)}.</>;
   })();
 
   return (
@@ -253,11 +274,13 @@ export function BatterijMaat({
       titel={titel}
       toelichting={
         <>
-          {weergave === "totaal"
-            ? "Jaarbesparing per combinatie"
-            : `Jaarbesparing ${modus.eenheid}, per combinatie`}
-          , met jouw verbruik en tarieven. Donkerder is meer. Klik een vakje om
-          die maat door te rekenen.
+          {weergave === "ncw"
+            ? "Wat elke combinatie netto oplevert over de looptijd"
+            : weergave === "tvt"
+              ? "Hoe snel elke combinatie zich terugverdient"
+              : "Jaarbesparing per combinatie"}
+          , met jouw verbruik, tarieven en de prijs die bij die maat hoort.
+          Donkerder is beter. Klik een vakje om die maat door te rekenen.
           {grid.bezig ? " Nog even geduld, de kaart vult zich." : ""}
         </>
       }
@@ -280,6 +303,11 @@ export function BatterijMaat({
         </div>
       }
     >
+      {adviesZin ? (
+        <p className="advies" role="status">
+          {adviesZin}
+        </p>
+      ) : null}
       <div
         className="chart-hover"
         ref={kader}
@@ -288,105 +316,110 @@ export function BatterijMaat({
           wis();
         }}
       >
-      <div className="heat-wrap">
-        <table className="heat">
-          <caption className="heat-caption">
-            Rijen: capaciteit in kWh. Kolommen: vermogen in kW.
-          </caption>
-          <thead>
-            <tr>
-              <th scope="col" className="heat-hoek">
-                kWh \ kW
-              </th>
-              {grid.powers.map((kw) => (
-                <th key={kw} scope="col">
-                  {getal(kw, 1)}
+        <div className="heat-wrap">
+          <table className="heat">
+            <caption className="heat-caption">
+              Rijen: capaciteit in kWh. Kolommen: vermogen in kW. Rechts van de
+              streep is een eigen groep nodig.
+            </caption>
+            <thead>
+              <tr>
+                <th scope="col" className="heat-hoek">
+                  kWh \ kW
                 </th>
-              ))}
-            </tr>
-          </thead>
-          <tbody>
-            {grid.capacities.map((cap, r) => (
-              <tr key={cap}>
-                <th scope="row">{getal(cap, 1)}</th>
-                {grid.powers.map((kw, k) => {
-                  const punt = grid.rows[r]?.[k];
-                  const isHuidig =
-                    Math.abs(cap - huidigeCapaciteit) < 0.05 &&
-                    Math.abs(kw - huidigVermogen) < 0.05;
-                  return (
-                    <td key={kw}>
-                      {punt ? (
-                        <button
-                          type="button"
-                          className={[
-                            "heat-cel",
-                            `stap-${stap(modus.waarde(punt))}`,
-                            isHuidig ? "huidig" : "",
-                            punt === beste ? "beste" : "",
-                          ]
-                            .filter(Boolean)
-                            .join(" ")}
-                          onMouseEnter={(e) => {
-                            setGehoverd({ r, k });
-                            toon(e, tipVoor(punt, modus, punt === beste, isHuidig));
-                          }}
-                          onMouseMove={(e) =>
-                            toon(e, tipVoor(punt, modus, punt === beste, isHuidig))
-                          }
-                          onMouseLeave={() => {
-                            setGehoverd(null);
-                            wis();
-                          }}
-                          onFocus={(e) => {
-                            setGehoverd({ r, k });
-                            const box = e.currentTarget.getBoundingClientRect();
-                            toon(
-                              { clientX: box.left + box.width / 2, clientY: box.top + box.height / 2 },
-                              tipVoor(punt, modus, punt === beste, isHuidig),
-                            );
-                          }}
-                          onBlur={() => {
-                            setGehoverd(null);
-                            wis();
-                          }}
-                          onClick={() => onKies(cap, kw)}
-                          aria-label={`${cap} kWh bij ${kw} kW: ${modus.bedrag(
-                            modus.waarde(punt),
-                          )}${punt === beste ? ", de hoogste in dit raster" : ""}`}
-                        >
-                          {/* Het getal staat er altijd bij: kleur draagt nooit
-                              alleen de betekenis. */}
-                          <span>{modus.cel(modus.waarde(punt))}</span>
-                        </button>
-                      ) : (
-                        <span className="heat-cel leeg" aria-hidden="true" />
-                      )}
-                    </td>
-                  );
-                })}
+                {grid.powers.map((kw, k) => (
+                  <th key={kw} scope="col" className={k === scheiding ? "heat-scheiding" : undefined}>
+                    {getal(kw, 1)}
+                  </th>
+                ))}
               </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
+            </thead>
+            <tbody>
+              {grid.capacities.map((cap, r) => (
+                <tr key={cap}>
+                  <th scope="row">{getal(cap, 1)}</th>
+                  {grid.powers.map((kw, k) => {
+                    const cel = fin[r]?.[k];
+                    const isHuidig =
+                      Math.abs(cap - huidigeCapaciteit) < 0.05 && Math.abs(kw - huidigVermogen) < 0.05;
+                    const isBeste = isBesteCel(cap, kw);
+                    const w = cel ? modus.waarde(cel) : null;
+                    return (
+                      <td key={kw} className={k === scheiding ? "heat-scheiding" : undefined}>
+                        {cel ? (
+                          <button
+                            type="button"
+                            className={[
+                              "heat-cel",
+                              `stap-${stap(w)}`,
+                              cel.npvEur < 0 ? "negatief" : "",
+                              isHuidig ? "huidig" : "",
+                              isBeste ? "beste" : "",
+                            ]
+                              .filter(Boolean)
+                              .join(" ")}
+                            onMouseEnter={(e) => {
+                              setGehoverd({ r, k });
+                              toon(e, tipVoor(cap, kw, cel, isBeste, isHuidig, jaar));
+                            }}
+                            onMouseMove={(e) => toon(e, tipVoor(cap, kw, cel, isBeste, isHuidig, jaar))}
+                            onMouseLeave={() => {
+                              setGehoverd(null);
+                              wis();
+                            }}
+                            onFocus={(e) => {
+                              setGehoverd({ r, k });
+                              const box = e.currentTarget.getBoundingClientRect();
+                              toon(
+                                { clientX: box.left + box.width / 2, clientY: box.top + box.height / 2 },
+                                tipVoor(cap, kw, cel, isBeste, isHuidig, jaar),
+                              );
+                            }}
+                            onBlur={() => {
+                              setGehoverd(null);
+                              wis();
+                            }}
+                            onClick={() => onKies(cap, kw)}
+                            aria-label={`${cap} kWh bij ${kw} kW: ${modus.bedrag(w)}, investering ${euro(
+                              cel.investeringEur,
+                            )}${isBeste ? ", het hoogste netto resultaat in dit raster" : ""}`}
+                          >
+                            {/* Het getal staat er altijd bij: kleur draagt nooit
+                                alleen de betekenis. */}
+                            <span>{modus.cel(w)}</span>
+                          </button>
+                        ) : (
+                          <span className="heat-cel leeg" aria-hidden="true" />
+                        )}
+                      </td>
+                    );
+                  })}
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
         <TipLaag tip={tip} />
       </div>
 
       <div className="heat-voet">
-        {actief ? (
+        {actief && actiefPunt ? (
           <p>
             <strong>
-              {getal(actief.capacityKwh, 1)} kWh bij {getal(actief.powerKw, 1)} kW
+              {getal(actiefPunt.capacityKwh, 1)} kWh bij {getal(actiefPunt.powerKw, 1)} kW
             </strong>{" "}
-            levert {euro(actief.savingEur)} per jaar op
-            {weergave === "totaal"
-              ? ""
-              : `, ${modus.bedrag(modus.waarde(actief))}`}
-            , bij {Math.round(actief.cyclesPerYear)} cycli.
+            kost {euro(actief.investeringEur)} en levert {euro(actief.besparingEur)} per jaar op:{" "}
+            {euro(actief.npvEur)} netto over {config.analysisYears} jaar,{" "}
+            {actief.paybackYears === null ? "verdient zich niet terug" : `terugverdiend na ${jaren(actief.paybackYears)}`}
+            , bij {Math.round(actief.cyclesPerYear)} laadbeurten per jaar.
           </p>
         ) : beste && grid.klaar ? (
-          <p>{besteZin}</p>
+          <p>
+            Het hoogste netto resultaat is {euro(beste.fin.npvEur)} bij {getal(beste.capacityKwh, 1)} kWh
+            en {getal(beste.powerKw, 1)} kW, voor een investering van {euro(beste.fin.investeringEur)}.
+            Meer is niet vanzelf beter: elke extra kilowattuur levert minder op dan de vorige, terwijl de
+            prijs gewoon doorloopt.
+          </p>
         ) : (
           <p>Wijs een vakje aan voor de details.</p>
         )}
@@ -400,7 +433,14 @@ export function BatterijMaat({
             zit daar tussenin; deze tool rekent aan de voorzichtige kant.
           </p>
         ) : null}
-        <p className="heat-noot">{modus.noot}</p>
+        <p className="heat-noot">
+          Elke cel: de besparing van {jaar ?? "het meest recente volledige jaar"} herhaald over{" "}
+          {config.analysisYears} jaar, met {procent(config.discountRate, 1)} rente die je misloopt en de slijtage
+          zoals bij jouw batterij. De prijs per cel volgt uit jouw batterij ({euro(config.investmentEur)}):{" "}
+          {euro(regel.perKwhEur)} per kWh en {euro(regel.perKwEur)} per kW erbij, en boven{" "}
+          {getal(STEKKER_GRENS_KW, 1)} kW eenmalig {euro(regel.installatieEur)} voor een eigen groep door een
+          installateur. Instelbaar bij de geavanceerde instellingen.
+        </p>
       </div>
     </Figure>
   );
