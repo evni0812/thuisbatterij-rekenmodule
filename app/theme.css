@@ -501,7 +501,9 @@ input[type="date"] {
 
 .tip {
   position: absolute;
-  z-index: 5;
+  /* Boven de stapper onderin, anders valt een kaart bij de onderste grafiek
+     half achter de balk. */
+  z-index: 30;
   transform: translateY(-50%);
   pointer-events: none;
   min-width: 150px;
@@ -1963,6 +1965,26 @@ details.voetnoot-uitklap .schakel {
  * staan naast elkaar op een spoor dat opschuift. Vaste breedte is de hele
  * truc: zonder dat springt de pil per titel van maat en schuift er niets.
  */
+/*
+ * De balk plakt onderin het scherm. Sticky en niet fixed: hij houdt zijn eigen
+ * plek in de pagina, dus onderaan laat hij los en staat hij boven de voettekst.
+ * Er hoeft daardoor nergens ruimte te worden vrijgehouden en er verdwijnt
+ * niets permanent achter de balk — je kunt altijd doorscrollen tot alles vrij
+ * ligt.
+ *
+ * De buitenste laag loopt over de volle breedte en draagt de achtergrond; de
+ * binnenste houdt de maat van de pagina. Zonder die twee lagen zweeft er een
+ * los kaartje in beeld terwijl de inhoud er links en rechts langs schuift.
+ */
+.stapper-balk {
+  position: sticky;
+  bottom: 0;
+  z-index: 20;
+  background: var(--surface-1);
+  border-top: 1px solid var(--border-strong);
+  box-shadow: 0 -4px 18px rgb(26 31 30 / 7%);
+}
+
 .stapper {
   /* Drie kolommen, waarvan de buitenste even breed: dan staat de pil precies
      in het midden, ook al is "Wat als" langer dan "Start". */
@@ -1970,11 +1992,10 @@ details.voetnoot-uitklap .schakel {
   grid-template-columns: 1fr auto 1fr;
   align-items: center;
   gap: 12px;
-  margin: 0 auto 40px;
-  padding: 18px 24px;
+  margin: 0 auto;
+  padding: 14px 24px;
   width: 100%;
   max-width: 980px;
-  border-top: 1px solid var(--border);
 }
 
 .stapper-knop {
@@ -2068,7 +2089,7 @@ details.voetnoot-uitklap .schakel {
    een pil van elf rem, en de pil zegt al waar je bent. */
 @media (max-width: 599px) {
   .stapper {
-    padding: 14px 16px;
+    padding: 10px 16px;
   }
 
   .stapper-zij {
@@ -2081,6 +2102,17 @@ details.voetnoot-uitklap .schakel {
 
   .stapper-venster {
     width: 9rem;
+  }
+}
+
+/*
+ * Op een laag venster — een telefoon in liggende stand — kost een vaste balk
+ * te veel van het weinige dat er is. Dan schuift hij gewoon mee met de pagina.
+ */
+@media (max-height: 460px) {
+  .stapper-balk {
+    position: static;
+    box-shadow: none;
   }
 }
 

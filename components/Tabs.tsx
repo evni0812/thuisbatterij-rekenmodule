@@ -90,6 +90,19 @@ export function Tabs({ actief, onKies }: { actief: TabId; onKies: (id: TabId) =>
  *
  * Met `prefers-reduced-motion` staat de overgang uit; de titel wisselt dan
  * gewoon. De inhoud is hetzelfde, alleen de animatie vervalt.
+ *
+ * ── Hij blijft onderin staan ────────────────────────────────────────────────
+ * De balk plakt aan de onderkant van het scherm (`position: sticky`), zodat je
+ * niet eerst een heel tabblad hoeft af te scrollen om verder te kunnen. Sticky
+ * en niet fixed: het element houdt zijn eigen plek in de pagina, dus zodra je
+ * onderaan bent laat hij los en staat hij gewoon boven de voettekst. Er hoeft
+ * daardoor nergens ruimte te worden vrijgehouden, en er verdwijnt niets
+ * permanent achter de balk.
+ *
+ * De buitenste laag loopt over de volle breedte en draagt de achtergrond; de
+ * binnenste houdt dezelfde maat als de pagina erboven. Zonder die twee lagen
+ * zou de balk als los kaartje midden in beeld zweven terwijl de inhoud er links
+ * en rechts langs schuift.
  */
 export function TabStapper({
   actief,
@@ -111,6 +124,7 @@ export function TabStapper({
   };
 
   return (
+    <div className="stapper-balk">
     <nav className="stapper" aria-label="Verder door de onderdelen">
       <button
         type="button"
@@ -158,6 +172,7 @@ export function TabStapper({
         <Chevron kant="rechts" />
       </button>
     </nav>
+    </div>
   );
 }
 

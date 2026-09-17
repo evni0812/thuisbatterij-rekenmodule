@@ -47,6 +47,21 @@ gemount zodat het dagprofiel zijn gekozen dag houdt.
 | **Wat als** | En als het anders was? | het nettarief, een andere maat, over de looptijd |
 | **Methode** | Waar komen de cijfers vandaan? | verantwoording, controlegegevens, "wat we niet weten" |
 
+**Twee manieren om van tabblad te wisselen.** De tablist in de balk is er om
+ergens naartóé te springen; de stapper onder aan de pagina is er om verder te
+lezen — chevron naar links, chevron naar rechts, en daartussen een pil met het
+tabblad waar je staat. Die pil is letterlijk een venster: alle vijf de titels
+staan naast elkaar op één spoor, de pil laat er één van zien en het spoor
+schuift op (`translateX(-i * 100%)`). Daardoor ís de beweging de navigatie — je
+ziet de oude titel weglopen en de nieuwe binnenkomen, en bij een sprong van twee
+schuift de tussenliggende titel er zichtbaar doorheen. Bij
+`prefers-reduced-motion` vervalt de overgang en wisselt de titel gewoon.
+Doorstappen scrolt naar boven, want de knop staat onderaan het vorige onderdeel.
+De stapper staat één keer in de boom, ná de panelen: alleen het actieve paneel
+is zichtbaar, dus hij hangt altijd onder wat je leest. Hij is een `<nav>` met
+gewone knoppen en geen tweede tablist, zodat een schermlezer niet twee keer
+dezelfde structuur krijgt.
+
 **De terugverdientijd kent de ingangsdatum van het nettarief.** Het
 tijdsafhankelijke tarief gaat pas in 2029 in, dus een batterij die je vandaag
 koopt draait eerst nog een paar jaar op de tarieven van nu. `lib/overgang.ts`

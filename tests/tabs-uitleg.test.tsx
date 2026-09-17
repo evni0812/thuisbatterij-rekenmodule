@@ -58,6 +58,19 @@ describe("de tabs", () => {
 });
 
 describe("de stapper onderaan", () => {
+  it("zit in een balk die onderin het scherm kan blijven staan", () => {
+    /**
+     * De balk is twee lagen: de buitenste draagt de achtergrond over de volle
+     * breedte en plakt onderin, de binnenste houdt de maat van de pagina.
+     * Verdwijnt die buitenste laag, dan zweeft er een los kaartje in beeld
+     * terwijl de inhoud er links en rechts langs schuift.
+     */
+    const { container } = render(<TabStapper actief="start" onKies={() => {}} />);
+    const balk = container.querySelector(".stapper-balk");
+    expect(balk).not.toBeNull();
+    expect(balk!.querySelector("nav.stapper")).not.toBeNull();
+  });
+
   it("noemt het vorige en het volgende onderdeel bij naam", () => {
     render(<TabStapper actief="wanneer" onKies={() => {}} />);
     expect(screen.getByRole("button", { name: "Vorige: Waarom" })).toBeDefined();
