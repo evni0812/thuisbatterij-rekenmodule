@@ -102,20 +102,25 @@ export class Gegevensdeler {
     let belofte = this.bestanden.get(url);
     if (!belofte) {
       belofte = this.manifestMetBytes().then(async ({ manifest }) => {
-        const bytes = await this.haalBytes(
-          // De versie in de URL: zie de toelichting bovenaan.
-          `${url}${url.includes("?") ? "&" : "?"}v=${encodeURIComponent(manifest.gegenereerd)}`,
-          this.timeouts.bestand,
-          {},
-          `kon ${url} niet laden`,
-        );
-        const verwacht = verwachteSha256(manifest, url);
-        if (verwacht) {
-          const werkelijk = await sha256Hex(bytes);
-          if (werkelijk !== null && werkelijk !== verwacht.toLowerCase()) {
+        // De versie in de URL: zie de toelichting bovenaan.
+        const versieUrl = `${url}${url.includes("?") ? "&" : "?"}v=${encodeURIComponent(manifest.gegenereerd)}`;
+        const verwacht = verwachteSha256(manifest, url)?.toLowerCase();
+        const klopt = async (b: ArrayBuffer) => {
+          if (!verwacht) return true;
+          const werkelijk = await sha256Hex(b);
+          return werkelijk === null || werkelijk === verwacht;
+        };
+        let bytes = await this.haalBytes(versieUrl, this.timeouts.bestand, {}, `kon ${url} niet laden`);
+        if (!(await klopt(bytes))) {
+          // De .bin-bestanden zijn "immutable": een beschadigde kopie blijft
+          // anders voor deze dataversie in de browsercache staan, en opnieuw
+          // laden haalt hem daar gewoon weer vandaan. Eén keer rechtstreeks
+          // van de server, buiten de cache om.
+          bytes = await this.haalBytes(versieUrl, this.timeouts.bestand, { cache: "reload" }, `kon ${url} niet laden`);
+          if (!(await klopt(bytes))) {
             throw new Error(
               `${url} is beschadigd of hoort bij een andere versie van de gegevens: ` +
-                "de controlesom klopt niet met het manifest. Laad de pagina opnieuw.",
+                "de controlesom klopt niet met het manifest, ook niet na opnieuw ophalen.",
             );
           }
         }

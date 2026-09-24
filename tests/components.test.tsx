@@ -1082,6 +1082,14 @@ describe("de pagina vertelt het verhaal in vier delen, in die volgorde", () => {
     cleanup();
     render(<Antwoord result={result} scenario={null} overgang={null} investeringEur={819} bezig={false} />);
     expect(document.body.textContent).toMatch(/wordt doorgerekend/);
+
+    // Mislukt het scenario, dan zegt Start dat, in plaats van eeuwig te wachten.
+    cleanup();
+    render(
+      <Antwoord result={result} scenario={null} overgang={null} investeringEur={819} bezig={false} scenarioFout="kapot" />,
+    );
+    expect(document.body.textContent).not.toMatch(/wordt doorgerekend/);
+    expect(document.body.textContent).toMatch(/lukte niet door te rekenen/);
   });
 });
 

@@ -420,6 +420,7 @@ export default function Page() {
                 investeringEur={toonPrijs}
                 bezig={busy}
                 heffingVanNu={toon?.useHistoricalLevy === false}
+                scenarioFout={scenarioFout}
                 actie={uitleg("antwoord")}
               />
 

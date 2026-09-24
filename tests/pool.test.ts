@@ -71,18 +71,18 @@ describe("de pool met nepworkers", () => {
   });
 
   it("kiest voor elke machine minstens twee en hoogstens vier workers", () => {
-    expect(poolGrootte(1, 8, 1280)).toBe(2);
-    expect(poolGrootte(2, 8, 1280)).toBe(2);
-    expect(poolGrootte(6, 8, 1280)).toBe(4);
-    expect(poolGrootte(8, 8, 1280)).toBe(4);
-    expect(poolGrootte(64, undefined, undefined)).toBe(4);
+    expect(poolGrootte(1, 8)).toBe(2);
+    expect(poolGrootte(2, 8)).toBe(2);
+    expect(poolGrootte(6, 8)).toBe(4);
+    expect(poolGrootte(8, 8)).toBe(4);
+    expect(poolGrootte(64, undefined)).toBe(4);
   });
 
-  it("houdt het op een telefoon of zuinig toestel bij twee", () => {
-    expect(poolGrootte(4, 8, 1280)).toBe(2); // vier kernen
-    expect(poolGrootte(8, 4, 1280)).toBe(2); // 4 GB geheugen
-    expect(poolGrootte(8, 8, 390)).toBe(2); // smal scherm
-    expect(poolGrootte(8, undefined, 1280)).toBe(4); // geen deviceMemory (Safari, Firefox)
+  it("houdt het alleen bij heel weinig geheugen op twee", () => {
+    expect(poolGrootte(4, 8)).toBe(3); // vier kernen: één vrij voor de UI
+    expect(poolGrootte(8, 4)).toBe(4); // 4 GB is genoeg
+    expect(poolGrootte(8, 2)).toBe(2); // 2 GB of minder: twee
+    expect(poolGrootte(8, undefined)).toBe(4); // geen deviceMemory (Safari, Firefox)
   });
 
   it("geeft een worker pas werk als hij zijn manifest heeft", () => {
@@ -278,6 +278,28 @@ describe("de controlesom uit het manifest", () => {
     }) as typeof fetch;
   }
 
+  it("haalt een beschadigd bestand één keer opnieuw, buiten de browsercache om", async () => {
+    // De .bin-bestanden zijn immutable: een beschadigde kopie in de
+    // browsercache zou anders voor deze dataversie blijven hangen.
+    const opties: (RequestInit | undefined)[] = [];
+    const f = ((input: RequestInfo | URL, init?: RequestInit) => {
+      const url = String(input);
+      if (url.includes("manifest.json")) {
+        return Promise.resolve(new Response(JSON.stringify({
+          gegenereerd: "2026-09-16T19:23:33Z",
+          prijzen: { "2025": { sha256: GOED } },
+        })));
+      }
+      opties.push(init);
+      const eersteKeer = opties.length === 1;
+      return Promise.resolve(new Response(eersteKeer ? new Uint8Array([0, 0, 0]) : INHOUD));
+    }) as typeof fetch;
+    const bytes = await new Gegevensdeler("/data", f).haal("/data/prices-2025.bin");
+    expect([...new Uint8Array(bytes)]).toEqual([9, 8, 7]);
+    expect(opties).toHaveLength(2);
+    expect(opties[1]?.cache).toBe("reload");
+  });
+
   it("laat een bestand door waarvan de sha256 klopt", async () => {
     const deler = new Gegevensdeler("/data", metSom(GOED));
     const bytes = await deler.haal("/data/prices-2025.bin");
@@ -294,7 +316,8 @@ describe("de controlesom uit het manifest", () => {
     await expect(deler.haal("/data/profile-871685900000056162-2025.bin")).rejects.toThrow(/controlesom/);
     // Een fout blijft niet in de deler hangen: de volgende vraag haalt opnieuw.
     await expect(deler.haal("/data/prices-2025.bin")).rejects.toThrow(/controlesom/);
-    expect(teller.n).toBe(3);
+    // Elk bestand wordt twee keer gehaald: de tweede keer buiten de cache om.
+    expect(teller.n).toBe(6);
     // Een bestand met een kloppende som in hetzelfde manifest gaat gewoon door.
     await expect(deler.haal("/data/co2-2025.bin")).resolves.toBeInstanceOf(ArrayBuffer);
   });

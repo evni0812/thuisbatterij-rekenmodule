@@ -1809,28 +1809,10 @@ details.voetnoot-uitklap .schakel {
 .heat-cel.stap-6 { background: var(--seq-700); color: #fff; }
 
 /*
- * Hieronder stond dit blok nog een keer, buiten elke media query. En
- * `:root:not([data-theme="light"])` matcht ook zonder expliciete themakeuze —
- * de stand waarin de meeste bezoekers zitten. Daardoor gold de omkering voor de
- * donkere modus áltijd: de hoogste waarden kregen donkere tekst op donkerblauw
- * en de laagste witte tekst op lichtblauw. Precies verkeerd om, en juist op de
- * cellen waar het om gaat.
+ * Er is één, licht thema: de seq-tokens kennen geen donkere variant. Een
+ * omkering van de tekstkleur onder `prefers-color-scheme: dark` gaf daardoor
+ * wit op de lichtste cellen (1,2:1) en bijna-zwart op de donkerste. Weg.
  */
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) .heat-cel.stap-0,
-  :root:not([data-theme="light"]) .heat-cel.stap-1,
-  :root:not([data-theme="light"]) .heat-cel.stap-2 { color: #fff; }
-  :root:not([data-theme="light"]) .heat-cel.stap-4,
-  :root:not([data-theme="light"]) .heat-cel.stap-5,
-  :root:not([data-theme="light"]) .heat-cel.stap-6 { color: #0b0b0b; }
-}
-
-:root[data-theme="dark"] .heat-cel.stap-0,
-:root[data-theme="dark"] .heat-cel.stap-1,
-:root[data-theme="dark"] .heat-cel.stap-2 { color: #fff; }
-:root[data-theme="dark"] .heat-cel.stap-4,
-:root[data-theme="dark"] .heat-cel.stap-5,
-:root[data-theme="dark"] .heat-cel.stap-6 { color: #0b0b0b; }
 
 .heat-cel.huidig {
   outline: 2px solid var(--text-primary);

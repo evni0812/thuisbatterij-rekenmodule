@@ -40,6 +40,7 @@ export function Antwoord({
   investeringEur,
   bezig,
   heffingVanNu = true,
+  scenarioFout = null,
   actie,
 }: {
   result: AnalysisResult;
@@ -56,6 +57,11 @@ export function Antwoord({
   overgang: Overgang | null;
   investeringEur: number;
   bezig: boolean;
+  /**
+   * De foutmelding als het nettariefscenario mislukte. Zonder deze prop bleef
+   * de regel eronder eeuwig "wordt doorgerekend…" zeggen.
+   */
+  scenarioFout?: string | null;
   /**
    * Gerekend met de energiebelasting en opslag van nu (de standaard) in plaats
    * van die van toen. De grondslag onder het bedrag noemt welke.
@@ -135,6 +141,12 @@ export function Antwoord({
                 het huidige nettarief en daarna met het nieuwe.
               </>
             ) : null}
+          </>
+        ) : scenarioFout ? (
+          <>
+            Met het voorgestelde nettarief: dat lukte niet door te rekenen. De
+            terugverdientijd hierboven gaat daarom uit van het huidige
+            nettarief; op het tabblad Wat als staat wat er misging.
           </>
         ) : (
           <>Met het voorgestelde nettarief: wordt doorgerekend…</>

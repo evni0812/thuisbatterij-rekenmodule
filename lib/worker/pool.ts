@@ -43,27 +43,24 @@ export interface PoolTaak {
 }
 
 /**
- * Hoeveel workers zinvol zijn op deze machine: één kern vrij voor de UI.
+ * Hoeveel workers zinvol zijn op deze machine: één kern vrij voor de UI, en
+ * hoogstens vier.
  *
- * Op een telefoon of een zuinige laptop hoogstens twee. Elke worker houdt zijn
- * eigen profielen, prijzen en dispatches vast (tientallen MB per stuk), en een
- * toestel met 4 GB geheugen of vier kernen wint weinig met een derde en vierde
- * worker: de kernen zijn traag of worden door de browser zelf gebruikt, en het
- * geheugen raakt op. `deviceMemory` bestaat alleen in Chromium; ontbreekt het,
- * dan beslissen de kernen en de schermbreedte.
+ * Een tijdlang kreeg elk toestel met vier kernen, 4 GB geheugen of een smal
+ * scherm er hoogstens twee, om geheugen te sparen. De eindtoets mat dat na:
+ * eigen invoer op een gesmoorde telefoon duurde daarmee 6,3 in plaats van 4,0
+ * seconden, en een geheugenwinst viel niet aan te tonen. Alleen op een toestel
+ * dat zelf zegt hoogstens 2 GB te hebben (`deviceMemory`, alleen Chromium)
+ * blijft het bij twee.
  */
 export function poolGrootte(
   hardwareConcurrency = typeof navigator !== "undefined" ? (navigator.hardwareConcurrency ?? 4) : 4,
   geheugenGb: number | undefined = typeof navigator !== "undefined"
     ? (navigator as Navigator & { deviceMemory?: number }).deviceMemory
     : undefined,
-  schermBreedte: number | undefined = typeof window !== "undefined" ? window.innerWidth : undefined,
 ): number {
-  const zuinig =
-    hardwareConcurrency <= 4 ||
-    (geheugenGb !== undefined && geheugenGb <= 4) ||
-    (schermBreedte !== undefined && schermBreedte < 700);
-  return Math.max(2, Math.min(zuinig ? 2 : 4, hardwareConcurrency - 1));
+  const krap = geheugenGb !== undefined && geheugenGb <= 2;
+  return Math.max(2, Math.min(krap ? 2 : 4, hardwareConcurrency - 1));
 }
 
 /** Wie de bestanden voor de workers ophaalt; zie lib/worker/ophalen.ts. */
