@@ -6,6 +6,7 @@
  * perfecte voorspelling, samenvoegen), vergeleken met `runAnalysis` op
  * dezelfde invoer.
  */
+import { createHash } from "node:crypto";
 import { readFileSync } from "node:fs";
 import { beforeAll, describe, expect, it, vi } from "vitest";
 import { STANDAARD, maakConfiguratie } from "../lib/configuratie";
@@ -20,6 +21,7 @@ import {
 } from "../lib/model/analysis";
 import { scenarioConfiguratie } from "../lib/nettarief";
 import { Gegevensdeler } from "../lib/worker/ophalen";
+import { verwachteSha256, type Manifest } from "../lib/data/manifest";
 import { WorkerPool, poolGrootte } from "../lib/worker/pool";
 import type { Configuration, WorkerRequest, WorkerResponse } from "../lib/worker/protocol";
 
@@ -234,6 +236,69 @@ describe("de gedeelde ophaler", () => {
     fout = false;
     await expect(deler.haal("/data/co2-2025.bin")).resolves.toBeInstanceOf(ArrayBuffer);
     expect(urls.filter((u) => u.includes("co2")).length).toBe(2);
+  });
+});
+
+describe("de controlesom uit het manifest", () => {
+  const INHOUD = new Uint8Array([9, 8, 7]);
+  const GOED = createHash("sha256").update(INHOUD).digest("hex");
+
+  function metSom(som: string, teller: { n: number } = { n: 0 }): typeof fetch {
+    return ((input: RequestInfo | URL) => {
+      const url = String(input);
+      if (url.includes("manifest.json")) {
+        const manifest = {
+          gegenereerd: "2026-09-16T19:23:33Z",
+          prijzen: { "2025": { sha256: som } },
+          co2: { "2025": { sha256: GOED } },
+          profielen: { "871685900000056162": { "2025": { sha256: som } } },
+          profielen_zonder: { "871685900000056162": { "2025": { sha256: GOED } } },
+        };
+        return Promise.resolve(new Response(JSON.stringify(manifest)));
+      }
+      teller.n++;
+      return Promise.resolve(new Response(INHOUD));
+    }) as typeof fetch;
+  }
+
+  it("laat een bestand door waarvan de sha256 klopt", async () => {
+    const deler = new Gegevensdeler("/data", metSom(GOED));
+    const bytes = await deler.haal("/data/prices-2025.bin");
+    expect([...new Uint8Array(bytes)]).toEqual([9, 8, 7]);
+    await expect(deler.haal("/data/profile-871685900000056162-2025-azi.bin")).resolves.toBeInstanceOf(ArrayBuffer);
+  });
+
+  it("weigert een bestand waarvan de sha256 afwijkt, met een fout die zegt wat er mis is", async () => {
+    const teller = { n: 0 };
+    const deler = new Gegevensdeler("/data", metSom("0".repeat(64), teller));
+    await expect(deler.haal("/data/prices-2025.bin")).rejects.toThrow(
+      /prices-2025\.bin is beschadigd.*controlesom klopt niet met het manifest/,
+    );
+    await expect(deler.haal("/data/profile-871685900000056162-2025.bin")).rejects.toThrow(/controlesom/);
+    // Een fout blijft niet in de deler hangen: de volgende vraag haalt opnieuw.
+    await expect(deler.haal("/data/prices-2025.bin")).rejects.toThrow(/controlesom/);
+    expect(teller.n).toBe(3);
+    // Een bestand met een kloppende som in hetzelfde manifest gaat gewoon door.
+    await expect(deler.haal("/data/co2-2025.bin")).resolves.toBeInstanceOf(ArrayBuffer);
+  });
+
+  it("controleert niet als het manifest geen som kent", async () => {
+    const deler = new Gegevensdeler("/data", metSom(GOED));
+    await expect(deler.haal("/data/co2-2024.bin")).resolves.toBeInstanceOf(ArrayBuffer);
+  });
+
+  it("vindt de som bij elke soort bestand", () => {
+    const m = {
+      prijzen: { "2025": { sha256: "p" } },
+      co2: { "2024": { sha256: "c" } },
+      profielen: { "123": { "2023": { sha256: "a" } } },
+      profielen_zonder: { "123": { "2023": { sha256: "z" } } },
+    } as unknown as Manifest;
+    expect(verwachteSha256(m, "/data/prices-2025.bin?v=x")).toBe("p");
+    expect(verwachteSha256(m, "/data/co2-2024.bin")).toBe("c");
+    expect(verwachteSha256(m, "/data/profile-123-2023.bin")).toBe("a");
+    expect(verwachteSha256(m, "/data/profile-123-2023-azi.bin")).toBe("z");
+    expect(verwachteSha256(m, "/data/manifest.json")).toBeUndefined();
   });
 });
 

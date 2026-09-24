@@ -22,13 +22,32 @@
  * niets opnieuw zolang de data niet is ververst. Een oud manifest kan zo niet
  * met nieuwe bestanden uit de browsercache mengen.
  *
+ * ── Controlesom ──────────────────────────────────────────────────────────────
+ * Het manifest geeft per bestand een sha256. Een half gedownload bestand, een
+ * proxy die er iets anders van maakt of een CDN die een oud bestand onder een
+ * nieuwe versie serveert, levert anders stil verkeerde getallen op: de lengte
+ * kan kloppen en de inhoud niet. De deler rekent de sha256 na (Web Crypto) en
+ * geeft bij een verschil een fout die zegt wat er aan de hand is. Zonder Web
+ * Crypto (een pagina over http buiten localhost) of zonder controlesom in het
+ * manifest wordt er niet gecontroleerd.
+ *
  * ── Time-out ────────────────────────────────────────────────────────────────
  * Een verzoek dat blijft hangen (een wegvallende mobiele verbinding) liet de
  * pagina eeuwig "De gegevens worden geladen…" zeggen. Na de time-out wordt het
  * een fout die de pagina kan melden, met een knop om het opnieuw te proberen.
  */
 
-import type { Manifest } from "../data/manifest";
+import { verwachteSha256, type Manifest } from "../data/manifest";
+
+/** Hex-sha256 van de bytes, of null als de omgeving geen Web Crypto heeft. */
+export async function sha256Hex(bytes: ArrayBuffer): Promise<string | null> {
+  const subtle = globalThis.crypto?.subtle;
+  if (!subtle) return null;
+  const digest = new Uint8Array(await subtle.digest("SHA-256", bytes));
+  let hex = "";
+  for (const b of digest) hex += b.toString(16).padStart(2, "0");
+  return hex;
+}
 
 /** Hoe lang het manifest mag duren; het is klein, dus dit is ruim. */
 export const MANIFEST_TIMEOUT_MS = 15_000;
@@ -82,15 +101,26 @@ export class Gegevensdeler {
     }
     let belofte = this.bestanden.get(url);
     if (!belofte) {
-      belofte = this.manifestMetBytes().then(({ manifest }) =>
-        this.haalBytes(
+      belofte = this.manifestMetBytes().then(async ({ manifest }) => {
+        const bytes = await this.haalBytes(
           // De versie in de URL: zie de toelichting bovenaan.
           `${url}${url.includes("?") ? "&" : "?"}v=${encodeURIComponent(manifest.gegenereerd)}`,
           this.timeouts.bestand,
           {},
           `kon ${url} niet laden`,
-        ),
-      );
+        );
+        const verwacht = verwachteSha256(manifest, url);
+        if (verwacht) {
+          const werkelijk = await sha256Hex(bytes);
+          if (werkelijk !== null && werkelijk !== verwacht.toLowerCase()) {
+            throw new Error(
+              `${url} is beschadigd of hoort bij een andere versie van de gegevens: ` +
+                "de controlesom klopt niet met het manifest. Laad de pagina opnieuw.",
+            );
+          }
+        }
+        return bytes;
+      });
       // Een mislukte poging blijft niet hangen: de volgende vraag probeert opnieuw.
       belofte.catch(() => this.bestanden.delete(url));
       this.bestanden.set(url, belofte);

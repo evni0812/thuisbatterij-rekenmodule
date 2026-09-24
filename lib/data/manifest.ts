@@ -134,3 +134,20 @@ export const NETGEBIED_NAMEN: Record<string, string> = {
 export function netgebiedNaam(ean: string): string {
   return NETGEBIED_NAMEN[ean] ?? ean;
 }
+
+/**
+ * De sha256 die het manifest voor een bestand opgeeft, uit de bestandsnaam:
+ * `prices-<jaar>.bin`, `co2-<jaar>.bin` of `profile-<ean>-<jaar>[-azi].bin`.
+ * Undefined als het bestand niet in het manifest staat of een ouder manifest
+ * geen controlesom heeft; dan valt er niets te controleren.
+ */
+export function verwachteSha256(m: Manifest, url: string): string | undefined {
+  const naam = url.split("?")[0]!.split("/").pop() ?? "";
+  let r = /^prices-(\d{4})\.bin$/.exec(naam);
+  if (r) return m.prijzen?.[r[1]!]?.sha256;
+  r = /^co2-(\d{4})\.bin$/.exec(naam);
+  if (r) return m.co2?.[r[1]!]?.sha256;
+  r = /^profile-(\d+)-(\d{4})(-azi)?\.bin$/.exec(naam);
+  if (r) return (r[3] ? m.profielen_zonder : m.profielen)?.[r[1]!]?.[r[2]!]?.sha256;
+  return undefined;
+}
