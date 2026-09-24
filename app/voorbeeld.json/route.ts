@@ -11,8 +11,10 @@
  *
  *   versie   het modelversienummer uit lib/cache.ts. Verandert het model, dan
  *            verandert dit nummer, en negeert de browser het bestand.
- *   sleutel  de hash van de configuratie waar dit antwoord bij hoort. Wijkt de
- *            configuratie van de bezoeker daarvan af, dan rekent hij gewoon zelf.
+ *   sleutel  de hash van de configuratie waar dit antwoord bij hoort, met de
+ *            dataversie (`gegenereerd` uit het manifest) erin. Wijkt de
+ *            configuratie van de bezoeker daarvan af, of rekent zijn browser
+ *            met een ander manifest, dan rekent hij gewoon zelf.
  *
  * Het bestand wordt statisch geëxporteerd, dus dit draait bij de build en nooit
  * bij een bezoek.
@@ -56,7 +58,7 @@ export async function GET(): Promise<Response> {
   const config = standaardConfiguratie();
 
   const bron = new Invoerbron("/data", vanSchijf);
-  await bron.init();
+  const manifest = await bron.init();
   const invoer = await bron.bouwInvoer(config);
   const result = runAnalysis(invoer);
 
@@ -106,7 +108,7 @@ export async function GET(): Promise<Response> {
 
   return Response.json({
     versie: MODEL_VERSIE,
-    sleutel: dispatchSleutel(config),
+    sleutel: dispatchSleutel(config, manifest.gegenereerd),
     gemaakt: new Date().toISOString(),
     result,
     scenario,

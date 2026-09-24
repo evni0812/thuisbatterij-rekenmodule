@@ -13,6 +13,7 @@
  * zitten. Deze test draait daarom de échte route-handler en controleert de
  * afspraak van beide kanten.
  */
+import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { GET } from "../app/voorbeeld.json/route";
 import { MODEL_VERSIE, dispatchSleutel } from "../lib/cache";
@@ -36,7 +37,12 @@ const payload: Payload = await (await GET()).json();
 describe("het vooruitgerekende antwoord", () => {
   it("draagt de sleutel die de browser voor de standaardinvoer berekent", () => {
     // Dit is de hele afspraak. Faalt deze regel, dan is de preload dood gewicht.
-    expect(payload.sleutel).toBe(dispatchSleutel(standaardConfiguratie()));
+    // De browser rekent met `gegenereerd` uit het manifest dat hij ophaalt.
+    const manifest = JSON.parse(readFileSync("public/data/manifest.json", "utf8")) as { gegenereerd: string };
+    expect(payload.sleutel).toBe(dispatchSleutel(standaardConfiguratie(), manifest.gegenereerd));
+    // En een andere dataversie past er niet op: na een dataverversing rekent
+    // een bezoeker zelf, tot de volgende build een nieuw antwoord meelevert.
+    expect(payload.sleutel).not.toBe(dispatchSleutel(standaardConfiguratie(), "een andere versie"));
     expect(payload.versie).toBe(MODEL_VERSIE);
     // De sleutel draagt het versienummer, zodat een modelwijziging het bestand
     // vanzelf ongeldig maakt.
