@@ -132,8 +132,8 @@ export function VoorWie({
     grens === null
       ? "Deze batterij komt bij geen van deze huishoudens netto uit de kosten"
       : grens === 0
-        ? `Als ${jaar.year} zich herhaalt, loont deze batterij ook zonder teruglevering`
-        : `Als ${jaar.year} zich herhaalt, loont deze batterij vanaf ongeveer ${kwh(Math.round(grens / 100) * 100)} teruglevering per jaar`;
+        ? "Als een gemiddeld jaar zich herhaalt, loont deze batterij ook zonder teruglevering"
+        : `Als een gemiddeld jaar zich herhaalt, loont deze batterij vanaf ongeveer ${kwh(Math.round(grens / 100) * 100)} teruglevering per jaar`;
 
   const asLabels: number[] = [];
   for (const p of metPanelen) {
@@ -158,7 +158,7 @@ export function VoorWie({
       { label: "Netto na rente", waarde: euro(p.fin.npvEur), uitkomst: true },
       { label: "Terugverdiend na", waarde: jaren(p.fin.paybackYears) },
     ],
-    noot: `Bij een afname van ${kwh(config.household.annualGridImportKwh)}, als ${jaar.year} zich herhaalt.`,
+    noot: `Bij een afname van ${kwh(config.household.annualGridImportKwh)}, op het niveau van het gemiddelde jaar.`,
   });
 
   return (
@@ -295,8 +295,8 @@ export function VoorWie({
           <dd className={eigen.fin.npvEur >= 0 ? "goed" : "slecht"}>
             {euro(eigen.fin.npvEur)}
             <span className="dd-noot">
-              netto bij {eigen.zonnepanelen ? `${kwh(eigen.terugleveringKwh)} teruglevering` : "geen zonnepanelen"}, als{" "}
-              {jaar.year} zich herhaalt
+              netto bij {eigen.zonnepanelen ? `${kwh(eigen.terugleveringKwh)} teruglevering` : "geen zonnepanelen"}, als
+              een gemiddeld jaar zich herhaalt
             </span>
           </dd>
         </div>

@@ -16,6 +16,7 @@ import { centPerKwh, euro, euroPrecies, getal, jaren, kwh, procent } from "./for
 import { referentieJaar, type AnalysisResult, type ScenarioResult, type YearAnalysis } from "./model/analysis";
 import { usableCapacityKwh } from "./model/battery";
 import { RASTER_CAPACITEITEN, RASTER_VERMOGENS } from "./model/raster";
+import { rasterGrondslag } from "./model/dimensionering";
 import { overgangZin, overgangsFinance } from "./overgang";
 import {
   BASISTARIEF,
@@ -1042,9 +1043,10 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
       bronnen: [PROFIEL_BRON(config), PRIJS_BRON, KOSTEN_BRON(config)],
       stappen: [
         <>Elke cel is een volledige doorrekening van de realistische strategie voor die maat, op het meest recente volledige jaar ({j.year}). Het optimum blijft weg; dat zou de kaart minutenlang laten rekenen zonder de vraag te veranderen.</>,
+        <>Daarna gaat elke cel naar het niveau van het gemiddelde over de volle jaren: maal de verhouding tussen het gemiddelde en {j.year} bij jouw batterij. Het jaar geeft de verhouding tussen de maten, het gemiddelde het niveau; alle jaren voor elke maat doorrekenen zou de kaart verdubbelen.</>,
         <><b>De prijs per maat</b> volgt één regel, verankerd aan jouw batterij: die kost {euro(config.investmentEur)}, elke kilowattuur erbij {euro(k.perKwhEur)}, elke kilowatt erbij {euro(k.perKwEur)}, en wie de grens van {getal(STEKKER_GRENS_KW, 1)} kW oversteekt betaalt eenmalig {euro(k.installatieEur)} voor een eigen groep door een installateur (boven 800 W is een vaste aansluiting op een eigen groep de norm). Terug naar een stekkerbatterij gaat de installateur er weer af.</>,
         <>Geen uitbreidingspakketten per merk: die verschillen per model en bij de meeste hubs groeit het vermogen niet mee. Eén regel voor alle maten houdt de kaart vergelijkbaar; de drie getallen zijn instelbaar voor wie een offerte heeft.</>,
-        <><b>Netto resultaat</b> is dezelfde financiële doorrekening als bovenaan de pagina: de jaarbesparing herhaald over {config.analysisYears} jaar, met {procent(config.priceEscalation, 1)} prijsstijging, {procent(config.discountRate, 1)} rente die je misloopt en de slijtage van de laadbeurten, min de prijs van die maat. Hoe de besparing terugloopt bij slijtage is alleen voor jouw batterij gemeten; de andere maten lenen die vorm.</>,
+        <><b>Netto resultaat</b> is dezelfde financiële doorrekening als bovenaan de pagina, maar zonder de overgang naar het nettarief: de jaarbesparing herhaald over {config.analysisYears} jaar, met {procent(config.priceEscalation, 1)} prijsstijging, {procent(config.discountRate, 1)} rente die je misloopt en de slijtage van de laadbeurten, min de prijs van die maat. Hoe de besparing terugloopt bij slijtage is alleen voor jouw batterij gemeten; de andere maten lenen die vorm.</>,
         <>De hoogste uitkomst is de cel met de hoogste netto contante waarde in deze doorrekening; geen persoonlijk advies. Terugverdientijd en jaarbesparing staan er als schakelaar naast; op besparing wint de grootste altijd, en dat is precies waarom de kaart met netto begint.</>,
       ],
       voorbeeld: {
@@ -1057,7 +1059,7 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
         ],
       },
       letop: [
-        <>De kaart rust op één jaar ({j.year}); het antwoord bovenaan op het gemiddelde over alle volledige jaren. De cel van jouw eigen maat komt daardoor niet precies op dat antwoord uit.</>,
+        <>Staat jouw batterij in het raster, dan bespaart zijn cel per jaar precies wat het antwoord bovenaan zegt. Netto resultaat en terugverdientijd wijken toch af: {rasterGrondslag(config).replace(/^Gerekend/, "de kaart rekent").replace(/\.$/, "")}.</>,
         <>Meer vermogen levert soms niets op: als de batterij toch al vol raakt of leeg is, helpt sneller laden niet. Meer capaciteit helpt alleen zolang je hem ook vol krijgt.</>,
       ],
     };
@@ -1070,7 +1072,7 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
       watZieJe: <>Eén kolom uit de kaart van maten als lijn: het netto resultaat per capaciteit bij het vermogen van jouw batterij, en bij het beste vermogen uit de kaart als dat een ander is.</>,
       bronnen: [PROFIEL_BRON(config), PRIJS_BRON, KOSTEN_BRON(config)],
       stappen: [
-        <>Elke stip is een cel uit de kaart: dezelfde jaarsimulatie ({j.year}), dezelfde prijs uit de kostenregel, dezelfde financiële doorrekening over {config.analysisYears} jaar.</>,
+        <>Elke stip is een cel uit de kaart: dezelfde jaarsimulatie ({j.year}) op het niveau van het gemiddelde jaar, dezelfde prijs uit de kostenregel, dezelfde financiële doorrekening over {config.analysisYears} jaar.</>,
         <>Van stip naar stip is het verschil in netto resultaat gedeeld door de extra kilowatturen wat die stap per kilowattuur opleverde. Zolang dat positief is, verdient de grotere batterij zijn meerprijs terug.</>,
         <>De streep staat bij de eerste stap waar dat omslaat: vanaf daar kost elke extra kilowattuur meer dan hij over de looptijd oplevert. Dat is het antwoord op "wanneer is uitbreiden niet logisch meer".</>,
       ],
@@ -1088,10 +1090,10 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
       watZieJe: <>Jouw batterij doorgerekend voor huishoudens met jouw afname maar een andere teruglevering ({HUISHOUDENS_TERUGLEVERING.map((t) => getal(t)).join(", ")} kWh per jaar), en voor een huishouden zonder zonnepanelen.</>,
       bronnen: [PROFIEL_BRON(config), PRIJS_BRON],
       stappen: [
-        <>Per huishouden één jaarsimulatie met de realistische strategie op {j.year}, met dezelfde batterij, dezelfde prijs ({euro(config.investmentEur)}) en dezelfde slijtagedrempel als jouw doorrekening. Alleen de teruglevering verschuift; het profiel wordt zo geschaald dat het jaartotaal klopt.</>,
+        <>Per huishouden één jaarsimulatie met de realistische strategie op {j.year}, met dezelfde batterij, dezelfde prijs ({euro(config.investmentEur)}) en dezelfde slijtagedrempel als jouw doorrekening. Alleen de teruglevering verschuift; het profiel wordt zo geschaald dat het jaartotaal klopt. Daarna gaat elk punt naar het niveau van het gemiddelde jaar, net als de kaart van maten.</>,
         <>Het huishouden zonder zonnepanelen rekent met het gemeten profiel van aansluitingen zonder invoeding (MFFBAS, afnametype AZI): het gemeten gemiddelde van alle aansluitingen zonder teruglevering in het netgebied, geen bewerking van het profiel met panelen.</>,
         <>Het netto resultaat per punt is dezelfde financiële doorrekening als bovenaan, over {config.analysisYears} jaar. Waar de lijn de nullijn kruist, komt de batterij uit de kosten; dat punt staat in de titel, lineair tussen de twee dichtstbijzijnde huishoudens.</>,
-        <>Jouw eigen huishouden staat erbij uit het hoofdresultaat op datzelfde jaar, zodat de lijn te ijken is aan de cijfers bovenaan.</>,
+        <>Jouw eigen huishouden staat erbij uit het hoofdresultaat, op hetzelfde niveau: zijn jaarbesparing is die van het antwoord bovenaan, zodat de lijn daaraan te ijken is. {rasterGrondslag(config)}</>,
       ],
       letop: [
         <>Alle huishoudens delen jouw afname. Wie meer of minder verbruikt, zit op een andere lijn; verander de afname en reken opnieuw om die te zien.</>,

@@ -242,6 +242,11 @@ describe("de teksten beweren niets wat niet klopt", () => {
     ["drie getallen terwijl er twee gevraagd worden", /Drie getallen van je/],
     ["eigen groep loont niet terwijl hij netto oplevert", /eigen groep door een installateur loont hier niet: de beste maat/],
     ["EB 2027 als vaststaand", /2026 en 2027 vast op/],
+    // Kaart van maten en huishoudens rekenen op het niveau van het gemiddelde
+    // jaar (rasterGrondslag), niet op één herhaald jaar.
+    ["één jaar dat zich herhaalt", /\{jaar(\.year)?\}\s+zich herhaalt|\$\{jaar(\.year)?[^}]*\} zich herhaalt/],
+    ["de besparing van één jaar herhaald", /de besparing van \{jaar/],
+    ["kaart op één jaar als reden", /De kaart rust op één jaar/],
   ])("niet: %s", (_naam, patroon) => {
     expect(tekst).not.toMatch(patroon);
   });

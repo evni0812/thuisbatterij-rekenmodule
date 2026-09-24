@@ -113,7 +113,7 @@ function tipVoor(
       ? "Dit is de batterij die je nu hebt ingesteld."
       : isBeste
         ? "Het hoogste netto resultaat in dit raster. Klik om hiermee door te rekenen."
-        : `Als ${jaar ?? "het doorgerekende jaar"} zich herhaalt. Klik om met deze maat door te rekenen.`,
+        : "Op het niveau van het gemiddelde jaar, herhaald over de looptijd. Klik om met deze maat door te rekenen.",
   };
 }
 
@@ -233,9 +233,10 @@ export function BatterijMaat({
       return rij[rij.length - 1]!.savingEur < top * 0.995;
     });
 
-  // De grondslag hoort in de zin zelf: dit is de hoogste uitkomst op één
-  // doorgerekend jaar, geen persoonlijk advies.
-  const grondslag = `uurprijzen van ${jaar ?? "het meest recente volledige jaar"}, belasting en opslag van ${
+  // De grondslag hoort in de zin zelf: dit is de hoogste uitkomst in deze
+  // doorrekening, geen persoonlijk advies. De maten onderling komen uit één
+  // jaar, het niveau uit het gemiddelde (`rasterNiveau`).
+  const grondslag = `uurprijzen van ${jaar ?? "het meest recente volledige jaar"} op het niveau van het gemiddelde jaar, belasting en opslag van ${
     config.useHistoricalLevy === false ? "nu" : "toen"
   }`;
   const adviesZin = ((): ReactNode => {
@@ -462,9 +463,11 @@ export function BatterijMaat({
           </p>
         ) : null}
         <p className="heat-noot">
-          Elke cel: de besparing van {jaar ?? "het meest recente volledige jaar"} herhaald over{" "}
-          {config.analysisYears} jaar, met {procent(config.discountRate, 1)} rente die je misloopt en de slijtage
-          zoals bij jouw batterij. De prijs per cel volgt uit jouw batterij ({euro(config.investmentEur)}):{" "}
+          Elke cel: de jaarbesparing van die maat herhaald over {config.analysisYears} jaar, met{" "}
+          {procent(config.discountRate, 1)} rente die je misloopt en de slijtage zoals bij jouw batterij. De
+          verhouding tussen de maten komt uit {jaar ?? "het meest recente volledige jaar"}; het niveau uit het
+          gemiddelde over de volle jaren, zodat de cel van jouw eigen maat per jaar bespaart wat het antwoord
+          bovenaan zegt. De prijs per cel volgt uit jouw batterij ({euro(config.investmentEur)}):{" "}
           {euro(regel.perKwhEur)} per kWh en {euro(regel.perKwEur)} per kW erbij, en boven{" "}
           {getal(STEKKER_GRENS_KW, 1)} kW eenmalig {euro(regel.installatieEur)} voor een eigen groep door een
           installateur. Instelbaar bij de geavanceerde instellingen. {rasterGrondslag(config)}
