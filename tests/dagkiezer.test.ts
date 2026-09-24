@@ -222,8 +222,8 @@ describe("de manifest-melding bij init", () => {
 
 describe("de dagovergang verklaart de negatieve dagbedragen", () => {
   /**
-   * Een batterij houdt zich niet aan de kalender. Op 23 november 2025 laadt hij
-   * 's nachts en ontlaadt hij pas op de 24e: de inkoop valt op de ene dag, de
+   * Een batterij houdt zich niet aan de kalender. Op 9 november 2025 laadt hij
+   * 's nachts en ontlaadt hij pas op de 10e: de inkoop valt op de ene dag, de
    * opbrengst op de andere. Die dag sluit daardoor negatief af, en dat is geen
    * fout van het model — het optimum met perfecte kennis maakt dezelfde keuze
    * en sluit die dag ook negatief af.
@@ -233,21 +233,22 @@ describe("de dagovergang verklaart de negatieve dagbedragen", () => {
    *
    * Dit voorbeeld stond eerder op 19 en 20 december. Sinds de planner met de
    * volle slijtageprijs rekent, laat hij die dagen liggen: de marge dekte de
-   * slijtage niet.
+   * slijtage niet. Daarna stond het op 23 en 24 november, tot de HomeWizard
+   * op 80% rondgang kwam en de eindwaarde van het plan de slijtage meetelde.
    */
   it("laat een negatieve dag zien als lading die naar de volgende dag gaat", async () => {
     const cfg = config();
-    const dag23 = (await vraagDag("2025-11-23", cfg))!;
-    const dag24 = (await vraagDag("2025-11-24", cfg))!;
+    const dag23 = (await vraagDag("2025-11-09", cfg))!;
+    const dag24 = (await vraagDag("2025-11-10", cfg))!;
 
-    // De 23e kost geld en eindigt voller dan hij begon.
+    // De 9e kost geld en eindigt voller dan hij begon.
     expect(dag23.stats.savingEur).toBeLessThan(0);
     expect(dag23.stats.socEndKwh - dag23.stats.socStartKwh).toBeGreaterThan(0.5);
-    // Op de 23e is er wel geladen maar niet ontladen.
+    // Op de 9e is er wel geladen maar niet ontladen.
     expect(dag23.stats.chargedKwh).toBeGreaterThan(0.5);
     expect(dag23.stats.deliveredKwh).toBeLessThan(0.01);
 
-    // De 24e begint met die lading en levert geld op.
+    // De 10e begint met die lading en levert geld op.
     expect(dag24.stats.socStartKwh).toBeCloseTo(dag23.stats.socEndKwh, 6);
     expect(dag24.stats.savingEur).toBeGreaterThan(0);
 
@@ -255,7 +256,7 @@ describe("de dagovergang verklaart de negatieve dagbedragen", () => {
     expect(dag23.stats.savingEur + dag24.stats.savingEur).toBeGreaterThan(0);
 
     // En het bewijs dat het geen misser is: perfecte kennis laadt ook op de
-    // 23e voor de 24e, sluit die dag ook negatief af en is over de twee dagen
+    // 9e voor de 10e, sluit die dag ook negatief af en is over de twee dagen
     // samen ook positief.
     expect(dag23.stats.optimalSavingEur).toBeLessThan(0);
     expect(dag23.stats.optimalSavingEur! + dag24.stats.optimalSavingEur!).toBeGreaterThan(0);
