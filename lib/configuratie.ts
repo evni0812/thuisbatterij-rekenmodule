@@ -49,7 +49,12 @@ export const STANDAARD: Instellingen = {
   spreiding: 1,
   terugleverkostenCt: 0,
   curtailment: true,
-  heffing: "toen",
+  // De heffing van nu (energiebelasting plus opslag van het meest recente
+  // prijsjaar, 12,885 ct in 2026) over alle jaren: wat een koper vandaag wil
+  // weten. Raster, huishoudens en de overgang rekenen op dezelfde configuratie
+  // en dus dezelfde grondslag; het scenario zet er de heffing van 2029 voor in
+  // de plaats. "toen" blijft een keuze in de geavanceerde instellingen.
+  heffing: "nu",
   analysejaren: STANDAARD_ANALYSEJAREN,
   discontovoet: STANDAARD_DISCONTOVOET,
   prijsstijging: STANDAARD_PRIJSSTIJGING,

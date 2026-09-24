@@ -45,9 +45,10 @@
  * een wat-als.
  *
  * ── De heffing in het scenario ──────────────────────────────────────────────
- * Het nettarief komt bovenop de energiebelasting en de inkoopopslag. Op de
- * historische prijzen (2023–2026) staat de heffing van toen: 13 tot 17 cent.
- * In 2029 en 2030 ligt de energiebelasting volgens CE Delft (Tabel 2) op
+ * Het nettarief komt bovenop de energiebelasting en de inkoopopslag. De
+ * gewone doorrekening rekent standaard met de heffing van nu (12,9 cent in
+ * 2026) over alle historische jaren; wie "toen" kiest krijgt de heffing zoals
+ * die per uur gold, 13 tot 17 cent. In 2029 en 2030 ligt de energiebelasting volgens CE Delft (Tabel 2) op
  * EUR 0,075 respectievelijk 0,076 per kWh exclusief btw. Het scenario rekent
  * daarom met de heffing van dat jaar in plaats van die van toen; anders stapelt
  * het een nettarief van 2030 op een belasting van 2024, en de besparing
