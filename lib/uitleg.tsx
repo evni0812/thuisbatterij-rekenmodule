@@ -127,7 +127,8 @@ const PRIJS_BRON = {
   naam: "ANWB Energie, uurtarieven",
   wat: (
     <>
-      De marktprijs per uur inclusief btw, via de ANWB-API. Daarbovenop de
+      De marktprijs per uur inclusief btw, zoals ANWB Energie die publiceert
+      (anwb.nl/energie/actuele-tarieven). Daarbovenop de
       heffing (energiebelasting plus opslag): standaard die van nu, of per uur
       die van toen als je dat kiest bij de geavanceerde instellingen. Sinds 20
       juni 2026 geeft de API de prijzen afgerond op hele centen. Elke uurprijs
@@ -152,10 +153,12 @@ const KOSTEN_BRON = (c: Configuration) => {
     naam: "Richtprijzen van uitbreiding en installatie",
     wat: (
       <>
-        Uitbreidingsmodules kosten bij vrijwel elk merk 310 tot 450 euro per kWh
-        (Zendure AB2000X, Anker BP2700, HomeWizard; thuisbatterijgids.net), een
-        hybride omvormer van 3 tot 5 kW 1.000 tot 2.500 euro, en een eigen groep
-        door een installateur 300 tot 1.200 euro (powerplugs.nl). Hier gerekend
+        Uitbreidingsmodules kosten 310 tot 450 euro per kWh (Zendure AB2000X
+        312, Anker SOLIX BP2700 316, HomeWizard 442 euro per kWh;
+        thuisbatterijgids.net), een hybride omvormer van 3 tot 5 kW 1.000 tot
+        2.500 euro, en een eigen groep door een installateur 100 tot 200 euro
+        in een standaardsituatie en 300 tot 600 euro bij een volle meterkast of
+        een lange kabel (powerplugs.nl). Hier gerekend
         met {euro(k.perKwhEur)} per kWh, {euro(k.perKwEur)} per kW en{" "}
         {euro(k.installatieEur)} installatie, peildatum {PRIJSPEILDATUM}; instelbaar
         bij de geavanceerde instellingen.
@@ -179,10 +182,12 @@ const CE_BRON = {
   naam: "CE Delft en Netbeheer Nederland",
   wat: (
     <>
-      De wegingsfactoren per uur uit het codewijzigingsvoorstel van 1 mei 2026
-      (ACM, BR-2026-2242), en het basistarief uit {NETTARIEF_BRON}: een
-      prognose van CE Delft, in opdracht van NVDE, Holland Solar,
-      Energie-Nederland en Energy Storage NL.
+      De wegingsfactoren per uur uit het codewijzigingsvoorstel dat de
+      netbeheerders op 1 mei 2026 bij de ACM indienden (BR-2026-2242), en het
+      basistarief uit {NETTARIEF_BRON}: een prognose uit het rapport
+      "Beheersbare energiekosten voor huishoudens in 2030" (CE Delft, september
+      2026), in opdracht van NVDE, Holland Solar, Energie-Nederland en Energy
+      Storage NL.
     </>
   ),
 };
@@ -208,8 +213,10 @@ const GEEN_VOORSPELLING_LETOP = (
 const STANDBY_LETOP = (
   <>
     Het eigen stroomverbruik van de batterij zit niet in de besparing. Een
-    thuisbatterij gebruikt ook stroom als hij niets doet, meestal 7 tot 25 watt:
-    60 tot 220 kWh per jaar. Trek dat er in gedachten van af.
+    thuisbatterij gebruikt ook stroom als hij niets doet; fabrikanten en
+    testers noemen enkele watts tot zo'n 25 watt, en 7 tot 25 watt is 60 tot
+    220 kWh per jaar. Een indicatie, geen meting: trek het er in gedachten
+    van af.
   </>
 );
 const DYNAMISCH_LETOP = (c: Configuration) => (
@@ -475,7 +482,8 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
       },
       letop: [
         <>
-          Vuistregel voor de opwek: ongeveer 900 kWh per kWp aan panelen. Een
+          Ter indicatie voor de opwek: Milieu Centraal rekent met 3.000 kWh
+          per jaar voor acht panelen van 435 Wp, ongeveer 860 kWh per kWp. Een
           te hoge opwek maakt het aandeel te laag, en andersom.
         </>,
         ...(geschat
@@ -743,8 +751,8 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
           <>
             Ligt de slijtage per jaar dicht bij de besparing, dan gaat bijna alles
             wat de batterij bespaart op aan zijn eigen afschrijving. Het eigen
-            stroomverbruik van de batterij (standby, meestal 60 tot 220 kWh per
-            jaar) zit niet in het model en is ook niet van de besparing
+            stroomverbruik van de batterij (stand-by, volgens fabrikanten
+            ongeveer 60 tot 220 kWh per jaar) zit niet in het model en is ook niet van de besparing
             afgetrokken.
           </>
         ),
@@ -1327,9 +1335,9 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
           naam: "Literatuur over slijtage in de aansturing",
           wat: (
             <>
-              Xu e.a., <i>Factoring the cycle aging cost of batteries participating in
-              electricity markets</i> (2018); Schade, <i>Battery degradation: impact on
-              economic dispatch</i> (2024). Beide concluderen dat een batterij alleen
+              B. Xu e.a., <i>Factoring the cycle aging cost of batteries participating in
+              electricity markets</i> (2018); C. Schade en R. Egging-Bratseth, <i>Battery
+              degradation: impact on economic dispatch</i> (2024). Beide concluderen dat een batterij alleen
               moet handelen als de marge boven de marginale slijtage ligt: wat één
               beurt extra werkelijk aan levensduur kost.
             </>

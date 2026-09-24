@@ -293,10 +293,12 @@ export const STANDAARD_DISCONTOVOET = 0.03;
  * De 2% die hier eerder stond was de inflatiedoelstelling, geen energieprijs-
  * verwachting. Wat een batterij verdient is het gat tussen afname en
  * teruglevering: energiebelasting plus opslag plus het prijsverschil over de
- * dag. De energiebelasting op stroom daalt juist (2025 → 2026) en staat voor
- * 2026 en 2027 vast op 11,1 ct incl. btw, als onderdeel van de verschuiving
- * van de lasten van stroom naar gas; PBL noemt de prijsontwikkeling tot 2030
- * "zeer onzeker" en geeft alleen bandbreedtes. Nul is dan het eerlijke
+ * dag. De energiebelasting op stroom daalt juist (2025 → 2026: 11,1 ct incl.
+ * btw), als onderdeel van de verschuiving van de lasten van stroom naar gas;
+ * het Belastingplan 2027 verandert het tarief niet, het bedrag voor 2027
+ * volgt eind 2026 uit de inflatiecorrectie. Het PBL geeft voor de
+ * groothandelsprijs van stroom in 2030 een bandbreedte van 53 tot 90 euro per
+ * MWh (KEV 2026). Nul is dan het eerlijke
  * uitgangspunt; de schuif staat er voor wie anders verwacht.
  */
 export const STANDAARD_PRIJSSTIJGING = 0;

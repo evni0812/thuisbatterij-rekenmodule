@@ -30,10 +30,10 @@
  * Bron: thuisbatterij-gids.nl, thuisbatterij.nl (prijzen 2026). Afgerond op 250.
  *
  * INSTALLATIE — boven 800 W mag een batterij niet aan een gewoon stopcontact
- * en komt er een installateur voor een eigen groep. Die kost 300 tot 1.200
- * euro, afhankelijk van of er alleen een groep bij moet of een nieuwe
- * meterkast. Voor één extra groep is 300 gangbaar. Bron: powerplugs.nl,
- * thuisbatterijgids.net (eigen groep).
+ * en komt er een installateur voor een eigen groep. Die kost volgens
+ * powerplugs.nl/pages/eigen-groep 100 tot 200 euro in een standaardsituatie
+ * en 300 tot 600 euro bij een volle meterkast of een lange kabel; wie een
+ * nieuwe meterkast nodig heeft, zit hoger. 300 is een voorzichtig midden.
  */
 
 import type { Configuration } from "../worker/protocol";

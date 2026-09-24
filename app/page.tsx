@@ -814,9 +814,10 @@ export default function Page() {
               </li>
               <li>
                 <b>Het eigen verbruik van de batterij zit er niet in.</b> Een
-                thuisbatterij gebruikt ook stroom als hij niets doet, meestal 7
-                tot 25 watt: 60 tot 220 kWh per jaar. Dat is niet van de
-                besparing afgetrokken.
+                thuisbatterij gebruikt ook stroom als hij niets doet.
+                Fabrikanten en testers noemen enkele watts tot zo'n 25 watt; 7
+                tot 25 watt is 60 tot 220 kWh per jaar. Een indicatie, en niet
+                van de besparing afgetrokken.
                 <span className="badge let-op">besparing valt lager uit</span>
               </li>
               <li>
@@ -862,10 +863,10 @@ export default function Page() {
             </div>
             <ul className="methode-lijst">
               <li>
-                <b>Uurprijzen:</b> ANWB Energie, dynamische uurtarieven via de
-                ANWB-API (
-                <a href="https://api.anwb.nl/energy/energy-services/v2/tarieven/electricity">
-                  api.anwb.nl
+                <b>Uurprijzen:</b> ANWB Energie, actuele dynamische
+                energietarieven (
+                <a href="https://www.anwb.nl/energie/actuele-tarieven">
+                  anwb.nl/energie/actuele-tarieven
                 </a>
                 ). Sinds 20 juni 2026 afgerond op hele centen. Sinds 1 oktober
                 2025 zijn day-ahead-prijzen per kwartier; de tool rekent met
@@ -883,15 +884,28 @@ export default function Page() {
                 <a href="https://ned.nl">ned.nl</a>).
               </li>
               <li>
-                <b>Nettarief:</b> ACM, voorstel codewijziging volume- en
-                tijdsafhankelijke transporttarieven voor kleinverbruikers,
-                BR-2026-2242 (
+                <b>Nettarief:</b> het codewijzigingsvoorstel volume- en
+                tijdsafhankelijke transporttarieven voor kleinverbruikers, dat de
+                netbeheerders op 1 mei 2026 bij de ACM indienden; de ACM beslist
+                erover (BR-2026-2242,{" "}
                 <a href="https://www.acm.nl/nl/publicaties/voorstel-codewijziging-volume-en-tijdsafhankelijke-transporttarieven-voor-kleinverbruikers">
                   acm.nl
                 </a>
-                ). Basistarief: prognose van CE Delft (september 2026), in
+                ).
+              </li>
+              <li>
+                <b>Basistarief en energiebelasting 2029–2030:</b> CE Delft,{" "}
+                <i>
+                  Beheersbare energiekosten voor huishoudens in 2030 – Ook binnen
+                  een kleinere netaansluiting
+                </i>
+                , M. Teng, L. van Cappellen en L. Vergroesen, september 2026, in
                 opdracht van NVDE, Holland Solar, Energie-Nederland en Energy
-                Storage NL.
+                Storage NL (
+                <a href="https://ce.nl/publicaties/beheersbare-energiekosten-voor-huishoudens-in-2030/">
+                  ce.nl
+                </a>
+                ).
               </li>
               <li>
                 <b>Energiebelasting 2026:</b> Belastingdienst (
@@ -914,7 +928,7 @@ export default function Page() {
                 <a href="https://doi.org/10.1109/TPWRS.2017.2733339">
                   doi:10.1109/TPWRS.2017.2733339
                 </a>
-                ); Schade en Egging-Bratseth, <i>Battery degradation:
+                ); C. Schade en R. Egging-Bratseth, <i>Battery degradation:
                 Impact on economic dispatch</i>, Energy Storage 6(2), 2024 (
                 <a href="https://doi.org/10.1002/est2.588">doi:10.1002/est2.588</a>
                 ).
@@ -922,6 +936,51 @@ export default function Page() {
               <li>
                 <b>Batterijprijzen:</b> richtprijzen van {PRIJSPEILDATUM}:{" "}
                 {PRESETS.map((p) => `${p.naam} ${euro(p.prijsEur)} (${p.prijsNoot})`).join("; ")}.
+              </li>
+              <li>
+                <b>Uitbreiding en installatie:</b> prijzen van uitbreidingsaccu's
+                (
+                <a href="https://thuisbatterijgids.net/uitbreidingsaccus/">
+                  thuisbatterijgids.net
+                </a>
+                : Zendure AB2000X 312, Anker SOLIX BP2700 316 euro per kWh; een
+                extra HomeWizard-unit 442 euro per kWh) en van een eigen groep
+                door een installateur (
+                <a href="https://www.powerplugs.nl/pages/eigen-groep">powerplugs.nl</a>
+                : 100 tot 200 euro standaard, 300 tot 600 euro bij een volle
+                meterkast of lange kabel).
+              </li>
+              <li>
+                <b>Opbrengst zonnepanelen:</b> Milieu Centraal, kosten en
+                opbrengst zonnepanelen: 3.000 kWh per jaar voor acht panelen van
+                435 Wp (
+                <a href="https://www.milieucentraal.nl/energie-besparen/zonnepanelen/kosten-en-opbrengst-zonnepanelen/">
+                  milieucentraal.nl
+                </a>
+                ).
+              </li>
+              <li>
+                <b>Prijsontwikkeling:</b> PBL, <i>Klimaat- en Energieverkenning
+                2026</i>: groothandelsprijs van stroom in 2030 70 euro per MWh,
+                bandbreedte 53 tot 90 (
+                <a href="https://www.pbl.nl/publicaties/klimaat-en-energieverkenning-2026">
+                  pbl.nl
+                </a>
+                ).
+              </li>
+              <li>
+                <b>Stand-byverbruik:</b> een indicatie uit fabrikantopgaven en
+                tests, bijvoorbeeld Indevolt (7 watt in diepe stand-by, 20 watt
+                voor de hoofdunit;{" "}
+                <a href="https://blog.indevolt.com/nl/wat-is-standby-verbruik-waarom-verbruikt-een-plug-in-thuisbatterij-ook-stroom-in-stand-by/">
+                  indevolt.com
+                </a>
+                ) en een meting aan de HomeWizard Plug-In Battery (ongeveer 6
+                watt;{" "}
+                <a href="https://energienerds.nl/index.php/2026/03/26/homewizard-plug-in-battery-review">
+                  energienerds.nl
+                </a>
+                ).
               </li>
               <li>
                 <b>Auto ter vergelijking:</b> 149 g CO2 per km uit de uitlaat voor

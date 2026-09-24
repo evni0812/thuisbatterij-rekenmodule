@@ -9,7 +9,7 @@
  * kalender op vijftien staat. Dan kost een extra beurt in werkelijkheid minder
  * dan de volle prijs, en laat een planner die de volle prijs rekent geld liggen.
  *
- * De literatuur (Xu e.a. 2018, Schade 2024, The Mobility House) is het erover
+ * De literatuur (Xu e.a. 2018, Schade en Egging-Bratseth 2024, The Mobility House) is het erover
  * eens dat de juiste drempel de MARGINALE slijtage is: wat één beurt extra
  * werkelijk aan levensduur kost. Die hangt af van de vraag of de beurten
  * opraken vóór de kalender, en dat weet je pas achteraf. Daarom is dit een

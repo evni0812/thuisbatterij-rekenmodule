@@ -250,8 +250,28 @@ describe("de teksten beweren niets wat niet klopt", () => {
     // Het profiel is een gemeten gemiddelde, geen werkelijk huishouden.
     ["profielen zoals ze werkelijk waren", /profielen zoals ze werkelijk waren/],
     ["wat er echt gebeurd is", /wat er echt gebeurd is/],
+    // Bronnen: alleen wat de bron ook echt zegt, en een link die werkt.
+    ["de API als publieke bron", /href="https:\/\/api\.anwb\.nl/],
+    ["Schade zonder coauteur", /Schade, <i>/],
+    ["eigen groep 300 tot 1.200 euro bij powerplugs", /1\.200 euro \(powerplugs/],
+    ["900 kWh per kWp als Milieu Centraal", /900 kWh per kWp \(Milieu Centraal\)/],
   ])("niet: %s", (_naam, patroon) => {
     expect(tekst).not.toMatch(patroon);
+  });
+
+  it("noemt de bronnen die in de teksten staan, met een publieke link", () => {
+    const pagina = readFileSync("app/page.tsx", "utf8");
+    for (const url of [
+      "https://www.anwb.nl/energie/actuele-tarieven",
+      "https://ce.nl/publicaties/beheersbare-energiekosten-voor-huishoudens-in-2030/",
+      "https://thuisbatterijgids.net/",
+      "https://www.powerplugs.nl/",
+      "https://www.milieucentraal.nl/",
+      "https://www.pbl.nl/",
+    ]) {
+      expect(pagina, url).toContain(url);
+    }
+    expect(tekst).toMatch(/Schade en R\. Egging-Bratseth/);
   });
 
   it("noemt de ANWB als afzender en de voorwaarde van een dynamisch contract", () => {
