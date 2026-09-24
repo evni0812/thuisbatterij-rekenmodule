@@ -83,7 +83,7 @@ export function Wachtscherm({
         </div>
         <p className="wachtscherm-uitleg">
           {v
-            ? `Elk profieljaar is een jaar aan kwartierdata, twee keer doorgerekend: zoals de batterij het echt zou doen, en met perfecte kennis van morgen als ijkpunt. Dat verdeelt zich over ${
+            ? `Elk profieljaar is een jaar aan kwartierdata, twee keer doorgerekend: zoals een slimme batterij het zou kunnen doen, en met perfecte kennis van morgen als ijkpunt. Dat verdeelt zich over ${
                 v.vensters.totaal
               } ${v.vensters.totaal === 1 ? "jaar" : "jaren"} en een handvol workers; meestal is het binnen tien seconden klaar.`
             : "De gegevens worden geladen…"}

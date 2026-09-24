@@ -233,6 +233,11 @@ export function BatterijMaat({
       return rij[rij.length - 1]!.savingEur < top * 0.995;
     });
 
+  // De grondslag hoort in de zin zelf: dit is de hoogste uitkomst op één
+  // doorgerekend jaar, geen persoonlijk advies.
+  const grondslag = `uurprijzen van ${jaar ?? "het meest recente volledige jaar"}, belasting en opslag van ${
+    config.useHistoricalLevy === false ? "nu" : "toen"
+  }`;
   const adviesZin = ((): ReactNode => {
     if (!raad) return null;
     const { beste: b, besteStekker, besteVast, vasteLoont } = raad;
@@ -241,8 +246,8 @@ export function BatterijMaat({
     if (b.fin.npvEur <= 0) {
       return (
         <>
-          In deze situatie komt geen enkele maat netto uit de kosten; het minst
-          verlies maakt een {isVasteAansluiting(b.powerKw) ? "batterij met eigen groep" : "stekkerbatterij"} van{" "}
+          In deze doorrekening ({grondslag}) komt geen enkele maat netto uit de
+          kosten; het minst verlies maakt een {isVasteAansluiting(b.powerKw) ? "batterij met eigen groep" : "stekkerbatterij"} van{" "}
           {plek(b)} ({euro(b.fin.npvEur)}).
         </>
       );
@@ -250,12 +255,13 @@ export function BatterijMaat({
     if (vasteLoont && besteVast) {
       return (
         <>
-          Advies: een batterij met een eigen groep van {plek(besteVast)}, netto{" "}
+          Hoogste uitkomst in deze doorrekening ({grondslag}): een batterij met
+          een eigen groep van {plek(besteVast)}, netto{" "}
           {euro(besteVast.fin.npvEur)} over {config.analysisYears} jaar.
           {besteStekker ? (
             <>
               {" "}
-              De installateur verdient zich hier terug: de beste stekkerbatterij ({plek(besteStekker)})
+              De eigen groep verdient zich hier terug: de beste stekkerbatterij ({plek(besteStekker)})
               komt op {euro(besteStekker.fin.npvEur)}.
             </>
           ) : null}
@@ -265,8 +271,9 @@ export function BatterijMaat({
     if (besteStekker) {
       return (
         <>
-          Advies: een stekkerbatterij van {plek(besteStekker)}, netto {euro(besteStekker.fin.npvEur)} over{" "}
-          {config.analysisYears} jaar.
+          Hoogste uitkomst in deze doorrekening ({grondslag}): een
+          stekkerbatterij van {plek(besteStekker)}, netto{" "}
+          {euro(besteStekker.fin.npvEur)} over {config.analysisYears} jaar.
           {besteVast ? (
             <>
               {" "}
@@ -277,7 +284,12 @@ export function BatterijMaat({
         </>
       );
     }
-    return <>Advies: {plek(b)}, netto {euro(b.fin.npvEur)}.</>;
+    return (
+      <>
+        Hoogste uitkomst in deze doorrekening ({grondslag}): {plek(b)}, netto{" "}
+        {euro(b.fin.npvEur)}.
+      </>
+    );
   })();
 
   return (

@@ -404,7 +404,7 @@ export function Geavanceerd({
               />
               <Getal
                 label="Eigen groep door installateur"
-                uitleg="Boven 800 W mag een batterij niet aan een gewoon stopcontact; dit is wat een installateur rekent voor een eigen groep. Gangbaar 300 euro, tot 1.200 als de meterkast op de schop moet."
+                uitleg="Boven 800 W is een vaste aansluiting op een eigen groep de norm; dit is wat een installateur daarvoor rekent. Gangbaar 300 euro, tot 1.200 als de meterkast op de schop moet."
                 waarde={inst.installatieEur}
                 eenheid="€"
                 eenheidVoor
@@ -484,7 +484,7 @@ export function Geavanceerd({
             <div className="instelling-grid">
               <Getal
                 label="Terugleverkosten"
-                uitleg="Wat je leverancier per teruggeleverde kilowattuur rekent. Sinds de saldering wegvalt doen steeds meer leveranciers dat."
+                uitleg="Wat je leverancier per teruggeleverde kilowattuur rekent. ANWB Energie rekent geen terugleverkosten, daarom staat dit standaard op 0; andere leveranciers doen het vaak wel."
                 waarde={inst.terugleverkostenCt}
                 eenheid="ct/kWh"
                 min={0}
@@ -520,11 +520,12 @@ export function Geavanceerd({
                   </button>
                 </div>
                 <p className="instelling-uitleg">
-                  Standaard geldt per uur de heffing die toen echt gold: het verschil
-                  tussen wat je aan de kassa betaalde en de kale marktprijs. In 2024
-                  en 2025 lag die een kwart tot een derde hoger dan nu, en de
-                  besparing schaalt daar bijna één-op-één mee. Kies "van nu" om de
-                  prijzen van toen te combineren met de belasting van vandaag.
+                  Standaard rekent de tool de uurprijzen van toen met de
+                  energiebelasting en opslag van nu: dat past bij een batterij die
+                  je vandaag koopt. Kies "van toen" om per uur de heffing te
+                  gebruiken die toen gold. In 2024 en 2025 lag die een kwart tot
+                  een derde hoger dan nu, en de besparing schaalt daar bijna
+                  één-op-één mee.
                 </p>
               </div>
 
@@ -538,9 +539,11 @@ export function Geavanceerd({
                   <span>Afregelen bij negatieve prijzen</span>
                 </label>
                 <p className="instelling-uitleg">
-                  Moderne omvormers stoppen met terugleveren als de prijs negatief
-                  is. Zet dit uit als jouw installatie dat niet kan; dan betaal je
-                  op die momenten om je stroom kwijt te raken.
+                  Stopt je installatie met terugleveren als de prijs negatief is?
+                  Sommige omvormers en energiemanagementsystemen kunnen dat; de
+                  meeste doen het niet vanzelf. Zet dit uit als jouw installatie
+                  het niet kan; dan betaal je op die momenten om je stroom kwijt
+                  te raken.
                 </p>
               </div>
             </div>

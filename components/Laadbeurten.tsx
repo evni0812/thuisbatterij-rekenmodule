@@ -288,16 +288,22 @@ export function Laadbeurten({
           <>
             De beurten raken op vóór de kalender. Elke beurt kost dan echt een
             stukje levensduur, en de volle slijtageprijs is de juiste drempel.
-            Een lagere stand levert per jaar meer op, maar de batterij is eerder
-            aan vervanging toe.
+            Een lagere stand kan per jaar meer opleveren, maar de beurten raken
+            dan nog eerder op.
           </>
-        ) : (
+        ) : deel > 0.2 ? (
           <>
             De beurten raken niet op vóór de kalender. Een extra beurt kost dan
             in werkelijkheid minder dan de volle slijtageprijs, want de batterij
             was toch al afgeschreven op leeftijd. Een lagere stand van de
-            strategie levert dan meer op zonder dat hij eerder aan vervanging toe
-            is; de terugverdientijd onder de cashflow laat zien hoeveel.
+            strategie kan dan meer opleveren, zolang de beurten niet alsnog
+            opraken vóór de kalender. Kies een andere stand en reken opnieuw om
+            het te zien.
+          </>
+        ) : (
+          <>
+            De beurten raken niet op vóór de kalender. De batterij gaat eerder
+            door ouderdom dan door zijn laadbeurten achteruit.
           </>
         )}
       </p>

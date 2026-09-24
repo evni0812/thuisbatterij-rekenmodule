@@ -12,7 +12,9 @@
  * Boven de nullijn afname, eronder teruglevering. De stippellijn is zonder
  * batterij, het gevulde vlak met. Waar het vlak onder de stippellijn blijft,
  * heeft de batterij afname weggehaald; waar het boven de stippellijn ligt bij
- * teruglevering, hield hij zon binnen.
+ * teruglevering, ging er minder het net op. De toelichting volgt het teken van
+ * het verschil: zonder zonnepanelen of op een dag waarop de batterij juist aan
+ * het net verkocht, klopt "hield hij binnen" niet.
  */
 
 import { useState } from "react";
@@ -84,9 +86,12 @@ export function Meterprofiel({
       toelichting={
         <>
           Boven de lijn wat je van het net afnam, eronder wat je terugleverde. De stippellijn is zonder
-          batterij, het vlak met. Teruglevering ging van {kwh(terugZonder)} naar {kwh(terugMet)}: dat
-          verschil hield de batterij binnen en gebruikte hij later zelf, of hij verkocht het op een
-          beter moment.
+          batterij, het vlak met.{" "}
+          {terugZonder < 0.05 && terugMet < 0.05
+            ? "Er ging deze periode vrijwel niets naar het net."
+            : terugMet < terugZonder
+              ? `Teruglevering ging van ${kwh(terugZonder)} naar ${kwh(terugMet)}: dat verschil ging de batterij in, voor later gebruik of om op een beter moment te verkopen.`
+              : `Teruglevering ging van ${kwh(terugZonder)} naar ${kwh(terugMet)}: de batterij leverde ook zelf aan het net.`}
         </>
       }
     >

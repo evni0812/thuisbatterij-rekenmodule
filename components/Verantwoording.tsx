@@ -21,9 +21,12 @@ export function Verantwoording({
   result: AnalysisResult;
   domein: string;
 }) {
+  // Alleen volledige jaren: een deeljaar heeft een ander seizoensgewicht en
+  // hoort niet in hetzelfde gemiddelde als de rest van de pagina.
+  const volledig = result.perYear.filter((j) => j.isFullYear);
+  const basis = volledig.length > 0 ? volledig : result.perYear;
   const gemiddeldeCapture =
-    result.perYear.reduce((a, j) => a + j.captureRate, 0) /
-    Math.max(1, result.perYear.length);
+    basis.reduce((a, j) => a + j.captureRate, 0) / Math.max(1, basis.length);
 
   const jaren = Object.values(manifest.profielen[domein] ?? {});
   const eerste = jaren[0]?.eerste_dag;
@@ -37,19 +40,21 @@ export function Verantwoording({
         <div>
           <h3>De data</h3>
           <p>
-            Verbruik en teruglevering komen uit de{" "}
-            <strong>werkelijk gemeten kwartierprofielen</strong> van MFFBAS voor{" "}
-            {netgebiedNaam(domein)}
+            Verbruik en teruglevering volgen het{" "}
+            <strong>gemeten gemiddelde kwartierpatroon</strong> van alle
+            kleinverbruikers (E1A) met, of zonder, teruglevering in{" "}
+            {netgebiedNaam(domein)} (MFFBAS/EDSN)
             {eerste && laatste ? (
               <>, van {datum(eerste)} tot {datum(laatste)}</>
             ) : null}
-            . De prijzen zijn de <strong>werkelijke uurtarieven</strong> van ANWB
-            Energie over diezelfde periode, inclusief btw.
+            , geschaald naar jouw jaartotalen. Het is geen meting van één
+            huishouden. De prijzen zijn de <strong>werkelijke uurtarieven</strong>{" "}
+            van ANWB Energie over diezelfde periode, inclusief btw.
           </p>
           <p>
             Er wordt niets voorspeld. De vraag is wat een batterij zou hebben
-            opgeleverd als de saldering toen al was afgeschaft, met de tarieven zoals ze werkelijk
-            golden.
+            opgeleverd als de saldering toen al was afgeschaft, met de uurprijzen
+            zoals ze werkelijk waren en standaard de belasting en opslag van nu.
           </p>
         </div>
 
@@ -60,22 +65,25 @@ export function Verantwoording({
               De getoonde bedragen zijn de <strong>variabele stroomkosten</strong>.
               Vastrecht, de belastingvermindering en het vaste deel van de
               netbeheerkosten zijn met en zonder batterij gelijk en beïnvloeden de
-              besparing niet. Vanaf 2029 gaat een deel van die netkosten wél van
-              je gedrag afhangen; wat dat doet staat in de sectie over het
+              besparing niet. Gaat het voorstel voor het nieuwe nettarief door,
+              dan hangt een deel van die netkosten naar verwachting vanaf 2029
+              wél van je gedrag af; wat dat doet staat in de sectie over het
               tijdsafhankelijke nettarief.
             </li>
             <li>
               Het profiel is een <strong>gemiddelde over veel huishoudens</strong> en
-              daardoor gladder dan één aansluiting. Wat dat scheelt kun je zelf
-              zien: zet bij de instellingen „Pieken in je verbruik” hoger en reken
-              opnieuw.
+              daardoor gladder dan één aansluiting. Of dat de uitkomst te hoog of
+              te laag maakt, is niet zeker. Hoe gevoelig hij ervoor is, zie je
+              zelf: zet bij de instellingen „Pieken in je verbruik” hoger en
+              reken opnieuw.
             </li>
             <li>
               De batterij plant met de prijzen die een dag van tevoren bekend worden,
               en met een verwachting van je verbruik. Niet met kennis van de
               toekomst. Hij haalt daarmee{" "}
               {procent(gemiddeldeCapture)} van wat met perfecte kennis mogelijk
-              was geweest.
+              was geweest, gemiddeld over{" "}
+              {volledig.length > 0 ? "de volledige jaren" : "de gekozen periode"}.
               {result.gap ? (
                 <>
                   {" "}
@@ -107,7 +115,7 @@ export function Verantwoording({
               <th>Zonder batterij</th>
               <th>Met batterij</th>
               <th>Besparing</th>
-              <th>Maximaal</th>
+              <th>Met perfecte kennis</th>
               <th>Cycli</th>
             </tr>
           </thead>

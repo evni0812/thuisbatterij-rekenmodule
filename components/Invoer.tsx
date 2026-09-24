@@ -6,7 +6,7 @@
  * Afname en teruglevering zijn niet alleen de simpelste vraag, ze zijn ook
  * precies de twee schaalfactoren die het model nodig heeft. Daardoor hoeft er
  * niets aangenomen te worden over oriëntatie, instraling of zelfconsumptie: dat
- * zit al in het gemeten profiel.
+ * zit al in het gemeten gemiddelde profiel van het netgebied.
  */
 
 import type { ReactNode } from "react";
@@ -207,14 +207,18 @@ export function Invoer({
         </div>
         <p className="invoer-keuze-hint">
           {zonnepanelen
-            ? "Gerekend met het gemeten profiel van huishoudens met zonnepanelen en een dynamisch contract."
-            : "Gerekend met het gemeten profiel van huishoudens zonder zonnepanelen (MFFBAS, aansluiting zonder invoeding). Ook dit is echt verbruik, geen model."}
+            ? "Gerekend met het gemeten gemiddelde kwartierpatroon van alle kleinverbruikers met teruglevering in je netgebied (MFFBAS), geschaald naar jouw jaartotalen. Geen meting van één huishouden."
+            : "Gerekend met het gemeten gemiddelde kwartierpatroon van alle kleinverbruikers zonder teruglevering in je netgebied (MFFBAS), geschaald naar jouw jaarafname. Geen meting van één huishouden."}
+        </p>
+        <p className="invoer-keuze-hint">
+          Deze doorrekening gaat uit van een dynamisch energiecontract en een
+          batterij die zelf op de uurprijzen stuurt.
         </p>
       </div>
       <div className="invoer-velden">
         <Veld
           label="Hoeveel stroom neem je per jaar van het net af?"
-          hint="Staat op je jaarafrekening onder 'verbruik' of 'geleverd'."
+          hint="Staat op je jaarafrekening onder 'verbruik' of 'geleverd'. Staan er een normaal- en een daltarief? Tel ze dan op."
           hintId="afname-hint"
         >
           <div className="getal-veld">
@@ -235,7 +239,7 @@ export function Invoer({
         {zonnepanelen ? (
         <Veld
           label="Hoeveel lever je per jaar terug?"
-          hint="Staat op je jaarafrekening onder 'teruglevering' of 'ingevoed'."
+          hint="Staat op je jaarafrekening onder 'teruglevering' of 'ingevoed'. Staan er een normaal- en een daltarief? Tel ze dan op."
           hintId="teruglevering-hint"
         >
           <div className="getal-veld">

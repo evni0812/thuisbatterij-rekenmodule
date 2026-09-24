@@ -36,9 +36,9 @@ import { Verantwoording } from "../components/Verantwoording";
 import { Verloop } from "../components/Verloop";
 import { Verliezen } from "../components/Verliezen";
 import { Verschuiving } from "../components/Verschuiving";
-import { datum, periode } from "../lib/format";
+import { datum, euro, jarenReeks, periode } from "../lib/format";
 import { leesLaatste, leesProfielen, type Profiel } from "../lib/opslag";
-import { PRIJSPEILDATUM, geschatteOpwekKwh } from "../lib/presets";
+import { PRESETS, PRIJSPEILDATUM, geschatteOpwekKwh } from "../lib/presets";
 import { STANDAARD, kiesPreset, maakConfiguratie } from "../lib/configuratie";
 import { referentieJaar } from "../lib/model/analysis";
 import { STANDAARD_CO2_DREMPEL_G } from "../lib/model/co2";
@@ -52,9 +52,10 @@ import { leesUrl, schrijfUrl, type Instellingen } from "../lib/url-state";
 import type { Configuration } from "../lib/worker/protocol";
 
 /**
- * De pagina is een verhaal in vijf tabbladen, in de volgorde van een gesprek:
+ * De pagina is een verhaal in zes tabbladen, in de volgorde van een gesprek:
  * wat is het antwoord (Start), waarom, wanneer gebeurt het, wat als het anders
- * was, en waar komen de cijfers vandaan (Methode). Elke sectie heeft één plek,
+ * was, wat scheelt het aan CO2 (Uitstoot), en waar komen de cijfers vandaan
+ * (Methode). Elke sectie heeft één plek,
  * één vraag en één knop "Hoe is dit berekend?" met de getallen van deze
  * doorrekening.
  *
@@ -196,6 +197,15 @@ export default function Page() {
       : volledigeJaren.length === 1
         ? String(volledigeJaren[0]!.year)
         : periodeLabel;
+  // Hetzelfde, maar als bijwoordelijke bepaling voor de CO2-zin ("kostte …").
+  const co2PeriodeLabel =
+    volledigeJaren.length > 1
+      ? `gemiddeld per jaar over ${jarenReeks(volledigeJaren.map((j) => j.year))}`
+      : volledigeJaren.length === 1
+        ? `in ${volledigeJaren[0]!.year}`
+        : `in ${periodeLabel}`;
+  // Rekende het getoonde resultaat met het profiel zonder zonnepanelen?
+  const toonZonnepanelen = toon ? toon.afnametype !== "AZI" : inst.zonnepanelen;
   const datadekking = manifest
     ? (() => {
         const jaren = Object.values(manifest.profielen[inst.domein] ?? {});
@@ -244,12 +254,22 @@ export default function Page() {
             <span className="eyebrow">{TABS[0].label} · {TABS[0].vraag}</span>
             <h1>Wat had een thuisbatterij je opgeleverd?</h1>
             <p>
-              Vanaf 2027 vervalt de saldering: je krijgt voor teruglevering nog
-              maar de kale marktprijs, terwijl afname het volle tarief kost. Deze
-              tool rekent met <strong>werkelijk gemeten verbruiksprofielen</strong>{" "}
-              en <strong>werkelijke uurtarieven</strong> door wat een batterij je
-              in die situatie had bespaard. Drie getallen van je jaarafrekening
-              zijn genoeg.
+              Op 1 januari 2027 stopt de salderingsregeling. Met een dynamisch
+              contract krijg je voor teruglevering dan de kale marktprijs van dat
+              uur, min eventuele terugleverkosten. Voor afname betaal je het volle
+              tarief, met belasting. Deze tool rekent door wat een thuisbatterij
+              je in die situatie had bespaard, op de{" "}
+              <strong>werkelijke uurprijzen</strong> van ANWB Energie en het{" "}
+              <strong>gemeten gemiddelde verbruikspatroon</strong> in jouw
+              netgebied, geschaald naar jouw jaartotalen. Drie getallen van je
+              jaarafrekening zijn genoeg.
+            </p>
+            <p>
+              Deze doorrekening gaat uit van een dynamisch energiecontract en een
+              batterij die zelf op de uurprijzen stuurt. Heb je een vast of
+              variabel contract? Dan krijg je tot en met 2030 voor teruglevering
+              minstens 50% van het kale leveringstarief; die situatie rekent deze
+              tool niet door.
             </p>
           </div>
 
@@ -454,10 +474,11 @@ export default function Page() {
         <Paneel id="wat-als" actief={tab}>
           <div className="sectiekop">
             <span className="eyebrow">Wat als · {TABS[3].vraag}</span>
-            <h2>Het nettarief van 2029 gooit de businesscase om</h2>
+            <h2>Een ander nettarief of een andere maat verandert de uitkomst</h2>
             <p>
-              Wat doet het tijdsafhankelijke nettarief dat vanaf 2029 gaat
-              gelden, welke maat batterij loont netto en tot waar loont
+              Wat doet het tijdsafhankelijke nettarief als het voorstel van de
+              ACM doorgaat (naar verwachting vanaf 1 januari 2029, mogelijk
+              later), welke maat batterij loont netto en tot waar loont
               uitbreiden, voor wie kan deze batterij uit, hoe zuinig gaat hij met
               zijn laadbeurten om, en hoe ziet de investering er over de
               looptijd uit.
@@ -538,14 +559,17 @@ export default function Page() {
               <>
                 <Co2Antwoord
                   co2={result.co2}
-                  periodeLabel={gemiddeldLabel}
+                  periodeLabel={co2PeriodeLabel}
+                  zonnepanelen={toonZonnepanelen}
+                  doel={toon.doel}
                   actie={uitleg("co2antwoord")}
                 />
                 <Co2Uren co2={result.co2} profielen={result.seasonProfiles ?? []} actie={uitleg("co2uren")} />
-                <Co2Maanden co2={result.co2} actie={uitleg("co2maanden")} />
+                <Co2Maanden co2={result.co2} zonnepanelen={toonZonnepanelen} actie={uitleg("co2maanden")} />
                 <Co2Nederland
                   co2={result.co2}
                   drempel={toon.co2DrempelG ?? STANDAARD_CO2_DREMPEL_G}
+                  zonnepanelen={toonZonnepanelen}
                   onDrempel={(g) => setInst((s) => ({ ...s, co2Drempel: g }))}
                   actie={uitleg("co2nederland")}
                 />
@@ -590,32 +614,88 @@ export default function Page() {
             </div>
             <ul className="methode-lijst">
               <li>
-                <b>Het profiel is een gemiddelde.</b> Jouw huis piekt scherper dan
-                het gemiddelde van veel huishoudens. Dat onderschat wat een
-                batterij kan opvangen. De schuif "Pieken in je verbruik" maakt dat
-                instelbaar.
-                <span className="badge let-op">richting zeker, hoogte niet</span>
+                <b>Het verbruikspatroon is een gemiddelde.</b> We rekenen met het
+                gemeten gemiddelde kwartierpatroon van alle kleinverbruikers (E1A)
+                met, of zonder, teruglevering in jouw netgebied, geschaald naar
+                jouw jaartotalen. Dat is geen meting van één huishouden: pieken
+                van een waterkoker of een laadpaal zijn uitgemiddeld, en een
+                warmtepomp of elektrische auto zit er niet apart in. Of de
+                uitkomst daardoor te hoog of te laag is, weten we niet. Met de
+                schuif "Pieken in je verbruik" zie je hoe gevoelig hij ervoor is.
+                <span className="badge let-op">richting onzeker</span>
               </li>
               <li>
-                <b>Eén leverancier.</b> De prijzen zijn van ANWB Energie. Een andere
-                dynamische leverancier rekent een andere opslag; dat verschuift de
-                kosten, nauwelijks de besparing.
+                <b>De batterij kent de toekomst niet.</b> De strategie plant op de
+                day-ahead-prijzen, die rond 13.00 uur voor de volgende dag bekend
+                worden, en op een eenvoudige verwachting van je verbruik en opwek
+                uit de afgelopen dagen. Alleen het optimum dat ter vergelijking
+                in de figuren staat, rekent met perfecte kennis vooraf.
+                <span className="badge neutraal">aanname</span>
+              </li>
+              <li>
+                <b>Het verleden staat model voor de toekomst.</b> Voor de
+                terugverdientijd herhalen we de doorgerekende jaren over de hele
+                looptijd, standaard zonder prijsstijging (0% per jaar). De
+                looptijd is een aanname voor de beoordeling, geen
+                fabrieksgarantie; die is vaak 10 jaar.
+                <span className="badge let-op">aanname</span>
+              </li>
+              <li>
+                <b>Eén leverancier, afgeronde uurprijzen.</b> De prijzen zijn van
+                ANWB Energie. Een andere dynamische leverancier rekent een andere
+                opslag; dat verschuift de kosten, nauwelijks de besparing. Sinds
+                20 juni 2026 geeft de ANWB de prijzen afgerond op hele centen. En
+                sinds 1 oktober 2025 hebben de day-ahead-prijzen een kwartier als
+                eenheid; de tool rekent met het gemiddelde per uur, dus
+                prijsverschillen binnen een uur vallen weg.
                 <span className="badge goed">klein effect</span>
               </li>
               <li>
-                <b>Het nettarief van 2029 is een scenario.</b> De blokken en
-                wegingsfactoren staan in het voorstel; het basistarief is een
-                prognose van CE Delft en de ACM heeft nog niet beslist. Invoering
-                is "in beginsel" 1 januari 2029, met uitwijk naar 2030.
+                <b>Het nettarief van 2029 is een voorstel.</b> De blokken en
+                wegingsfactoren staan in het voorstel van de netbeheerders; het
+                basistarief is een prognose van CE Delft, in opdracht van NVDE,
+                Holland Solar, Energie-Nederland en Energy Storage NL. De ACM
+                heeft nog niet beslist. Invoering is "in beginsel" 1 januari
+                2029, mogelijk later.
                 <span className="badge let-op">te toetsen eind 2026</span>
               </li>
               <li>
-                <b>De energiebelasting daalt.</b> De heffing was in 2024 en 2025 een
-                kwart tot een derde hoger dan nu, en de besparing schaalt daar
-                bijna één-op-één mee. Kies "van nu" bij de geavanceerde
-                instellingen om dat effect te zien; het nettariefscenario rekent
-                al met de belasting van 2029.
-                <span className="badge let-op">kan lager uitvallen</span>
+                <b>De belasting van nu.</b> De uurprijzen zijn van toen, de
+                energiebelasting en opslag van nu. Zo past de uitkomst bij een
+                batterij die je vandaag koopt. In 2024 en 2025 lag de heffing een
+                kwart tot een derde hoger, en de besparing schaalt daar bijna
+                één-op-één mee. Bij de geavanceerde instellingen kies je "van
+                toen"; het nettariefscenario rekent met de belasting van 2029.
+                <span className="badge let-op">kan veranderen</span>
+              </li>
+              <li>
+                <b>Terugleverkosten staan standaard op 0 cent.</b> ANWB Energie
+                rekent ze niet, andere leveranciers vaak wel. Vul je eigen bedrag
+                in bij de geavanceerde instellingen.
+                <span className="badge neutraal">zelf in te vullen</span>
+              </li>
+              <li>
+                <b>Afregelen bij negatieve prijzen is een aanname.</b> Het model
+                gaat ervan uit dat je installatie stopt met terugleveren als de
+                prijs negatief is. Sommige omvormers en
+                energiemanagementsystemen kunnen dat; de meeste doen het niet
+                vanzelf. Kan jouw installatie het niet, zet het dan uit bij de
+                geavanceerde instellingen.
+                <span className="badge let-op">aanname</span>
+              </li>
+              <li>
+                <b>Het eigen verbruik van de batterij zit er niet in.</b> Een
+                thuisbatterij gebruikt ook stroom als hij niets doet, meestal 7
+                tot 25 watt: 60 tot 220 kWh per jaar. Dat is niet van de
+                besparing afgetrokken.
+                <span className="badge let-op">besparing valt lager uit</span>
+              </li>
+              <li>
+                <b>CO2 is een toerekening.</b> We rekenen met de gemiddelde
+                uitstoot van de Nederlandse opwek per uur, niet met de marginale
+                uitstoot van de centrale die op- of afregelt. De uitstoot van het
+                maken van de batterij is niet meegerekend.
+                <span className="badge neutraal">geen meting</span>
               </li>
               <li>
                 <b>Batterijprijzen bewegen.</b> De richtprijzen zijn van{" "}
@@ -624,11 +704,101 @@ export default function Page() {
                 <span className="badge neutraal">zelf in te vullen</span>
               </li>
               <li>
-                <b>Wat er niet in zit.</b> Vastrecht, belastingvermindering en het
-                vaste deel van de netbeheerkosten: met en zonder batterij gelijk.
-                Terugleverkosten alleen als één instelbaar bedrag per kWh; geen
-                staffels per leverancier. Geen kosten voor slimme sturing.
+                <b>Aanmelden en installeren.</b> Een thuisbatterij meld je aan bij
+                je netbeheerder via energieleveren.nl. Boven 800 W is een vaste
+                aansluiting op een eigen groep door een installateur de norm; de
+                kaart van maten rekent daar een bedrag voor.
+                <span className="badge neutraal">niet in de besparing</span>
+              </li>
+              <li>
+                <b>Wat er verder niet in zit.</b> Vastrecht, belastingvermindering
+                en het vaste deel van de netbeheerkosten: met en zonder batterij
+                gelijk. Terugleverkosten alleen als één instelbaar bedrag per
+                kWh; geen staffels per leverancier. Geen kosten voor slimme
+                sturing.
                 <span className="badge neutraal">bewust buiten beeld</span>
+              </li>
+            </ul>
+          </section>
+
+          <section className="figure">
+            <div className="figure-kop">
+              <div>
+                <h3>Bronnen</h3>
+                <p className="figure-uitleg">
+                  Waar de data en de aannames vandaan komen. Geraadpleegd op
+                  24 september 2026.
+                </p>
+              </div>
+            </div>
+            <ul className="methode-lijst">
+              <li>
+                <b>Uurprijzen:</b> ANWB Energie, dynamische uurtarieven via de
+                ANWB-API (
+                <a href="https://api.anwb.nl/energy/energy-services/v2/tarieven/electricity">
+                  api.anwb.nl
+                </a>
+                ). Sinds 20 juni 2026 afgerond op hele centen. Sinds 1 oktober
+                2025 zijn day-ahead-prijzen per kwartier; de tool rekent met
+                uurgemiddelden.
+              </li>
+              <li>
+                <b>Verbruikspatronen:</b> MFFBAS/EDSN, profielfracties per
+                kwartier, categorie E1A, met en zonder teruglevering (
+                <a href="https://www.energiedatawijzer.nl">energiedatawijzer.nl</a>
+                ).
+              </li>
+              <li>
+                <b>CO2 per uur:</b> Nationaal Energie Dashboard, emissiefactor
+                van de elektriciteitsmix (type 27, ElectricityMix) (
+                <a href="https://ned.nl">ned.nl</a>).
+              </li>
+              <li>
+                <b>Nettarief:</b> ACM, voorstel codewijziging volume- en
+                tijdsafhankelijke transporttarieven voor kleinverbruikers,
+                BR-2026-2242 (
+                <a href="https://www.acm.nl/nl/publicaties/voorstel-codewijziging-volume-en-tijdsafhankelijke-transporttarieven-voor-kleinverbruikers">
+                  acm.nl
+                </a>
+                ). Basistarief: prognose van CE Delft (september 2026), in
+                opdracht van NVDE, Holland Solar, Energie-Nederland en Energy
+                Storage NL.
+              </li>
+              <li>
+                <b>Energiebelasting 2026:</b> Belastingdienst (
+                <a href="https://www.belastingdienst.nl/wps/wcm/connect/bldcontentnl/belastingdienst/zakelijk/overige_belastingen/belastingen_op_milieugrondslag/energiebelasting/energiebelasting">
+                  belastingdienst.nl
+                </a>
+                ).
+              </li>
+              <li>
+                <b>Einde saldering:</b> Rijksoverheid, salderingsregeling (
+                <a href="https://www.rijksoverheid.nl/themas/klimaat-milieu-en-natuur/energie-thuis/salderingsregeling">
+                  rijksoverheid.nl
+                </a>
+                ).
+              </li>
+              <li>
+                <b>Slijtage in de aansturing:</b> B. Xu e.a., <i>Factoring the
+                Cycle Aging Cost of Batteries Participating in Electricity
+                Markets</i>, IEEE Transactions on Power Systems 33(2), 2018 (
+                <a href="https://doi.org/10.1109/TPWRS.2017.2733339">
+                  doi:10.1109/TPWRS.2017.2733339
+                </a>
+                ); Schade en Egging-Bratseth, <i>Battery degradation:
+                Impact on economic dispatch</i>, Energy Storage 6(2), 2024 (
+                <a href="https://doi.org/10.1002/est2.588">doi:10.1002/est2.588</a>
+                ).
+              </li>
+              <li>
+                <b>Batterijprijzen:</b> richtprijzen van {PRIJSPEILDATUM}:{" "}
+                {PRESETS.map((p) => `${p.naam} ${euro(p.prijsEur)} (${p.prijsNoot})`).join("; ")}.
+              </li>
+              <li>
+                <b>Auto ter vergelijking:</b> 149 g CO2 per km uit de uitlaat voor
+                een middelgrote benzineauto (
+                <a href="https://co2emissiefactoren.nl">co2emissiefactoren.nl</a>
+                , 2025), afgerond op 150 g.
               </li>
             </ul>
           </section>
@@ -642,9 +812,11 @@ export default function Page() {
 
       <footer className="voet">
         <span>
-          Bronnen: MFFBAS/EDSN profielfracties · ANWB Energie uurtarieven · CE
-          Delft en Netbeheer Nederland (nettarief 2029). Geen commerciële partij,
-          geen advies.
+          Bronnen: MFFBAS/EDSN profielfracties · ANWB Energie uurtarieven · NED
+          · CE Delft en Netbeheer Nederland (nettarief 2029). Deze tool is van de
+          ANWB. De ANWB verkoopt ook energie en thuisbatterijen. De uitkomsten
+          zijn een doorrekening op historische prijzen, geen persoonlijk advies
+          en geen garantie.
         </span>
         {manifest ? <span>Data gegenereerd {datum(manifest.gegenereerd.slice(0, 10))}</span> : null}
       </footer>

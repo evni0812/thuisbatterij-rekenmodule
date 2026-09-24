@@ -126,7 +126,7 @@ export function Verschuiving({
       actie={actie}
       titel={
         grootsteDaling[1] && grootsteDaling[1].kwh > (grootsteDaling[0]?.kwh ?? 0)
-          ? "In de zomer verschuift de batterij je hele middagoverschot naar de avond"
+          ? "In de zomer verschuift de batterij een deel van je middagoverschot naar de avond"
           : "De batterij haalt je avondpiek van het net af"
       }
       toelichting={

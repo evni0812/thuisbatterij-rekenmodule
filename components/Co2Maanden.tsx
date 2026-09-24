@@ -4,10 +4,10 @@
  * De CO2-winst door het jaar heen.
  *
  * Dezelfde twee verdienmodellen als bij de euro's, maar met een ander gewicht:
- * in de zomer bewaart de batterij zonnestroom die anders 's avonds door gas
- * vervangen werd, in de winter verschuift hij afname van de avondpiek naar de
- * nacht, en die nacht is lang niet altijd schoner. De winst zit dus vooral in
- * de zomer, meer nog dan de euro's.
+ * in de zomer kan de batterij zonnestroom bewaren voor de avond, in de winter
+ * verschuift hij afname van de avondpiek naar de nacht, en die nacht is lang
+ * niet altijd schoner. Zonder zonnepanelen is er alleen dat tweede, en kan een
+ * maand ook negatief uitvallen; de teksten volgen dat.
  */
 
 import { useState, type ReactNode } from "react";
@@ -30,7 +30,16 @@ const RECHTS = 16;
 const ONDER = 46;
 const BOVEN = 24;
 
-export function Co2Maanden({ co2, actie }: { co2: Co2Jaar; actie?: ReactNode }) {
+export function Co2Maanden({
+  co2,
+  zonnepanelen = true,
+  actie,
+}: {
+  co2: Co2Jaar;
+  /** Met zonnepanelen kan de batterij zonnestroom bewaren; zonder alleen afname verschuiven. */
+  zonnepanelen?: boolean;
+  actie?: ReactNode;
+}) {
   const { kader, tip, toon, wis } = useTip();
   const [aangewezen, setAangewezen] = useState<number | null>(null);
   const maanden = co2.perMaand.map((m) => ({ ...m, winstKg: m.importBasisKg - m.importBatKg }));
@@ -52,16 +61,20 @@ export function Co2Maanden({ co2, actie }: { co2: Co2Jaar; actie?: ReactNode }) 
     <Figure
       actie={actie}
       titel={
-        zomer > winter
-          ? `De CO2-winst zit in de zomer: ${kg(zomer)} tegen ${kg(winter)} in de winter`
-          : `De CO2-winst zit in de winter: ${kg(winter)} tegen ${kg(zomer)} in de zomer`
+        zomer <= 0 && winter <= 0
+          ? `De batterij kost in beide seizoenen CO2: ${kg(-zomer)} in de zomer en ${kg(-winter)} in de winter`
+          : zomer > winter
+            ? `De CO2-winst zit in de zomer: ${kg(zomer)} tegen ${kg(winter)} in de winter`
+            : `De CO2-winst zit in de winter: ${kg(winter)} tegen ${kg(zomer)} in de zomer`
       }
       toelichting={
         <>
           Hoeveel minder CO2 je netafname per maand kost met batterij, gemiddeld over de volledige
-          jaren. De gearceerde helft is de zomer, april tot en met september. In de zomer vervangt
-          bewaarde zonnestroom de avondafname; in de winter verschuift de batterij afname naar de
-          nacht, en die is niet altijd schoner.
+          jaren; een rode staaf is een maand waarin het meer CO2 kostte. De gearceerde helft is de
+          zomer, april tot en met september.{" "}
+          {zonnepanelen
+            ? "In de zomer kan opgeslagen zonnestroom een deel van de avondafname vervangen; in de winter verschuift de batterij afname naar de nacht, en die is niet altijd schoner."
+            : "Zonder zonnepanelen verschuift de batterij alleen afname: hij laadt van het net en levert later, en dat is niet op elk uur schoner."}
         </>
       }
     >
@@ -112,9 +125,11 @@ export function Co2Maanden({ co2, actie }: { co2: Co2Jaar; actie?: ReactNode }) 
                     { label: "Met batterij", waarde: kg(m.importBatKg) },
                     { kleur: "var(--series-3)", label: "Winst", waarde: kg(m.winstKg), uitkomst: true },
                   ],
-                  noot: isZomer(m.month)
-                    ? "Zomer: bewaarde zonnestroom vervangt de avondafname."
-                    : "Winter: afname verschuift van de avondpiek naar de nacht.",
+                  noot: !zonnepanelen
+                    ? "Zonder zonnepanelen: afname verschuift naar de uren waarop de batterij laadt."
+                    : isZomer(m.month)
+                      ? "Zomer: opgeslagen zonnestroom kan een deel van de avondafname vervangen."
+                      : "Winter: afname verschuift van de avondpiek naar de nacht.",
                 });
               }}
               onWis={() => { setAangewezen(null); wis(); }}
