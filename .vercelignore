@@ -12,8 +12,15 @@ data/raw/
 # waar zijn relatieve imports niet bestaan, en de build viel om.
 out/
 .next/
+.next-dev/
 .next-build/
 
-# Lokale rommel die niets met de build te maken heeft.
+# Lokale rommel die niets met de build te maken heeft: de oude versie, de
+# losse meetprofielen waaruit public/data is gemaakt, kladwerk, en vooral geen
+# omgevingsbestanden met sleutels.
 venv/
 legacy/
+profielen/
+.scratch/
+.env*
+.claude/
