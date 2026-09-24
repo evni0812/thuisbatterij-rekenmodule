@@ -148,10 +148,18 @@ export function laatstePrijsjaar(m: Manifest): string {
  */
 export class Invoerbron {
   private manifest: Manifest | null = null;
-  private readonly profielen = new Map<string, ProfileYear>();
-  private readonly prijzen = new Map<number, PriceYear>();
-  private readonly co2s = new Map<number, Co2Year>();
-  private readonly schalingen = new Map<string, NettingScale>();
+  private manifestBelofte: Promise<Manifest> | null = null;
+  /*
+   * Beloftes, geen resultaten. Eerder werd het geladen bestand pas na de
+   * `await` bewaard; twee aanvragen die tegelijk hetzelfde jaar wilden (de
+   * opwarming en een dagaanvraag, of de schaling en het venster) haalden het
+   * dan allebei op. Nu deelt de tweede de belofte van de eerste. Een mislukte
+   * lading gaat eruit, zodat een volgende poging opnieuw kan.
+   */
+  private readonly profielen = new Map<string, Promise<ProfileYear>>();
+  private readonly prijzen = new Map<number, Promise<PriceYear>>();
+  private readonly co2s = new Map<number, Promise<Co2Year>>();
+  private readonly schalingen = new Map<string, Promise<NettingScale>>();
 
   constructor(
     private readonly baseUrl = "/data",
@@ -159,9 +167,14 @@ export class Invoerbron {
   ) {}
 
   async init(): Promise<Manifest> {
-    if (!this.manifest) {
-      this.manifest = await loadManifest(this.baseUrl, this.haal);
+    if (this.manifest) return this.manifest;
+    if (!this.manifestBelofte) {
+      this.manifestBelofte = loadManifest(this.baseUrl, this.haal).catch((err) => {
+        this.manifestBelofte = null;
+        throw err;
+      });
     }
+    this.manifest = await this.manifestBelofte;
     return this.manifest;
   }
 
@@ -171,42 +184,36 @@ export class Invoerbron {
     return this.manifest;
   }
 
-  async profiel(
+  /** Eén keer laden per sleutel; gelijktijdige vragers delen de belofte. */
+  private static eenmalig<K, V>(kaart: Map<K, Promise<V>>, sleutel: K, laad: () => Promise<V>): Promise<V> {
+    const hit = kaart.get(sleutel);
+    if (hit) return hit;
+    const belofte = laad();
+    kaart.set(sleutel, belofte);
+    belofte.catch(() => {
+      if (kaart.get(sleutel) === belofte) kaart.delete(sleutel);
+    });
+    return belofte;
+  }
+
+  profiel(
     domain: string,
     year: number,
     afnametype: Afnametype = "AMI",
   ): Promise<ProfileYear> {
-    const key = `${domain}:${year}:${afnametype}`;
-    const hit = this.profielen.get(key);
-    if (hit) return hit;
-    const geladen = await loadProfileYear(
-      this.gegevens,
-      domain,
-      year,
-      this.baseUrl,
-      this.haal,
-      afnametype,
+    return Invoerbron.eenmalig(this.profielen, `${domain}:${year}:${afnametype}`, () =>
+      loadProfileYear(this.gegevens, domain, year, this.baseUrl, this.haal, afnametype),
     );
-    this.profielen.set(key, geladen);
-    return geladen;
   }
 
   /** De emissiefactoren van een jaar, of null als het manifest ze niet heeft. */
   async co2(year: number): Promise<Co2Year | null> {
     if (!this.gegevens.co2?.[String(year)]) return null;
-    const hit = this.co2s.get(year);
-    if (hit) return hit;
-    const geladen = await loadCo2Year(this.gegevens, year, this.baseUrl, this.haal);
-    this.co2s.set(year, geladen);
-    return geladen;
+    return Invoerbron.eenmalig(this.co2s, year, () => loadCo2Year(this.gegevens, year, this.baseUrl, this.haal));
   }
 
-  async prijs(year: number): Promise<PriceYear> {
-    const hit = this.prijzen.get(year);
-    if (hit) return hit;
-    const geladen = await loadPriceYear(this.gegevens, year, this.baseUrl, this.haal);
-    this.prijzen.set(year, geladen);
-    return geladen;
+  prijs(year: number): Promise<PriceYear> {
+    return Invoerbron.eenmalig(this.prijzen, year, () => loadPriceYear(this.gegevens, year, this.baseUrl, this.haal));
   }
 
   /**
@@ -215,26 +222,23 @@ export class Invoerbron {
    * Gebufferd, want de oplossing kost een tiental passes over een jaar en het
    * antwoord verandert alleen als het netgebied of de meterstanden veranderen.
    */
-  private async schaling(config: Configuration): Promise<NettingScale> {
+  private schaling(config: Configuration): Promise<NettingScale> {
     const m = this.gegevens;
     const hh = config.household;
     const type = config.afnametype ?? "AMI";
     const key = `${config.domain}:${type}:${hh.annualGridImportKwh}:${hh.annualGridExportKwh}`;
-    const hit = this.schalingen.get(key);
-    if (hit) return hit;
+    return Invoerbron.eenmalig(this.schalingen, key, async () => {
+      const jaren = Object.entries(profielenVan(m, type)[config.domain] ?? {})
+        .filter(([, info]) => info.volledig_jaar)
+        .map(([y]) => Number(y))
+        .sort((a, b) => b - a);
+      // Zonder vol jaar valt er niets betrouwbaars op te lossen; dan blijft de
+      // reeks ongeschaald en komen de volumes onder de meterstanden uit.
+      if (jaren.length === 0) return GEEN_SCHALING;
 
-    const jaren = Object.entries(profielenVan(m, type)[config.domain] ?? {})
-      .filter(([, info]) => info.volledig_jaar)
-      .map(([y]) => Number(y))
-      .sort((a, b) => b - a);
-    // Zonder vol jaar valt er niets betrouwbaars op te lossen; dan blijft de
-    // reeks ongeschaald en komen de volumes onder de meterstanden uit.
-    if (jaren.length === 0) return GEEN_SCHALING;
-
-    const prof = await this.profiel(config.domain, jaren[0]!, type);
-    const scale = solveNettingScale(prof.importFraction, prof.exportFraction, hh);
-    this.schalingen.set(key, scale);
-    return scale;
+      const prof = await this.profiel(config.domain, jaren[0]!, type);
+      return solveNettingScale(prof.importFraction, prof.exportFraction, hh);
+    });
   }
 
   /**
@@ -266,7 +270,14 @@ export class Invoerbron {
     // worden op één VOL kalenderjaar bepaald en voor alle jaren gebruikt, ook
     // de deeljaren. Een deeljaar zou anders de jaartotalen in een deel van het
     // jaar proppen. Het meest recente volle jaar is het representatiefst.
-    const schaling = await this.schaling(config);
+    //
+    // Alle bestanden gaan tegelijk de deur uit in plaats van jaar na jaar: over
+    // het netwerk scheelt dat een rij wachttijden. De volgorde van de vensters
+    // hieronder verandert er niet door.
+    const [schaling] = await Promise.all([
+      this.schaling(config),
+      ...jaren.flatMap((y) => [this.profiel(config.domain, y, type), this.prijs(y), this.co2(y)]),
+    ]);
 
     // Zonder historische heffing rekenen we met de heffing van nu: die van het
     // meest recente prijsjaar in de data, tenzij de gebruiker er zelf een opgaf.

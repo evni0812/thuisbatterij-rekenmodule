@@ -7,7 +7,7 @@
  * dezelfde invoer.
  */
 import { readFileSync } from "node:fs";
-import { beforeAll, describe, expect, it } from "vitest";
+import { beforeAll, describe, expect, it, vi } from "vitest";
 import { STANDAARD, maakConfiguratie } from "../lib/configuratie";
 import { Invoerbron, vensterGrenzen } from "../lib/data/invoer";
 import {
@@ -19,6 +19,7 @@ import {
   type VensterUitkomst,
 } from "../lib/model/analysis";
 import { scenarioConfiguratie } from "../lib/nettarief";
+import { Gegevensdeler } from "../lib/worker/ophalen";
 import { WorkerPool, poolGrootte } from "../lib/worker/pool";
 import type { Configuration, WorkerRequest, WorkerResponse } from "../lib/worker/protocol";
 
@@ -54,10 +55,12 @@ describe("de pool met nepworkers", () => {
     }
   }
 
-  function maak() {
+  function maak({ gereed = true } = {}) {
     NepWorker.alle = [];
     const berichten: { msg: WorkerResponse; worker: number }[] = [];
     const pool = new WorkerPool(3, () => new NepWorker() as unknown as Worker, (msg, worker) => berichten.push({ msg, worker }), () => {});
+    if (gereed) for (const w of NepWorker.alle) w.stuur({ type: "ready", manifest: {} });
+    berichten.length = 0;
     return { pool, berichten, workers: NepWorker.alle };
   }
   const cfg = maakConfiguratie(STANDAARD);
@@ -66,11 +69,70 @@ describe("de pool met nepworkers", () => {
   });
 
   it("kiest voor elke machine minstens twee en hoogstens vier workers", () => {
-    expect(poolGrootte(1)).toBe(2);
-    expect(poolGrootte(2)).toBe(2);
-    expect(poolGrootte(4)).toBe(3);
-    expect(poolGrootte(8)).toBe(4);
-    expect(poolGrootte(64)).toBe(4);
+    expect(poolGrootte(1, 8, 1280)).toBe(2);
+    expect(poolGrootte(2, 8, 1280)).toBe(2);
+    expect(poolGrootte(6, 8, 1280)).toBe(4);
+    expect(poolGrootte(8, 8, 1280)).toBe(4);
+    expect(poolGrootte(64, undefined, undefined)).toBe(4);
+  });
+
+  it("houdt het op een telefoon of zuinig toestel bij twee", () => {
+    expect(poolGrootte(4, 8, 1280)).toBe(2); // vier kernen
+    expect(poolGrootte(8, 4, 1280)).toBe(2); // 4 GB geheugen
+    expect(poolGrootte(8, 8, 390)).toBe(2); // smal scherm
+    expect(poolGrootte(8, undefined, 1280)).toBe(4); // geen deviceMemory (Safari, Firefox)
+  });
+
+  it("geeft een worker pas werk als hij zijn manifest heeft", () => {
+    const { pool, workers } = maak({ gereed: false });
+    pool.plaats({ groep: 1, bericht: venster(1) });
+    pool.plaats({ groep: 1, bericht: venster(2) });
+    expect(workers.map((w) => w.ontvangen.length)).toEqual([0, 0, 0]);
+    // Worker 2 is als eerste klaar en krijgt de eerste taak; de rest wacht.
+    workers[2]!.stuur({ type: "ready", manifest: {} });
+    expect(workers[2]!.ontvangen.map((m) => (m as { id: number }).id)).toEqual([1]);
+    workers[0]!.stuur({ type: "ready", manifest: {} });
+    expect(workers[0]!.ontvangen.map((m) => (m as { id: number }).id)).toEqual([2]);
+    expect(pool.isGereed(1)).toBe(false);
+  });
+
+  it("geeft de taken van een worker waarvan de initialisatie mislukte aan de anderen", () => {
+    const { pool, workers, berichten } = maak({ gereed: false });
+    workers[0]!.stuur({ type: "ready", manifest: {} });
+    pool.plaats({ groep: 1, bericht: venster(1) }); // naar worker 0
+    pool.plaats({ groep: 1, worker: 1, bericht: venster(2) }); // alleen voor worker 1
+    workers[1]!.stuur({ type: "error", id: null, message: "manifest niet gevonden" });
+    // De aanroeper hoort het (en beslist of het fataal is) …
+    expect(berichten.map((b) => [b.msg.type, b.worker])).toEqual([["ready", 0], ["error", 1]]);
+    // … en taak 2 gaat naar de eerste worker die vrij is.
+    workers[0]!.stuur({ type: "klaar", id: 1 });
+    expect(workers[0]!.ontvangen.map((m) => (m as { id: number }).id)).toEqual([1, 2]);
+    expect(workers[1]!.ontvangen).toHaveLength(0);
+  });
+
+  it("beantwoordt een `haal` via de ophaaldienst, met een eigen kopie per worker", async () => {
+    NepWorker.alle = [];
+    const gevraagd: string[] = [];
+    const bron = new Uint8Array([1, 2, 3, 4]).buffer;
+    const dienst = {
+      haal: async (url: string) => {
+        gevraagd.push(url);
+        return bron.slice(0);
+      },
+    };
+    const pool = new WorkerPool(2, () => new NepWorker() as unknown as Worker, () => {}, () => {}, dienst);
+    const [a, b] = NepWorker.alle;
+    pool.init("/data");
+    expect(a!.ontvangen[0]).toEqual({ type: "init", baseUrl: "/data", viaHoofdthread: true });
+    a!.stuur({ type: "haal", verzoek: 7, url: "/data/prices-2025.bin" });
+    b!.stuur({ type: "haal", verzoek: 7, url: "/data/prices-2025.bin" });
+    await new Promise((r) => setTimeout(r, 0));
+    const antwoordA = a!.ontvangen.find((m) => m.type === "gehaald") as { verzoek: number; buffer: ArrayBuffer };
+    const antwoordB = b!.ontvangen.find((m) => m.type === "gehaald") as { verzoek: number; buffer: ArrayBuffer };
+    expect(antwoordA.verzoek).toBe(7);
+    expect([...new Uint8Array(antwoordB.buffer)]).toEqual([1, 2, 3, 4]);
+    expect(antwoordA.buffer).not.toBe(antwoordB.buffer);
+    expect(gevraagd).toEqual(["/data/prices-2025.bin", "/data/prices-2025.bin"]);
   });
 
   it("verdeelt taken over vrije workers en wacht met de rest tot er een klaar is", () => {
@@ -119,6 +181,109 @@ describe("de pool met nepworkers", () => {
   });
 });
 
+describe("de gedeelde ophaler", () => {
+  /** Een nep-fetch die bijhoudt wat er gevraagd is. */
+  function nepFetch(opties: { status?: (url: string) => number; traag?: boolean } = {}) {
+    const urls: string[] = [];
+    const inits: (RequestInit | undefined)[] = [];
+    const f = (url: string, init?: RequestInit) => {
+      urls.push(url);
+      inits.push(init);
+      if (opties.traag) {
+        return new Promise<Response>((_, faal) => {
+          init?.signal?.addEventListener("abort", () => faal(new DOMException("afgebroken", "AbortError")));
+        });
+      }
+      const status = opties.status?.(url) ?? 200;
+      const body = url.includes("manifest.json")
+        ? new TextEncoder().encode(JSON.stringify({ gegenereerd: "2026-09-16T19:23:33Z" }))
+        : new Uint8Array([9, 8, 7]);
+      return Promise.resolve(new Response(status === 200 ? body : null, { status }));
+    };
+    return { f, urls, inits };
+  }
+
+  it("haalt elk bestand één keer, met de dataversie in de URL, en geeft elke vrager een kopie", async () => {
+    const { f, urls, inits } = nepFetch();
+    const deler = new Gegevensdeler("/data", f);
+    const [a, b] = await Promise.all([deler.haal("/data/prices-2025.bin"), deler.haal("/data/prices-2025.bin")]);
+    await deler.haal("/data/manifest.json");
+    expect(urls).toEqual(["/data/manifest.json", "/data/prices-2025.bin?v=2026-09-16T19%3A23%3A33Z"]);
+    // Het manifest wordt altijd opnieuw gevalideerd; de bestanden niet.
+    expect(inits[0]?.cache).toBe("no-cache");
+    expect(a).not.toBe(b);
+    expect([...new Uint8Array(b)]).toEqual([9, 8, 7]);
+  });
+
+  it("meldt een ontbrekend manifest als fout", async () => {
+    const { f } = nepFetch({ status: (u) => (u.includes("manifest") ? 404 : 200) });
+    await expect(new Gegevensdeler("/data", f).manifest()).rejects.toThrow("manifest niet gevonden: HTTP 404");
+  });
+
+  it("geeft het op na de time-out in plaats van eeuwig te wachten", async () => {
+    const { f } = nepFetch({ traag: true });
+    const deler = new Gegevensdeler("/data", f, { manifest: 20, bestand: 20 });
+    await expect(deler.manifest()).rejects.toThrow(/duurde langer dan/);
+  });
+
+  it("probeert een mislukt bestand bij de volgende vraag opnieuw", async () => {
+    let fout = true;
+    const { f, urls } = nepFetch({ status: (u) => (u.includes(".bin") && fout ? 503 : 200) });
+    const deler = new Gegevensdeler("/data", f);
+    await expect(deler.haal("/data/co2-2025.bin")).rejects.toThrow("HTTP 503");
+    fout = false;
+    await expect(deler.haal("/data/co2-2025.bin")).resolves.toBeInstanceOf(ArrayBuffer);
+    expect(urls.filter((u) => u.includes("co2")).length).toBe(2);
+  });
+});
+
+describe("een worker die werk krijgt vóór zijn manifest binnen is", () => {
+  const cfg = maakConfiguratie({ ...STANDAARD, van: "2025-01-01", tot: "2025-12-31" });
+
+  async function nieuweWorker(fetchFn: typeof fetch) {
+    vi.resetModules();
+    globalThis.fetch = fetchFn;
+    const ontvangen: WorkerResponse[] = [];
+    const nep = {
+      onmessage: null as ((e: { data: WorkerRequest }) => Promise<void>) | null,
+      postMessage: (msg: WorkerResponse) => ontvangen.push(msg),
+    };
+    (globalThis as unknown as { self: typeof nep }).self = nep;
+    await import("../lib/worker/sim.worker");
+    return { ontvangen, stuur: (msg: WorkerRequest) => nep.onmessage!({ data: msg }) };
+  }
+
+  it("wacht op de initialisatie in plaats van te falen", async () => {
+    // Regressie: een helper die zijn taak kreeg terwijl zijn manifest nog
+    // onderweg was, gooide "worker is nog niet geïnitialiseerd", en omdat die
+    // fout buiten de pooltaak viel kwam er nooit een `klaar`.
+    let laatGaan!: () => void;
+    const poort = new Promise<void>((r) => (laatGaan = r));
+    const { ontvangen, stuur } = await nieuweWorker((async (input: RequestInfo | URL) => {
+      if (String(input).endsWith("manifest.json")) await poort;
+      return haal(input);
+    }) as typeof fetch);
+    const init = stuur({ type: "init", baseUrl: "/data" });
+    const taak = stuur({ type: "quick", id: 5, groep: 1, config: cfg, jaarIndex: 0, fraction: 0.5 });
+    await new Promise((r) => setTimeout(r, 20));
+    expect(ontvangen).toEqual([]);
+    laatGaan();
+    await Promise.all([init, taak]);
+    expect(ontvangen.map((m) => m.type).sort()).toEqual(["klaar", "quick", "ready"]);
+  }, 60_000);
+
+  it("meldt een mislukte initialisatie, en geeft een pooltaak daarna toch vrij", async () => {
+    const { ontvangen, stuur } = await nieuweWorker((async () => ({ ok: false, status: 404 }) as Response) as typeof fetch);
+    await stuur({ type: "init", baseUrl: "/data" });
+    expect(ontvangen).toEqual([{ type: "error", id: null, message: "manifest niet gevonden: HTTP 404" }]);
+    await stuur({ type: "venster", id: 6, groep: 1, config: cfg, jaarIndex: 0, metOptimum: false });
+    expect(ontvangen.slice(1)).toEqual([
+      { type: "error", id: 6, message: "manifest niet gevonden: HTTP 404" },
+      { type: "klaar", id: 6 },
+    ]);
+  });
+});
+
 describe("de invoer per venster", () => {
   it("is bit-voor-bit gelijk aan het venster uit de volledige invoer", async () => {
     const bron = new Invoerbron("/data", haal);
@@ -142,6 +307,8 @@ describe("het protocol door de echte worker", () => {
   let stuur: (msg: WorkerRequest) => Promise<void>;
 
   beforeAll(async () => {
+    // Een eigen exemplaar van de worker: de tests hierboven laden er ook een.
+    vi.resetModules();
     globalThis.fetch = haal;
     const nep = {
       onmessage: null as ((e: { data: WorkerRequest }) => unknown) | null,

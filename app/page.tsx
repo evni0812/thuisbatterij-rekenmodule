@@ -48,6 +48,7 @@ import { UITLEG, type UitlegContext } from "../lib/uitleg";
 import { overgangsFinance } from "../lib/overgang";
 import { useAnalysis } from "../lib/useAnalysis";
 import { leesUrl, schrijfUrl, type Instellingen } from "../lib/url-state";
+import { VELDNAAM } from "../lib/normaliseer";
 import type { Configuration } from "../lib/worker/protocol";
 
 /**
@@ -71,18 +72,24 @@ export default function Page() {
   const [laatsteBewaard, setLaatsteBewaard] = useState<string | null>(null);
   /** De instellingen kwamen uit de browseropslag, niet uit de URL. */
   const [uitOpslag, setUitOpslag] = useState(false);
+  /** Instellingen uit de link die niet klopten en zijn teruggezet of begrensd. */
+  const [aangepast, setAangepast] = useState<(keyof Instellingen)[]>([]);
 
   // De configuratie staat in de URL, zodat elke doorrekening deelbaar is. Een
   // URL met parameters wint van de bewaarde instellingen: een gedeelde link
   // moet laten zien wat de afzender zag.
   useEffect(() => {
-    const uitUrl = leesUrl();
+    const gecorrigeerd: (keyof Instellingen)[] = [];
+    const uitUrl = leesUrl(gecorrigeerd);
+    if (gecorrigeerd.length > 0) setAangepast(gecorrigeerd);
     const p = new URLSearchParams(window.location.search);
     const tabUrl = p.get("tab");
     if (isTabId(tabUrl)) setTab(tabUrl);
 
     const laatste = leesLaatste();
-    if (Object.keys(uitUrl).length === 0 && laatste) {
+    // Een link met alleen onleesbare instellingen is nog steeds een link: dan
+    // de standaard, niet de bewaarde set van de ontvanger.
+    if (Object.keys(uitUrl).length === 0 && gecorrigeerd.length === 0 && laatste) {
       setInst(laatste.inst);
       setUitOpslag(true);
     } else {
@@ -107,6 +114,9 @@ export default function Page() {
       () => (geladen ? maakConfiguratie(inst) : null),
       [geladen, inst],
     ),
+    // Het raster en de huishoudens staan alleen op "Wat als"; zolang dat
+    // tabblad dicht is, rekent de telefoon er niet aan.
+    { rasterNodig: tab === "wat-als" },
   );
 
   const {
@@ -133,7 +143,20 @@ export default function Page() {
     herbereken,
     getoondeConfig,
     verouderd,
+    fataal,
+    probeerOpnieuw,
+    scenarioFout,
+    uitCache,
   } = state;
+
+  // Een netgebied dat niet in de data staat (een oude of verminkte link) gaf
+  // een technische foutmelding. Terug naar het standaardnetgebied, en zeggen.
+  useEffect(() => {
+    if (!manifest || manifest.netgebieden.includes(inst.domein)) return;
+    if (!manifest.netgebieden.includes(STANDAARD.domein)) return;
+    setInst((s) => ({ ...s, domein: STANDAARD.domein }));
+    setAangepast((a) => (a.includes("domein") ? a : [...a, "domein"]));
+  }, [manifest, inst.domein]);
 
   // Alles wat naast het resultaat wordt getoond, komt uit de configuratie die
   // bij dát resultaat hoort — niet uit de live invoer. Anders staat een verse
@@ -207,7 +230,9 @@ export default function Page() {
   const wachtOpResultaat = !result ? (
     <div className="notitie">
       <p>
-        {error ? (
+        {fataal ? (
+          <>De gegevens konden niet worden geladen. Probeer het opnieuw op het tabblad Start.</>
+        ) : error ? (
           <>Er ging iets mis bij het rekenen: {error}</>
         ) : (
           <>De doorrekening loopt nog. Dit tabblad vult zich zodra het antwoord er is.</>
@@ -271,6 +296,18 @@ export default function Page() {
             </div>
           ) : null}
 
+          {aangepast.length > 0 ? (
+            <div className="notitie" role="status">
+              <p>
+                <b>Niet alles uit de link was bruikbaar.</b> Aangepast naar een
+                geldige waarde: {aangepast.map((k) => VELDNAAM[k]).join(", ")}.
+              </p>
+              <button type="button" className="knop licht klein" onClick={() => setAangepast([])}>
+                Begrepen
+              </button>
+            </div>
+          ) : null}
+
           <Invoer
             afnameKwh={inst.afnameKwh}
             terugleveringKwh={inst.terugleveringKwh}
@@ -311,7 +348,22 @@ export default function Page() {
             </p>
           ) : null}
 
-          {!result && !error ? (
+          {fataal ? (
+            <div className="notitie" role="alert">
+              <p>
+                <b>De gegevens konden niet worden geladen.</b>{" "}
+                {result && uitCache
+                  ? "Hieronder staat je vorige doorrekening, uit deze browser. "
+                  : ""}
+                Controleer je verbinding en probeer het opnieuw. ({fataal})
+              </p>
+              <button type="button" className="knop licht klein" onClick={probeerOpnieuw}>
+                Opnieuw proberen
+              </button>
+            </div>
+          ) : null}
+
+          {!result && !error && !fataal ? (
             <p className="laden">De gegevens worden geladen…</p>
           ) : null}
 
@@ -471,6 +523,11 @@ export default function Page() {
                 overgang={overgang}
                 actie={uitleg("nettarief")}
               />
+              {scenarioFout && !scenario ? (
+                <p className="fout" role="alert">
+                  Het nettariefscenario kon niet worden doorgerekend: {scenarioFout}
+                </p>
+              ) : null}
               {toon ? (
                 <>
                   <BatterijMaat

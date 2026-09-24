@@ -44,7 +44,39 @@ import type {
  * en schaalfactoren tussen aanvragen bewaard blijven.
  */
 let bron = new Invoerbron();
-let manifest: Manifest | null = null;
+/**
+ * De initialisatie, als belofte. Elke aanvraag wacht hierop in plaats van te
+ * controleren of er al een manifest is.
+ *
+ * Eerder gooide een worker die een taak kreeg vóór zijn manifest binnen was
+ * "worker is nog niet geïnitialiseerd". Dat gebeurde gewoon: de pool verdeelt
+ * taken zodra hij ze heeft, en alleen worker 0 meldde zich klaar. Met een
+ * trage verbinding voor de helpers faalde zo de hele doorrekening, en omdat
+ * de fout buiten `pooltaak` viel kwam er geen `klaar`: de helpers bleven de
+ * rest van de sessie bezet. Nu wacht een vroege taak gewoon tot het manifest
+ * er is, en faalt hij alleen als de initialisatie zelf faalde.
+ */
+let initBelofte: Promise<Manifest> | null = null;
+
+/** Wacht tot de worker klaar is voor werk; gooit als de initialisatie mislukte. */
+async function klaarVoorWerk(): Promise<void> {
+  if (!initBelofte) throw new Error("worker is nog niet geïnitialiseerd");
+  await initBelofte;
+}
+
+/**
+ * Bestanden via de hoofdthread (lib/worker/ophalen.ts): één download voor alle
+ * workers. Elk verzoek krijgt een nummer; het antwoord `gehaald` lost de
+ * bijbehorende belofte op.
+ */
+let verzoekTeller = 0;
+const openstaand = new Map<number, { los: (r: Response) => void; faal: (e: Error) => void }>();
+const viaHoofdthread = (url: string): Promise<Response> =>
+  new Promise((los, faal) => {
+    const verzoek = ++verzoekTeller;
+    openstaand.set(verzoek, { los, faal });
+    post({ type: "haal", verzoek, url });
+  });
 
 async function buildInput(config: Configuration): Promise<AnalysisInput> {
   return bron.bouwInvoer(config);
@@ -68,6 +100,7 @@ function buffersVan(d: DispatchResult | undefined): ArrayBuffer[] {
  */
 async function pooltaak(id: number, werk: () => Promise<void>): Promise<void> {
   try {
+    await klaarVoorWerk();
     await werk();
   } catch (err) {
     post({ type: "error", id, message: err instanceof Error ? err.message : String(err) });
@@ -99,25 +132,31 @@ async function runGrid(
   const prijsPerKwh = prijsPerKwhVan(invoer, config.investmentEur);
 
   for (let k = 0; k < rijen.length; k++) {
-    if (huidigeGrid !== id) return; // een nieuwere aanvraag heeft voorrang
     const r = rijen[k]!;
     const cap = capacities[r]!;
-    const points: GridPoint[] = powers.map((kw) =>
-      rasterPunt(
-        entry,
-        basis,
-        invoer.battery,
-        invoer.tariff,
-        cap,
-        kw,
-        prijsPerKwh,
-        config.cycleLife,
-        config.wearFraction ?? 1,
-      ),
-    );
+    const points: GridPoint[] = [];
+    for (const kw of powers) {
+      // Na elk punt terug naar de berichtenlus, niet pas na een rij: een rij is
+      // zeven jaarsimulaties, ruim een seconde op een telefoon, en zolang
+      // bleef een annulering of een nieuwere aanvraag liggen.
+      if (huidigeGrid !== id) return; // een nieuwere aanvraag heeft voorrang
+      points.push(
+        rasterPunt(
+          entry,
+          basis,
+          invoer.battery,
+          invoer.tariff,
+          cap,
+          kw,
+          prijsPerKwh,
+          config.cycleLife,
+          config.wearFraction ?? 1,
+        ),
+      );
+      await adempauze();
+    }
+    if (huidigeGrid !== id) return;
     post({ type: "grid-row", id, row: r, points, done: k === rijen.length - 1 });
-    // Even terug naar de berichtenlus, zodat een annulering ertussen kan.
-    await new Promise((resolve) => setTimeout(resolve, 0));
   }
 }
 
@@ -181,6 +220,17 @@ async function warmOp(id: number, config: Configuration): Promise<void> {
     await adempauze();
   }
 }
+
+/** De berichten die als pooltaak lopen: de pool wacht op hun `klaar`. */
+const POOLTAKEN = new Set<WorkerRequest["type"]>([
+  "grid",
+  "huishoudens",
+  "venster",
+  "quick",
+  "perfect",
+  "voegSamen",
+  "voegSamenScenario",
+]);
 
 /** Volgnummer van het raster dat nu mag draaien; ouder werk stopt vanzelf. */
 let huidigeGrid = -1;
@@ -269,23 +319,40 @@ async function zorgVoorInvoer(config: Configuration): Promise<Doorrekening> {
     return laatste;
   }
 
-  const invoer = await buildInput(config);
-  vorige = laatste;
-  laatste = {
-    sleutel,
-    invoer,
-    spec: {
-      ...invoer.battery,
-      wearCostEurPerKwh:
-        wearCostPerKwh(invoer.investmentEur, invoer.cycleLife, invoer.battery) *
-        (invoer.wearFraction ?? 1),
-    },
-    dispatches: new Map(),
-    optimaal: new Map(),
-    basis: new Map(),
-  };
-  return laatste;
+  // Twee aanvragen voor dezelfde nieuwe configuratie (de opwarming en een dag)
+  // bouwen de invoer één keer, en krijgen hetzelfde slot.
+  const lopend = inOpbouw.get(sleutel);
+  if (lopend) return lopend;
+  const opbouw = (async () => {
+    const invoer = await buildInput(config);
+    const staat: Doorrekening = {
+      sleutel,
+      invoer,
+      spec: {
+        ...invoer.battery,
+        wearCostEurPerKwh:
+          wearCostPerKwh(invoer.investmentEur, invoer.cycleLife, invoer.battery) *
+          (invoer.wearFraction ?? 1),
+      },
+      dispatches: new Map(),
+      optimaal: new Map(),
+      basis: new Map(),
+    };
+    // Kwam het slot intussen via een samenvoeging binnen, dan wint dat: daar
+    // staan de dispatches al in.
+    if (laatste && laatste.sleutel === sleutel) return laatste;
+    vorige = laatste;
+    laatste = staat;
+    return staat;
+  })();
+  inOpbouw.set(sleutel, opbouw);
+  try {
+    return await opbouw;
+  } finally {
+    inOpbouw.delete(sleutel);
+  }
 }
+const inOpbouw = new Map<string, Promise<Doorrekening>>();
 
 /** Zoek de dag op, en reken het jaar waarin hij valt door als dat nog moet. */
 function haalDag(
@@ -354,10 +421,19 @@ function haalPeriode(
 
 self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
   const msg = event.data;
+  if (msg.type === "gehaald") {
+    const wacht = openstaand.get(msg.verzoek);
+    openstaand.delete(msg.verzoek);
+    if (!wacht) return;
+    if (msg.buffer) wacht.los(new Response(msg.buffer));
+    else wacht.faal(new Error(msg.fout ?? "kon het bestand niet laden"));
+    return;
+  }
   try {
     if (msg.type === "init") {
-      bron = new Invoerbron(msg.baseUrl);
-      manifest = await bron.init();
+      bron = new Invoerbron(msg.baseUrl, msg.viaHoofdthread ? viaHoofdthread : fetch);
+      initBelofte = bron.init();
+      const manifest = await initBelofte;
       post({ type: "ready", manifest });
       return;
     }
@@ -369,28 +445,25 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       return;
     }
     if (msg.type === "warm") {
-      if (!manifest) throw new Error("worker is nog niet geïnitialiseerd");
       huidigeWarm = msg.id;
+      await klaarVoorWerk();
       await adempauze();
       if (huidigeWarm !== msg.id) return;
       await warmOp(msg.id, msg.config);
       return;
     }
     if (msg.type === "huishoudens") {
-      if (!manifest) throw new Error("worker is nog niet geïnitialiseerd");
       huidigeHuishoudens = msg.id;
       await pooltaak(msg.id, () => runHuishoudens(msg.id, msg.config, msg.varianten, msg.indices));
       return;
     }
     if (msg.type === "grid") {
-      if (!manifest) throw new Error("worker is nog niet geïnitialiseerd");
       huidigeGrid = msg.id;
       const rijen = msg.rijen ?? msg.capacities.map((_, i) => i);
       await pooltaak(msg.id, () => runGrid(msg.id, msg.config, msg.capacities, msg.powers, rijen));
       return;
     }
     if (msg.type === "venster") {
-      if (!manifest) throw new Error("worker is nog niet geïnitialiseerd");
       await pooltaak(msg.id, async () => {
         const invoer = await bron.bouwInvoer(msg.config, { alleenVenster: msg.jaarIndex });
         const { spec, volleSlijtage } = slijtageVoor(invoer);
@@ -406,7 +479,6 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       return;
     }
     if (msg.type === "quick") {
-      if (!manifest) throw new Error("worker is nog niet geïnitialiseerd");
       await pooltaak(msg.id, async () => {
         const invoer = await bron.bouwInvoer(msg.config, { alleenVenster: msg.jaarIndex });
         const { spec } = slijtageVoor(invoer);
@@ -417,7 +489,6 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       return;
     }
     if (msg.type === "perfect") {
-      if (!manifest) throw new Error("worker is nog niet geïnitialiseerd");
       await pooltaak(msg.id, async () => {
         const invoer = await bron.bouwInvoer(msg.config, { alleenVenster: msg.jaarIndex });
         const { spec } = slijtageVoor(invoer);
@@ -428,7 +499,6 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       return;
     }
     if (msg.type === "voegSamen") {
-      if (!manifest) throw new Error("worker is nog niet geïnitialiseerd");
       await pooltaak(msg.id, async () => {
         const t0 = performance.now();
         const invoer = await buildInput(msg.config);
@@ -451,7 +521,6 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       return;
     }
     if (msg.type === "voegSamenScenario") {
-      if (!manifest) throw new Error("worker is nog niet geïnitialiseerd");
       await pooltaak(msg.id, async () => {
         const invoer = await buildInput(msg.config);
         post({ type: "scenario", id: msg.id, result: voegSamenScenario(invoer, msg.uitkomsten, msg.metingen) });
@@ -459,8 +528,8 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       return;
     }
     if (msg.type === "day") {
-      if (!manifest) throw new Error("worker is nog niet geïnitialiseerd");
       huidigeDag = msg.id;
+      await klaarVoorWerk();
       await adempauze();
       if (huidigeDag !== msg.id) return; // er ligt al een nieuwere aanvraag
       const staat = await zorgVoorInvoer(msg.config);
@@ -468,8 +537,8 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       return;
     }
     if (msg.type === "periode") {
-      if (!manifest) throw new Error("worker is nog niet geïnitialiseerd");
       huidigePeriode[msg.kanaal] = msg.id;
+      await klaarVoorWerk();
       await adempauze();
       if (huidigePeriode[msg.kanaal] !== msg.id) return;
       const staat = await zorgVoorInvoer(msg.config);
@@ -482,7 +551,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       return;
     }
     if (msg.type === "analyse") {
-      if (!manifest) throw new Error("worker is nog niet geïnitialiseerd");
+      await klaarVoorWerk();
       const t0 = performance.now();
       const invoer = await buildInput(msg.config);
       // De dispatches komen uit dezelfde doorrekening; opnieuw rekenen zou een
@@ -517,8 +586,8 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       // Een tweede volledige doorrekening met een andere tariefopbouw. Hij raakt
       // `laatste` bewust niet aan: de dagkiezer hoort bij het hoofdresultaat, en
       // die zou anders stilletjes op het scenario gaan wijzen.
-      if (!manifest) throw new Error("worker is nog niet geïnitialiseerd");
       huidigScenario = msg.id;
+      await klaarVoorWerk();
       await adempauze();
       // Een annulering of een nieuwere aanvraag die intussen binnenkwam wint.
       if (huidigScenario !== msg.id) return;
@@ -533,5 +602,8 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
       id: "id" in msg ? msg.id : null,
       message: err instanceof Error ? err.message : String(err),
     });
+    // Een pooltaak die hier belandt (buiten `pooltaak` om misgegaan) moet de
+    // worker toch vrijgeven, anders blijft hij de hele sessie bezet.
+    if ("id" in msg && POOLTAKEN.has(msg.type)) post({ type: "klaar", id: msg.id });
   }
 };
