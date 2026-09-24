@@ -1,4 +1,4 @@
-import { defineConfig } from "vitest/config";
+import { configDefaults, defineConfig } from "vitest/config";
 
 export default defineConfig({
   test: {
@@ -13,6 +13,9 @@ export default defineConfig({
      * halve minuut langer, maar de tijdsbudgetten betekenen dan weer iets.
      */
     fileParallelism: false,
+    // Agents en reviews werken in git-worktrees onder .claude/; die bevatten
+    // een volledige kopie van tests/ en horen niet in deze suite.
+    exclude: [...configDefaults.exclude, ".claude/**"],
     // Modeltests draaien in Node; componenttests hebben een DOM nodig. De
     // environment wordt per bestand gekozen met een docblock-comment.
     environment: "node",
