@@ -7,6 +7,7 @@
  */
 
 import type { Doel } from "./model/types";
+import { normaliseerDeel } from "./normaliseer";
 
 export interface Instellingen {
   afnameKwh: number;
@@ -88,58 +89,62 @@ const SLEUTELS: Record<keyof Instellingen, string> = {
   opwekKwh: "opwek",
 };
 
-export function leesUrl(): Partial<Instellingen> {
+/**
+ * Een getal zoals schrijfUrl het wegschrijft: cijfers, hoogstens een minteken
+ * en een decimale punt. `Number()` alleen is te ruim: die maakt van een leeg
+ * veld 0, van `0x10` 16 en van `1e12` een biljoen.
+ */
+const GETAL = /^-?\d+(\.\d+)?$/;
+
+/**
+ * Lees de instellingen uit de URL, binnen de grenzen van lib/normaliseer.ts.
+ *
+ * Wat niet te lezen is valt weg (de pagina neemt er de standaard voor), wat
+ * buiten de grenzen valt wordt geklemd. De sleutels die niet ongeschonden
+ * door de controle kwamen gaan naar `gecorrigeerd`, zodat de pagina kan zeggen
+ * dat een link is aangepast; schrijfUrl schoont de adresbalk daarna vanzelf op.
+ */
+export function leesUrl(gecorrigeerd?: (keyof Instellingen)[]): Partial<Instellingen> {
   if (typeof window === "undefined") return {};
   const p = new URLSearchParams(window.location.search);
-  const uit: Partial<Instellingen> = {};
+  const ruw: Partial<Record<keyof Instellingen, unknown>> = {};
 
-  const getal = (sleutel: string): number | undefined => {
-    const v = p.get(sleutel);
-    if (v === null) return undefined;
-    const n = Number(v);
-    return Number.isFinite(n) ? n : undefined;
-  };
+  const getalVelden: (keyof Instellingen)[] = [
+    "afnameKwh",
+    "terugleveringKwh",
+    "spreiding",
+    "terugleverkostenCt",
+    "analysejaren",
+    "discontovoet",
+    "prijsstijging",
+    "degradatie",
+    "slijtageDeel",
+    "kostenPerKwh",
+    "kostenPerKw",
+    "installatieEur",
+    "co2Drempel",
+    "prijsEur",
+    "capaciteitKwh",
+    "vermogenKw",
+    "opwekKwh",
+  ];
+  for (const k of getalVelden) {
+    const v = p.get(SLEUTELS[k]);
+    if (v === null) continue;
+    // Onleesbaar: als ongeldig doorgeven, zodat het gemeld wordt.
+    ruw[k] = GETAL.test(v.trim()) ? Number(v) : Number.NaN;
+  }
+  for (const k of ["presetId", "domein", "van", "tot", "heffing", "doel"] as const) {
+    const v = p.get(SLEUTELS[k]);
+    if (v !== null && v !== "") ruw[k] = v;
+  }
+  for (const k of ["curtailment", "zonnepanelen"] as const) {
+    const v = p.get(SLEUTELS[k]);
+    if (v === null) continue;
+    ruw[k] = v === "1" ? true : v === "0" ? false : v;
+  }
 
-  const zetGetal = <K extends keyof Instellingen>(key: K, v: number | undefined) => {
-    if (v !== undefined) (uit as Record<string, unknown>)[key] = v;
-  };
-
-  zetGetal("afnameKwh", getal(SLEUTELS.afnameKwh));
-  zetGetal("terugleveringKwh", getal(SLEUTELS.terugleveringKwh));
-  zetGetal("spreiding", getal(SLEUTELS.spreiding));
-  zetGetal("terugleverkostenCt", getal(SLEUTELS.terugleverkostenCt));
-  zetGetal("analysejaren", getal(SLEUTELS.analysejaren));
-  zetGetal("discontovoet", getal(SLEUTELS.discontovoet));
-  zetGetal("prijsstijging", getal(SLEUTELS.prijsstijging));
-  zetGetal("degradatie", getal(SLEUTELS.degradatie));
-  zetGetal("slijtageDeel", getal(SLEUTELS.slijtageDeel));
-  zetGetal("kostenPerKwh", getal(SLEUTELS.kostenPerKwh));
-  zetGetal("kostenPerKw", getal(SLEUTELS.kostenPerKw));
-  zetGetal("installatieEur", getal(SLEUTELS.installatieEur));
-  zetGetal("co2Drempel", getal(SLEUTELS.co2Drempel));
-  zetGetal("prijsEur", getal(SLEUTELS.prijsEur));
-  zetGetal("capaciteitKwh", getal(SLEUTELS.capaciteitKwh));
-  zetGetal("vermogenKw", getal(SLEUTELS.vermogenKw));
-  zetGetal("opwekKwh", getal(SLEUTELS.opwekKwh));
-
-  const preset = p.get(SLEUTELS.presetId);
-  if (preset) uit.presetId = preset;
-  const net = p.get(SLEUTELS.domein);
-  if (net) uit.domein = net;
-  const van = p.get(SLEUTELS.van);
-  if (van) uit.van = van;
-  const tot = p.get(SLEUTELS.tot);
-  if (tot) uit.tot = tot;
-  const afr = p.get(SLEUTELS.curtailment);
-  if (afr !== null) uit.curtailment = afr === "1";
-  const zon = p.get(SLEUTELS.zonnepanelen);
-  if (zon !== null) uit.zonnepanelen = zon === "1";
-  const hef = p.get(SLEUTELS.heffing);
-  if (hef === "toen" || hef === "nu") uit.heffing = hef;
-  const doel = p.get(SLEUTELS.doel);
-  if (doel === "rendement" || doel === "zelfconsumptie" || doel === "uitstoot") uit.doel = doel;
-
-  return uit;
+  return normaliseerDeel(ruw, gecorrigeerd);
 }
 
 export function schrijfUrl(
