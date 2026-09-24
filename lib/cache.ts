@@ -63,6 +63,11 @@ export interface Bundel {
  * afgeronde centen, en met de heffing van het scenariojaar in plaats van die
  * van toen; dat verandert de bedragen van het scenario in de bundel.
  *
+ * Versie 16: de nettingschaling komt bij elke verhouding tussen afname en
+ * teruglevering op de meterstanden uit. Bij een scheve verhouding verdween de
+ * teruglevering eerder stil; bij de gewone verhoudingen schuiven de bedragen
+ * minder dan een duizendste euro, omdat de schaling nu scherper oplost.
+ *
  * Versie 15: de eindwaarde van de rollende planner trekt de slijtagedrempel af
  * en het laatste plan van een venster waardeert restlading niet meer; de
  * voorspelling kent op de zomertijdwissel geen metingen van na het
@@ -94,7 +99,7 @@ export interface Bundel {
  * heffing per uur in plaats van een jaarconstante, en de uitvoerder die bewuste
  * verkoop aan het net doorlaat. Alle drie veranderen de bedragen.
  */
-export const MODEL_VERSIE = 15;
+export const MODEL_VERSIE = 16;
 
 /**
  * Alles van de cache staat onder zijn eigen voorvoegsel, `tbat:cache:`.

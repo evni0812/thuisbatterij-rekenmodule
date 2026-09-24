@@ -787,14 +787,48 @@ opnieuw genormaliseerd: drie wintermaanden horen meer dan een kwart van het
 jaarvolume te bevatten.
 
 **Netten en de meterstanden.** E17 en E18 zijn gemiddelden over veel
-huishoudens en overlappen elkaar op veel kwartieren; het model trekt ze per
-kwartier van elkaar af, want één aansluiting kan maar één kant op. Daarbij valt
+huishoudens, per energierichting opgeteld over een steekproef van slimme meters,
+en overlappen elkaar op veel kwartieren. Het model trekt ze per kwartier van
+elkaar af: volgens de netbeheerders zelf neemt één aansluiting binnen een
+kwartier meestal óf af óf levert terug, en is de overlap een eigenschap van de
+groep (codewijzigingsvoorstel profielallocatie, BR-2021-1822). Daarbij valt
 volume weg: met 2.500/2.000 kWh bleef er zonder correctie 2.086/1.586 over. De
-jaartotalen op de afrekening zijn zelf al genette sommen, dus het model schaalt
-de twee fracties met factoren (`solveNettingScale`, ruwweg 1,20 en 1,25) zodat de
-genette reeks over een vol jaar exact op de meterstanden uitkomt. Deeljaren lenen
-die factoren van het meest recente volle jaar. Het scheelt bijna een vijfde in de
-besparing.
+jaartotalen op de afrekening zijn daardoor vrijwel genette sommen, dus het model
+schaalt de twee fracties met factoren (`solveNettingScale`, ruwweg 1,20 en 1,25)
+zodat de genette reeks over een vol jaar exact op de meterstanden uitkomt.
+Deeljaren lenen die factoren van het meest recente volle jaar. Het scheelt bijna
+een vijfde in de besparing.
+
+De schaling lost één onbekende op met bisectie, en komt bij elke verhouding op
+de meterstanden uit. De vast-punt-iteratie die er eerst stond, gaf het op zodra
+geen kwartier meer een overschot had: boven een verhouding van ongeveer 58
+tussen afname en teruglevering (30.000 tegen 500 kWh is al 60) verdween de
+teruglevering stil uit het model. `tests/pipeline.test.ts` controleert de
+meterstanden nu voor alle netgebieden, van 30.000/100 tot 100/30.000 kWh.
+
+**Waarom niet apart houden.** Houd je E17 en E18 apart, dan kloppen de
+meterstanden vanzelf, maar laadt de batterij uit de teruglevering en levert hij
+in hetzelfde kwartier aan de afname: stroom schuiven tussen buren. Doorgerekend
+op Liander 2025 (2.500/2.000 kWh, perfecte vooruitblik, beide varianten op de
+meterstanden):
+
+| Invoer | Overlap | Zendure 800 Pro 2 | 5 kWh / 2,5 kW |
+|---|---|---|---|
+| genet en geschaald (de tool) | 0 kWh | € 125 | € 257 |
+| 90% van de overlap weggenet | 49 kWh | € 131 | € 262 |
+| 50% weggenet | 227 kWh | € 153 | € 276 |
+| apart gehouden | 414 kWh | € 177 | € 290 |
+
+De extra besparing komt volledig uit de overlap: de opgeslagen zonnestroom
+verdubbelt van 461 naar 890 kWh. Wat één echt huis binnen een kwartier beide
+kanten op doet (een wolk, een waterkoker), is volgens metingen op seconde- en
+minuutbasis goed voor enkele procentpunten zelfconsumptie, en met een batterij
+verwaarloosbaar (Tjaden e.a., HTW Berlin 2014; Beck e.a., Applied Energy 2016).
+Netten zit daarom het dichtst bij één aansluiting. Blijft er bij een echt huis
+een tiende van de overlap over, dan ligt de besparing zo'n 5% hoger. Een
+openbare dataset met kwartierstanden van losse huishoudens, beide telwerken
+apart, om dat te ijken bestaat niet; een paar tientallen P1-metingen zouden het
+beslechten.
 
 **Heffing per uur.** Energiebelasting plus inkoopopslag komt uit
 allInPrijs − marktprijs, per uur en niet als jaarconstante: in 2025 zakte de

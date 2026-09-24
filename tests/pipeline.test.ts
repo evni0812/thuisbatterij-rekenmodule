@@ -241,8 +241,8 @@ describe("volumes", () => {
 
   it("reproduceert met schaling exact de meterstanden", () => {
     /**
-     * Eén meter kan binnen een kwartier niet tegelijk afnemen en terugleveren,
-     * dus de jaartotalen op de afrekening zijn al genette sommen. Het model
+     * Eén meter neemt binnen een kwartier meestal óf af óf levert terug, dus
+     * de jaartotalen op de afrekening zijn vrijwel genette sommen. Het model
      * hoort ze terug te geven, niet 83% ervan.
      */
     for (const year of [2024, 2025]) {
@@ -265,6 +265,57 @@ describe("volumes", () => {
       expect(s.gridImportKwh).toBeCloseTo(2500, 0);
       expect(s.gridExportKwh).toBeCloseTo(2000, 0);
     }
+  });
+
+  it("reproduceert de meterstanden bij elke verhouding, in elk netgebied", () => {
+    /**
+     * De oude vast-punt-iteratie gaf het op zodra geen kwartier meer een
+     * overschot had. Boven een verhouding van ongeveer 58 verdween de
+     * teruglevering dan stil, en bij 100.000/2.000 kwam de afname uit op
+     * 148.213 kWh. Die verhouding ligt binnen de invoergrenzen (30.000 tegen
+     * 500 is al 60), dus de uitersten horen hier, beide kanten op.
+     */
+    const verhoudingen: [number, number][] = [
+      [2500, 2000],
+      [1000, 1000],
+      [30000, 500],
+      [30000, 100],
+      [100000, 2000],
+      [500, 30000],
+      [100, 30000],
+    ];
+    // Het laatste volle jaar per netgebied: dat is het jaar waarop de app zijn
+    // schaalfactoren bepaalt (lib/data/invoer.ts).
+    for (const domain of Object.keys(manifest.profielen)) {
+      const jaar = Object.entries(manifest.profielen[domain]!)
+        .filter(([, info]) => info.volledig_jaar)
+        .map(([y]) => Number(y))
+        .sort((a, b) => b - a)[0];
+      if (jaar === undefined) continue;
+      const prof = profileYear(domain, jaar);
+      for (const [af, tl] of verhoudingen) {
+        const hh: HouseholdSpec = { annualGridImportKwh: af, annualGridExportKwh: tl, spreadFactor: 1 };
+        const scale = solveNettingScale(prof.importFraction, prof.exportFraction, hh);
+        const s = summarizeResidual(
+          buildResidual(prof.importFraction, prof.exportFraction, hh, prof.startMs, scale),
+          hh,
+        );
+        const plek = `${domain} ${jaar} ${af}/${tl}`;
+        // Relatief op een duizendste: de fracties zijn float32, en bij
+        // 100.000 kWh telt die ruis op tot enkele kWh.
+        expect(Math.abs(s.gridImportKwh / af - 1), plek).toBeLessThan(1e-3);
+        expect(Math.abs(s.gridExportKwh / tl - 1), plek).toBeLessThan(1e-3);
+      }
+    }
+  }, 30_000);
+
+  it("weigert meterstanden die met het profiel onhaalbaar zijn", () => {
+    // Een profiel waarin teruglevering nergens de afname overtreft: geen enkele
+    // schaal maakt dan een kwartier met overschot. Liever een fout dan een
+    // uitkomst die stil niet op de meterstanden uitkomt.
+    const vorm = new Float32Array(96).fill(1 / 96);
+    const hh: HouseholdSpec = { annualGridImportKwh: 2500, annualGridExportKwh: 2000, spreadFactor: 1 };
+    expect(() => solveNettingScale(vorm, vorm, hh)).toThrow(/niet te halen/);
   });
 
   it("laat de schaling van een vol jaar een deeljaar niet opblazen", () => {
