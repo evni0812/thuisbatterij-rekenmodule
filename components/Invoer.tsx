@@ -213,8 +213,8 @@ export function Invoer({
             : "Gerekend met het gemeten gemiddelde kwartierpatroon van alle kleinverbruikers zonder teruglevering in je netgebied (MFFBAS), geschaald naar jouw jaarafname. Geen meting van één huishouden."}
         </p>
         <p className="invoer-keuze-hint">
-          Deze doorrekening gaat uit van een dynamisch energiecontract en een
-          batterij die zelf op de uurprijzen stuurt.
+          Gerekend met een dynamisch energiecontract; wat dat betekent staat
+          bij het antwoord.
         </p>
       </div>
       <div className="invoer-velden">

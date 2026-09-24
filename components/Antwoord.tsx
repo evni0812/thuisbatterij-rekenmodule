@@ -27,6 +27,8 @@ import type { ReactNode } from "react";
 import type { AnalysisResult, ScenarioResult } from "../lib/model/analysis";
 import { overgangZin, type Overgang } from "../lib/overgang";
 import { euro, jaren, jarenReeks } from "../lib/format";
+import { stuurZin } from "../lib/model/doel";
+import type { Doel } from "../lib/model/types";
 
 /** De terugverdientijd als zinsdeel: "terugverdiend na 7 jaar" of "niet terugverdiend". */
 function terugverdiend(payback: number | null): string {
@@ -41,6 +43,7 @@ export function Antwoord({
   bezig,
   heffingVanNu = true,
   scenarioFout = null,
+  doel = "rendement",
   actie,
 }: {
   result: AnalysisResult;
@@ -67,6 +70,8 @@ export function Antwoord({
    * van die van toen. De grondslag onder het bedrag noemt welke.
    */
   heffingVanNu?: boolean;
+  /** Waar de batterij op stuurde; de grondslag zegt het erbij. */
+  doel?: Doel;
   /** De knop "Hoe is dit berekend?" rechtsboven. */
   actie?: ReactNode;
 }) {
@@ -122,16 +127,24 @@ export function Antwoord({
       <p className="antwoord-grondslag">
         Doorgerekend op de uurprijzen van {jaartallen} met de belasting en
         opslag van {heffingVanNu ? "nu" : "toen"}. De terugverdientijd trekt dat
-        door naar de toekomst; dat is een aanname, geen voorspelling. Deze
-        doorrekening gaat uit van een dynamisch energiecontract en een batterij
-        die zelf op de uurprijzen stuurt. Het eigen stroomverbruik van de
-        batterij (ongeveer 60 tot 220 kWh per jaar) is er niet van afgetrokken.
+        door naar de toekomst; dat is een aanname, geen voorspelling. Het
+        eigen stroomverbruik van de batterij (volgens fabrikanten ongeveer 60
+        tot 220 kWh per jaar) is er niet van afgetrokken.
+      </p>
+      {/* De contractvoorwaarde staat op Start één keer, hier bij het antwoord
+          waar hij bij hoort; de invoer verwijst ernaar. */}
+      <p className="antwoord-grondslag">
+        Deze doorrekening gaat uit van een dynamisch energiecontract en een
+        batterij die {stuurZin(doel)}. Heb je een vast of variabel contract?
+        Dan krijg je tot en met 2030 voor teruglevering minstens 50% van het
+        kale leveringstarief; die situatie rekent deze tool niet door.
       </p>
       <p className={scenario ? "antwoord-scenario" : "antwoord-scenario plaatshouder"}>
         {scenario ? (
           <>
-            Als het voorstel van de ACM doorgaat, geldt naar verwachting vanaf 1
-            januari {overgang?.ingangsjaar ?? 2029} (mogelijk later) een
+            Gaat het voorstel van de netbeheerders door (de ACM beslist
+            erover), dan geldt naar verwachting vanaf 1 januari{" "}
+            {overgang?.ingangsjaar ?? 2029} (mogelijk later) een
             tijdsafhankelijk nettarief. Met dat tarief was de besparing{" "}
             <strong>{euro(scenario.averageSavingEur)} per jaar</strong> geweest.
             {overgang && overgang.jarenOpHuidigTarief > 0 ? (

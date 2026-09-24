@@ -314,15 +314,10 @@ export default function Page() {
               je in die situatie had bespaard, op de{" "}
               <strong>werkelijke uurprijzen</strong> van ANWB Energie en het{" "}
               <strong>gemeten gemiddelde verbruikspatroon</strong> in jouw
-              netgebied, geschaald naar jouw jaartotalen. Drie getallen van je
-              jaarafrekening zijn genoeg.
-            </p>
-            <p>
-              Deze doorrekening gaat uit van een dynamisch energiecontract en een
-              batterij die zelf op de uurprijzen stuurt. Heb je een vast of
-              variabel contract? Dan krijg je tot en met 2030 voor teruglevering
-              minstens 50% van het kale leveringstarief; die situatie rekent deze
-              tool niet door.
+              netgebied, geschaald naar jouw jaartotalen.{" "}
+              {inst.zonnepanelen
+                ? "Twee getallen van je jaarafrekening zijn genoeg: je afname en je teruglevering."
+                : "Eén getal van je jaarafrekening is genoeg: je afname."}
             </p>
           </div>
 
@@ -434,6 +429,7 @@ export default function Page() {
                 bezig={busy}
                 heffingVanNu={toon?.useHistoricalLevy === false}
                 scenarioFout={scenarioFout}
+                doel={toon?.doel}
                 actie={uitleg("antwoord")}
               />
 
@@ -567,9 +563,9 @@ export default function Page() {
             <span className="eyebrow">Wat als · {TABS[3].vraag}</span>
             <h2>Een ander nettarief, een ander doel of een andere maat verandert de uitkomst</h2>
             <p>
-              Wat doet het tijdsafhankelijke nettarief als het voorstel van de
-              ACM doorgaat (naar verwachting vanaf 1 januari 2029, mogelijk
-              later), wat verandert er als de batterij op zelfconsumptie of
+              Wat doet het tijdsafhankelijke nettarief dat de netbeheerders
+              voorstellen en waarover de ACM beslist (naar verwachting vanaf 1
+              januari 2029, mogelijk later), wat verandert er als de batterij op zelfconsumptie of
               uitstoot stuurt in plaats van op rendement, welke maat batterij
               loont netto en tot waar loont uitbreiden, voor wie kan deze
               batterij uit, hoe zuinig gaat hij met zijn laadbeurten om, en hoe

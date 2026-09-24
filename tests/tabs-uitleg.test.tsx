@@ -237,6 +237,11 @@ describe("de teksten beweren niets wat niet klopt", () => {
     ["besparing één-op-één met de heffing", /één-op-één/],
     ["heffing van toen als 13 tot 17 cent", /13 tot 17 cent/],
     ["bedrag tegen een getal geplakt", /tegen\s*\n\s*\{centPerKwh/],
+    // Het voorstel komt van de netbeheerders; de ACM beslist erover.
+    ["voorstel van de ACM", /voorstel van de\s+ACM/],
+    ["drie getallen terwijl er twee gevraagd worden", /Drie getallen van je/],
+    ["eigen groep loont niet terwijl hij netto oplevert", /eigen groep door een installateur loont hier niet: de beste maat/],
+    ["EB 2027 als vaststaand", /2026 en 2027 vast op/],
   ])("niet: %s", (_naam, patroon) => {
     expect(tekst).not.toMatch(patroon);
   });

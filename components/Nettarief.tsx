@@ -88,8 +88,9 @@ export function Nettarief({
         <>
           Vandaag betaal je je netkosten als een vast bedrag per jaar: je
           doorlaatwaarde maal een tarief, hoeveel je ook gebruikt en wanneer ook.
-          Als het voorstel van de ACM doorgaat, verandert dat naar verwachting
-          vanaf {NETTARIEF_INGANG}, mogelijk later. Twee derde van het
+          Gaat het voorstel van de netbeheerders door (de ACM beslist erover),
+          dan verandert dat naar verwachting vanaf {NETTARIEF_INGANG}, mogelijk
+          later. Twee derde van het
           transporttarief wordt dan <b>per kilowattuur</b> in rekening gebracht,
           en die prijs hangt af van <b>het moment</b>: de winteravond wordt duur,
           de zomermiddag gratis. Precies de uren waarop een batterij levert en

@@ -51,6 +51,22 @@ export const DOELEN: readonly DoelInfo[] = [
   },
 ];
 
+/**
+ * Hoe de batterij in de doorrekening stuurt, als zinsdeel achter "een
+ * batterij die". Er stond overal "zelf op de uurprijzen stuurt", ook als de
+ * bezoeker Uitstoot of Zelfconsumptie had gekozen.
+ */
+export function stuurZin(id: Doel | undefined): string {
+  switch (id ?? STANDAARD_DOEL) {
+    case "zelfconsumptie":
+      return "alleen je eigen zonnestroom opslaat voor je eigen verbruik";
+    case "uitstoot":
+      return "zelf op de uitstoot van de stroom per uur stuurt";
+    default:
+      return "zelf op de uurprijzen stuurt";
+  }
+}
+
 export function doelInfo(id: Doel | undefined): DoelInfo {
   return DOELEN.find((d) => d.id === (id ?? STANDAARD_DOEL)) ?? DOELEN[0]!;
 }

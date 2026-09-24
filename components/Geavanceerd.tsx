@@ -572,7 +572,7 @@ export function Geavanceerd({
               <Percentage
                 veld="prijsstijging"
                 label="Prijsstijging per jaar"
-                uitleg="Hoe hard je verwacht dat het gat tussen afname en teruglevering groeit. Standaard 0%: de energiebelasting op stroom daalt eerder dan dat hij stijgt (2026 en 2027 vast op 11,1 ct) en PBL noemt de prijsontwikkeling tot 2030 zeer onzeker. Zet hem hoger als je anders verwacht."
+                uitleg="Hoe hard je verwacht dat het gat tussen afname en teruglevering groeit. Standaard 0%: de energiebelasting op stroom daalde de afgelopen jaren (2026: 11,1 ct inclusief btw; het tarief voor 2027 wordt pas eind 2026 vastgesteld) en het PBL geeft voor de groothandelsprijs van stroom in 2030 een brede bandbreedte, 53 tot 90 euro per MWh. Zet hem hoger als je anders verwacht."
                 fractie={inst.prijsstijging}
                 onChange={(v) => onChange({ prijsstijging: v })}
               />

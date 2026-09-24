@@ -87,12 +87,13 @@ export function Verantwoording({
               {result.gap ? (
                 <>
                   {" "}
-                  Van het verschil komt{" "}
+                  Waar dat verschil vandaan komt, is gemeten op {result.gap.year}:
+                  in dat jaar kwam{" "}
                   <strong>{euroPrecies(result.gap.forecastCostEur)}</strong> doordat
                   zon en verbruik van morgen een verwachting zijn, en{" "}
                   <strong>{euroPrecies(result.gap.horizonCostEur)}</strong> doordat
                   de prijzen van morgen pas rond 13:00 bekend worden. Het weer weegt
-                  hier dus veel zwaarder dan de prijshorizon.
+                  dus veel zwaarder dan de prijshorizon.
                 </>
               ) : null}
             </li>

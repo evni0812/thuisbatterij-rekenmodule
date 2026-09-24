@@ -36,7 +36,7 @@ import { HUISHOUDENS_TERUGLEVERING } from "./model/huishoudens";
 import { STEKKER_GRENS_KW, kostenregelVan } from "./model/kosten";
 import { CO2_KLASSE_G, STANDAARD_CO2_DREMPEL_G, huishoudPerspectief, nederlandPerspectief } from "./model/co2";
 import { AUTO_G_PER_KM } from "../components/Co2Antwoord";
-import { DOELEN, GRAM_PER_CENT, doelInfo } from "./model/doel";
+import { DOELEN, GRAM_PER_CENT, doelInfo, stuurZin } from "./model/doel";
 import { doelKaarten, type VergelijkingDelen } from "./model/vergelijking";
 import type { Configuration } from "./worker/protocol";
 
@@ -210,12 +210,12 @@ const STANDBY_LETOP = (
     60 tot 220 kWh per jaar. Trek dat er in gedachten van af.
   </>
 );
-const DYNAMISCH_LETOP = (
+const DYNAMISCH_LETOP = (c: Configuration) => (
   <>
     Deze doorrekening gaat uit van een dynamisch energiecontract en een batterij
-    die zelf op de uurprijzen stuurt. Met een vast of variabel contract krijg je
-    tot en met 2030 voor teruglevering minstens 50% van het kale
-    leveringstarief; die situatie rekent de tool niet door.
+    die {stuurZin(c.doel)}. Met een vast of variabel contract krijg je tot en
+    met 2030 voor teruglevering minstens 50% van het kale leveringstarief; die
+    situatie rekent de tool niet door.
   </>
 );
 const MARGINAAL_LETOP = (
@@ -404,7 +404,7 @@ export const UITLEG: Record<UitlegId, (ctx: UitlegContext) => UitlegBlok> = {
         config.doel && config.doel !== "rendement" ? (
           <>De batterij stuurt hier op <b>{doelInfo(config.doel).naam.toLowerCase()}</b>: {doelInfo(config.doel).kort} De besparing in euro's is daardoor lager dan bij sturen op rendement; dat is de prijs van die keuze, en die staat hier eerlijk.</>
         ) : null,
-GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP, STANDBY_LETOP, GEMIDDELD_LETOP, EEN_LEVERANCIER_LETOP],
+GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP, EEN_LEVERANCIER_LETOP],
     };
   },
 
@@ -998,7 +998,7 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP, STANDBY_LETOP, GEMIDDELD_LETOP, EEN_LE
     const jaar = scenarioJaar ?? NETTARIEF_JAAR;
     return {
       titel: "Het voorgestelde nettarief en wat het met de businesscase doet",
-      watZieJe: <>Dezelfde doorrekening nog een keer, nu met het tijdsafhankelijke nettarief bovenop de afnameprijs. Als het voorstel van de ACM doorgaat, geldt dat tarief naar verwachting vanaf 1 januari 2029, mogelijk later.</>,
+      watZieJe: <>Dezelfde doorrekening nog een keer, nu met het tijdsafhankelijke nettarief bovenop de afnameprijs. Gaat het voorstel van de netbeheerders door (de ACM beslist erover), dan geldt dat tarief naar verwachting vanaf 1 januari 2029, mogelijk later.</>,
       bronnen: [CE_BRON, PRIJS_BRON],
       stappen: [
         <>Het voorstel geeft per uur en per seizoen een wegingsfactor: 0, 0,3, 0,5, 0,7 of 1,0. Die staan vast. Het basistarief niet; dat is de prognose van CE Delft, in opdracht van NVDE, Holland Solar, Energie-Nederland en Energy Storage NL: {centPerKwh(BASISTARIEF[2030])} in 2030, en {centPerKwh(BASISTARIEF[2029])} in 2029 (ongeveer 7% lager: één jaar tariefstijging van 7,5% eraf).</>,

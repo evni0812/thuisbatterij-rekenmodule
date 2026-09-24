@@ -277,8 +277,13 @@ export function BatterijMaat({
           {besteVast ? (
             <>
               {" "}
-              Een eigen groep door een installateur loont hier niet: de beste maat met meer vermogen ({plek(besteVast)})
-              komt op {euro(besteVast.fin.npvEur)}.
+              {/* Op het teken: een eigen groep die netto nog iets oplevert,
+                  "loont" wel, alleen minder dan de stekkerbatterij. */}
+              {besteVast.fin.npvEur > 0
+                ? "Een eigen groep door een installateur levert hier minder op"
+                : "Een eigen groep door een installateur loont hier niet"}
+              : de beste maat met meer vermogen ({plek(besteVast)}) komt op{" "}
+              {euro(besteVast.fin.npvEur)}.
             </>
           ) : null}
         </>

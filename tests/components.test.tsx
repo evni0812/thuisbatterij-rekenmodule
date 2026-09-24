@@ -173,6 +173,16 @@ describe("de pagina toont het antwoord", () => {
     expect(tekst).toMatch(/eigen stroomverbruik van de\s+batterij/);
   });
 
+  it("zegt waar de batterij op stuurde, niet altijd de uurprijzen", () => {
+    render(<Antwoord result={result} scenario={null} overgang={null} investeringEur={699} bezig={false} doel="uitstoot" />);
+    const tekst = document.body.textContent ?? "";
+    expect(tekst).toMatch(/batterij die zelf op de uitstoot van de stroom per uur stuurt/);
+    expect(tekst).not.toMatch(/op de uurprijzen stuurt/);
+    // De contractvoorwaarde staat er één keer, met wat een vast contract krijgt.
+    expect(tekst.match(/dynamisch energiecontract/g)?.length).toBe(1);
+    expect(tekst).toMatch(/minstens 50% van het\s+kale leveringstarief/);
+  });
+
   it("legt de prijskloof uit met beide gewogen prijzen", () => {
     render(
       <Prijskloof gap={result.priceGap} afnameKwh={2500} terugleveringKwh={2000} />,
@@ -1130,7 +1140,9 @@ describe("de pagina vertelt het verhaal in vier delen, in die volgorde", () => {
     );
     const tekst = document.body.textContent ?? "";
     // Het nettarief is een voorstel, geen feit.
-    expect(tekst).toMatch(/Als het voorstel van de ACM doorgaat/);
+    // Het voorstel komt van de netbeheerders; de ACM beslist.
+    expect(tekst).toMatch(/Gaat het voorstel van de netbeheerders door \(de ACM beslist\s+erover\)/);
+    expect(tekst).not.toMatch(/voorstel van de ACM/);
     expect(tekst).toMatch(/mogelijk later/);
     // Eén vetgedrukt hoofdgetal: de terugverdientijd mét de overgang. Die van
     // een ongewijzigd tarief staat erachter als vergelijking.
