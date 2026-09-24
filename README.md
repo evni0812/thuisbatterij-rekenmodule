@@ -2,11 +2,24 @@
 
 Wat had een thuisbatterij je opgeleverd als er geen saldering was geweest?
 
-Deze tool rekent die vraag door op **werkelijk gemeten kwartierprofielen** en
-**werkelijke uurtarieven** — geen synthetische curves en geen prijsvoorspelling.
-Vanaf 2027 vervalt de saldering: teruglevering brengt dan nog de kale marktprijs
-op, terwijl afname het volle tarief kost. Dat gat is de hele businesscase van een
-thuisbatterij, en dit is de eerlijkste manier om te laten zien hoe groot het is.
+Deze tool rekent die vraag door op het **gemeten gemiddelde kwartierpatroon** van
+alle kleinverbruikers (E1A) met, of zonder, teruglevering in een netgebied
+(MFFBAS/EDSN), geschaald naar de jaartotalen van de gebruiker, en op de
+**werkelijke uurtarieven** van ANWB Energie — geen synthetische curves en geen
+prijsvoorspelling. Het profiel is geen meting van één huishouden: pieken van een
+waterkoker of laadpaal zijn uitgemiddeld.
+
+Op 1 januari 2027 stopt de salderingsregeling. Met een dynamisch contract krijg
+je voor teruglevering dan de kale marktprijs van dat uur, min eventuele
+terugleverkosten, terwijl afname het volle tarief met belasting kost. Dat gat is
+de hele businesscase van een thuisbatterij. Met een vast of variabel contract
+geldt tot en met 2030 een wettelijke minimumvergoeding van 50% van het kale
+leveringstarief; die situatie rekent de tool niet door. De doorrekening gaat uit
+van een dynamisch contract en een batterij die zelf op de uurprijzen stuurt.
+
+De uitkomst is een doorrekening op historische prijzen met de belasting en
+opslag van nu, geen persoonlijk advies en geen garantie. De tool is van de ANWB,
+die ook energie en thuisbatterijen verkoopt; dat staat ook op de pagina.
 
 De app draait volledig in de browser. Geen backend, geen API-calls tijdens
 gebruik, alles vanaf de CDN.
@@ -16,7 +29,7 @@ gebruik, alles vanaf de CDN.
 ```bash
 npm install
 npm run dev          # http://localhost:3000
-npm test             # 169 tests, waaronder de modelinvarianten
+npm test             # 348 tests, waaronder de modelinvarianten
 npm run build        # statische export naar out/
 npm run clean        # bij een vastgelopen build-cache
 ```
@@ -53,7 +66,7 @@ gemount zodat het dagprofiel zijn gekozen dag houdt.
 **Twee manieren om van tabblad te wisselen.** De tablist in de balk is er om
 ergens naartóé te springen; de stapper onder aan de pagina is er om verder te
 lezen — chevron naar links, chevron naar rechts, en daartussen een pil met het
-tabblad waar je staat. Die pil is letterlijk een venster: alle vijf de titels
+tabblad waar je staat. Die pil is letterlijk een venster: alle zes de titels
 staan naast elkaar op één spoor, de pil laat er één van zien en het spoor
 schuift op (`translateX(-i * 100%)`). Daardoor ís de beweging de navigatie — je
 ziet de oude titel weglopen en de nieuwe binnenkomen, en bij een sprong van twee
@@ -66,15 +79,19 @@ gewone knoppen en geen tweede tablist, zodat een schermlezer niet twee keer
 dezelfde structuur krijgt.
 
 **De terugverdientijd kent de ingangsdatum van het nettarief.** Het
-tijdsafhankelijke tarief gaat pas in 2029 in, dus een batterij die je vandaag
-koopt draait eerst nog een paar jaar op de tarieven van nu. `lib/overgang.ts`
+tijdsafhankelijke tarief is een voorstel; gaat het door, dan naar verwachting
+op 1 januari 2029 (mogelijk later). Een batterij die vanaf het einde van de
+saldering meedraait, rekent dus eerst nog een paar jaar met het huidige
+nettarief. `lib/overgang.ts`
 rekent dat geval: `computeFinance` accepteert een tweede besparingscurve en het
 jaar waarin die ingaat, en leest per jaar de goede curve af terwijl de
 degradatie gewoon doorloopt — het is dezelfde batterij, alleen de prijzen
 veranderen. Dat kost geen extra simulatie, want beide doorrekeningen leveren al
 een curve van besparing tegen resterende capaciteit op. Het antwoord bovenaan,
 de kerncijfers bij het nettarief en de cashflowgrafiek gebruiken alle drie dit
-getal; in de grafiek staat het omslagjaar als stippellijn. De twee losse
+getal; in het antwoord is het de enige vetgedrukte terugverdientijd ("als het
+nettarief-voorstel doorgaat"), met die van een ongewijzigd tarief erachter als
+vergelijking. In de grafiek staat het omslagjaar als stippellijn. De twee losse
 doorrekeningen leggen elk hún tarief over de hele levensduur en zijn dus te
 pessimistisch respectievelijk te optimistisch — die blijven staan als
 vergelijking van twee tariefwerelden, niet als voorspelling.
@@ -312,12 +329,13 @@ gemeten profielen (`Instellingen.zonnepanelen`, URL `zon`,
 opwek ook; de batterij verdient dan alleen aan het prijsverschil over de dag.
 De vorm verschilt echt: het AZI-profiel heeft geen middagdip (Liander 2025: 4,7%
 van het dagvolume om 12 uur tegen 2,6% bij huishoudens met panelen) en een
-lagere nacht. Beide zijn metingen, geen model; `tests/zonnepanelen.test.ts`
+lagere nacht. Beide zijn gemeten gemiddelden over alle aansluitingen van die
+soort in het netgebied, geen model en geen meting van één huishouden; `tests/zonnepanelen.test.ts`
 bewaakt dat verschil. `scripts/build_assets.py` schrijft de AZI-reeksen als
 `profile-<gebied>-<jaar>-azi.bin` en zet ze in het manifest onder
 `profielen_zonder`. Andere verbruiksscenario's (warmtepomp, elektrische auto)
 zijn bewust niet gebouwd: daar bestaat geen gemeten profiel voor en een model
-zou als echt verbruik gelezen worden.
+zou als gemeten verbruik gelezen worden.
 
 **Waarom E1A en niet E1B.** E1A is het enkeltariefprofiel, passend bij een
 dynamisch contract. E1B is dubbeltarief en sommeert over een jaar op ongeveer 2
@@ -338,12 +356,15 @@ de toekomst. Herplannen gebeurt eens per dag, uitgelijnd op het publicatiemoment
 van de nieuwe prijzen.
 
 Het verschil tussen beide is zelf een resultaat: het laat zien wat onvolmaakte
-informatie kost. Op de echte data haalt de realistische strategie ruwweg 85 tot
-90% van het optimum, afhankelijk van de batterij; de app toont het werkelijke
-percentage bij de verantwoording.
+informatie kost. Op de echte data haalt de realistische strategie 74 tot 99% van
+het optimum, afhankelijk van de maat van de batterij en het jaar; de app toont
+het werkelijke percentage (gemiddeld over de volledige jaren) bij de
+verantwoording.
 
 **Dat gat is de weersvoorspelling, niet de prijshorizon.** Gemeten over 2025,
-netgebied Liander, 2.500/2.000 kWh:
+netgebied Liander, 2.500/2.000 kWh. De bedragen zijn een momentopname van een
+eerdere modelversie (heffing van toen, oudere slijtagedrempel) en komen niet
+meer overeen met de app; de verhoudingen tussen de rijen zijn waar het om gaat:
 
 | | 1,92 kWh / 0,8 kW | 10 kWh / 3,6 kW |
 |---|---|---|
@@ -485,8 +506,9 @@ is exact de jaarbesparing van het referentiejaar in het hoofdresultaat (test in
 `tests/huishoudens.test.ts`). Het eigen huishouden staat als apart punt in de
 figuur; waar de lijn de nullijn kruist, komt de batterij uit de kosten.
 
-De adviesregel boven de kaart volgt uit de cel met de hoogste netto contante
-waarde: een stekkerbatterij als de beste maat op of onder 0,8 kW ligt, anders
+De regel boven de kaart ("Hoogste uitkomst in deze doorrekening", met jaar en
+heffing erbij; bewust geen "advies") volgt uit de cel met de hoogste netto
+contante waarde: een stekkerbatterij als de beste maat op of onder 0,8 kW ligt, anders
 een batterij met eigen groep, met erbij wat de beste maat aan de andere kant
 van de streep oplevert.
 
@@ -671,7 +693,8 @@ niet schaars waren, oplopend bij schaarste, met een proefrun om dat te bepalen.
 Die liet de batterij handelen op dagen waar de beurt méér aan slijtage kostte
 dan hij opleverde (18 december 2025: € 0,07 opbrengst tegen € 0,12 slijtage)
 zonder dat de gebruiker daar iets over te zeggen had. Dat is nu de expliciete
-stand "Maximaal rendement", met de zuinige stand als standaard.
+stand Volop (voorheen "Maximaal rendement"), en die is ook de standaard:
+`STANDAARD_SLIJTAGEDEEL` = 0,2 in `lib/strategie.ts`.
 
 **Het seizoensprofiel** (`seasonProfiles` in het resultaat) is de gemiddelde dag
 van winter en zomer: per uur van de dag hoeveel er van het net kwam en hoeveel
@@ -753,10 +776,12 @@ besparing.
 
 **Heffing per uur.** Energiebelasting plus inkoopopslag komt uit
 allInPrijs − marktprijs, per uur en niet als jaarconstante: in 2025 zakte de
-heffing in september van 17,13 naar 14,29 ct. Wie met de heffing van nu wil
-rekenen — die ligt een kwart tot een derde onder die van 2024 en 2025, en de
-besparing schaalt daar bijna één-op-één mee — zet dat aan bij de instellingen;
-dan geldt de heffing van het meest recente prijsjaar over alle jaren.
+heffing in september van 17,13 naar 14,29 ct. Standaard rekent de tool met de
+heffing van nu (die van het meest recente prijsjaar, over alle jaren): dat past
+bij een batterij die je vandaag koopt, en het antwoord zegt dat ook ("met de
+belasting en opslag van nu"). De heffing van toen lag in 2024 en 2025 een kwart
+tot een derde hoger, en de besparing schaalt daar bijna één-op-één mee; wie
+daarmee wil rekenen kiest "van toen" bij de instellingen.
 
 **Een dag is geen sluitende eenheid.** Een batterij houdt zich niet aan de
 kalender: laden in de nacht van de 19e om te ontladen op de 20e is precies wat
@@ -854,8 +879,15 @@ zonder batterij.
   van het nettarief is daar vanaf 2029 de uitzondering op — zie hierboven.
 - Terugleverkosten-staffels per leverancier — wel als één instelbare €/kWh.
 - Het profiel is een gemiddelde over veel huishoudens en daardoor gladder dan één
-  aansluiting. Dat onderschat de waarde van een batterij eerder dan dat het hem
-  overdrijft. De spreidingsfactor maakt die bias instelbaar.
+  aansluiting. Of dat de waarde van een batterij onder- of overschat, is niet
+  onderbouwd; de spreidingsfactor laat zien hoe gevoelig de uitkomst ervoor is.
+- Het eigen stroomverbruik van de batterij (standby, typisch 7 tot 25 W, 60 tot
+  220 kWh per jaar). Bewust niet gemodelleerd; de pagina zegt dat bij het
+  antwoord en in de Methode-tab.
+- De uitstoot van het maken van de batterij. De CO2-cijfers zijn een
+  toerekening met de gemiddelde (niet de marginale) uitstoot per uur.
+- Kwartierprijzen. Sinds 1 oktober 2025 zijn day-ahead-prijzen per kwartier;
+  de ANWB-API levert uurprijzen, sinds 20 juni 2026 afgerond op hele centen.
 
 ## Structuur
 
@@ -906,8 +938,11 @@ python3 scripts/build_assets.py             # → public/data/
 
 `fetch_dynamic.py` slaat over wat er al ligt. De EDSN-API staat 1000 requests per
 dag per IP toe; alle netgebieden over de volle periode kost er ongeveer 700.
-DYNAMIC loopt twee dagen achter en recente dagen kunnen nog wijzigen, dus ververs
-de laatste maanden opnieuw.
+DYNAMIC loopt twee dagen achter en recente dagen kunnen nog wijzigen. Het script
+vult alleen ontbrekende dagen aan en haalt dagen die er al staan niet opnieuw
+op, ook niet als EDSN ze later corrigeert. Wil je de laatste maanden verversen,
+haal die dagen dan eerst uit `data/raw/dynamic/<netgebied>.csv` (of verwijder het
+bestand) en draai het script opnieuw.
 
 Prestaties: ongeveer 410 ms voor de realistische strategie en 270 tot 325 ms
 voor het optimum per profieljaar (`tests/pipeline.test.ts` drukt het af). Eén
