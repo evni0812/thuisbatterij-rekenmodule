@@ -29,7 +29,7 @@ gebruik, alles vanaf de CDN.
 ```bash
 npm install
 npm run dev          # http://localhost:3000
-npm test             # 348 tests, waaronder de modelinvarianten
+npm test             # 460 tests, waaronder de modelinvarianten
 npm run build        # statische export naar out/
 npm run clean        # bij een vastgelopen build-cache
 ```
@@ -316,7 +316,11 @@ Python-scripts nodig — zie [Data verversen](#data-verversen).
 | Verbruik en teruglevering per kwartier | MFFBAS/EDSN **DYNAMIC** profielfracties, categorie E1A, afnametype AMI (met zonnepanelen) en AZI (zonder) | vanaf 2023-04-01 |
 | Uurtarieven | ANWB Energie, marktprijs en all-in, incl. btw | vanaf 2023 (sinds 20-06-2026 op hele centen) |
 
-Beide via de `energiedata-nl` skill.
+Beide via de `energiedata-nl` skill. Technisch komen de uurtarieven uit de
+ANWB-API (`https://api.anwb.nl/energy/energy-services/v2/tarieven/electricity`,
+zie `scripts/fetch_prices.py`); die geeft zonder de juiste parameters HTTP 400,
+dus de pagina verwijst bezoekers naar de publieke tarievenpagina
+(`https://www.anwb.nl/energie/actuele-tarieven`).
 
 **Waarom DYNAMIC en niet de standaardprofielen.** DYNAMIC wordt dagelijks
 herberekend uit echte meetdata en bevat dus het werkelijke weer. Richting E17 is
@@ -589,25 +593,33 @@ van de netafname is per kwartier afname maal factor, zonder en met batterij.
 Alleen afname telt; wat je teruglevert is de voetafdruk van wie het gebruikt.
 De batterij wint door eigen zonnestroom te bewaren voor de avond (gas) en door,
 als hij van het net laadt, dat op een schoner uur te doen dan waarop hij
-levert. Voor het standaardhuishouden met de Zendure in 2025: 652 → 542 kg,
-110 kg minder, 17%. De omzettingsverliezen zitten erin. De factor is de
+levert. Voor het standaardhuishouden met de Zendure, gemiddeld over de volle
+jaren 2024 en 2025: 627 → 522 kg, 105 kg minder, 17%. De omzettingsverliezen zitten erin. De factor is de
 gemiddelde van de opwek, niet de marginale (de duurste centrale, vrijwel altijd
-gas); marginaal zou de winst groter maken, maar bestaat niet als meetreeks.
+gas). Met een marginale factor kan de uitkomst juist ongunstiger uitvallen:
+draait op het laad- en ontlaaduur dezelfde gascentrale bij, dan blijven alleen
+de omzettingsverliezen over. Een openbare uurreeks daarvan bestaat voor
+Nederland niet; de pagina noemt de cijfers daarom een toerekening.
 
 **Nederland** (`nederlandPerspectief`): teruglevering is geen verlies als een
 buur die kWh gebruikt en er minder uit een centrale hoeft te komen; die
 vermeden uitstoot gaat van de afname af. Behalve op uren waarop de mix al onder
-een drempel zit (standaard 100 g/kWh): dan is er meer groene stroom dan afname
-en gaat de kWh de grens over of wordt hij afgeschakeld. Erik koos de
+een drempel zit (standaard 100 g/kWh): dan is er vaak, maar niet altijd, meer
+aanbod dan vraag, en gaat de kWh de grens over of wordt hij afgeschakeld. De
+drempel is een benadering van overschot, geen meting. Erik koos de
 emissiefactor als maat voor overschot, boven de negatieve prijs of de netto
 export: de vraag is of de stroom op dat moment bij de buren nog iets
 verdringt, en dat zegt de factor direct. Om de drempel zonder herrekenen te
 kunnen verschuiven, bewaart de balans afname en teruglevering per klasse van
-20 g/kWh (31 klassen), met per klasse de uitstoot die de teruglevering elders
+20 g/kWh (30 klassen tot 600 g plus één open klasse daarboven, `CO2_KLASSEN`
+= 31), met per klasse de uitstoot die de teruglevering elders
 vermeed. De schuif staat bij de figuur zelf, als afleidingsveld
-(`co2DrempelG`), niet in Geavanceerd. Voor het standaardhuishouden 2025: 585 →
-486 kg voor Nederland, 99 kg minder; van de 2.000 kWh teruglevering viel 928
-kWh in overschot-uren, met batterij nog 691.
+(`co2DrempelG`), niet in Geavanceerd. Voor het standaardhuishouden, gemiddeld
+over 2024 en 2025: 558 → 463 kg voor Nederland, 95 kg minder; van de 1.397 kWh
+teruglevering (de rest van de 2.000 is bij negatieve prijzen afgeregeld) viel
+971 kWh in overschot-uren, met batterij nog 734. Zonder zonnepanelen levert
+alleen de batterij iets terug (wat hij in dure uren verkoopt); de figuur zegt
+dat dan met die getallen.
 
 De balans zit in elk jaar (`YearKern.co2`) en gemiddeld over de volledige
 jaren in het resultaat (`co2`), dus in cache en preload; daarom `MODEL_VERSIE`
@@ -654,8 +666,9 @@ jaar, 5.400) raakt hij ze niet op. Een extra beurt kost dan in werkelijkheid
 minder dan de volle prijs, en de literatuur is het erover eens dat de juiste
 drempel de *marginale* slijtage is — wat één beurt extra echt aan levensduur
 kost (Xu e.a., *Factoring the cycle aging cost of batteries participating in
-electricity markets*, 2018; Schade, *Battery degradation: impact on economic
-dispatch*, 2024; The Mobility House over hun optimizer). Die marginale prijs
+electricity markets*, 2018; C. Schade en R. Egging-Bratseth, *Battery
+degradation: impact on economic dispatch*, 2024; The Mobility House over hun
+optimizer). Die marginale prijs
 hangt af van de vraag of de beurten vóór de kalender opraken, en dat weet je pas
 achteraf; daarom kiest de gebruiker, en laat het financieringsmodel via
 `remainingCapacityFraction` (de zwaarste van kalender- en cyclusslijtage) zien
@@ -760,10 +773,13 @@ laten rekenen: sinds die wijziging laat hij zo'n dag voorbijgaan.
 prijsstijging staat op 0% (was 2%, de inflatiedoelstelling, geen energieprijs-
 verwachting). Wat een batterij verdient is het gat tussen afname en
 teruglevering: energiebelasting plus opslag plus het prijsverschil over de dag.
-De energiebelasting op stroom daalt van 2025 op 2026 en staat voor 2026 en 2027
-vast op 11,1 ct/kWh incl. btw, als onderdeel van de lastenverschuiving van
-stroom naar gas; PBL noemt de prijsontwikkeling tot 2030 "zeer onzeker" en geeft
-alleen bandbreedtes. De schuif blijft voor wie anders verwacht.
+De energiebelasting op stroom daalt van 2025 op 2026 (11,1 ct/kWh incl. btw),
+als onderdeel van de lastenverschuiving van stroom naar gas. Het Belastingplan
+2027 (37022, ingediend, nog niet aangenomen) verandert het tarief niet; het
+bedrag voor 2027 volgt eind 2026 uit de inflatiecorrectie. Het PBL geeft in de
+Klimaat- en Energieverkenning 2026 voor de groothandelsprijs van stroom in 2030
+70 euro per MWh met een bandbreedte van 53 tot 90. De schuif blijft voor wie
+anders verwacht.
 
 **Financiële instellingen raken de natuurkunde niet.** Discontovoet, prijsstijging en
 looptijd veranderen de contante waarde, niet de jaaropbrengst en niet het aantal
@@ -835,9 +851,13 @@ allInPrijs − marktprijs, per uur en niet als jaarconstante: in 2025 zakte de
 heffing in september van 17,13 naar 14,29 ct. Standaard rekent de tool met de
 heffing van nu (die van het meest recente prijsjaar, over alle jaren): dat past
 bij een batterij die je vandaag koopt, en het antwoord zegt dat ook ("met de
-belasting en opslag van nu"). De heffing van toen lag in 2024 en 2025 een kwart
-tot een derde hoger, en de besparing schaalt daar bijna één-op-één mee; wie
-daarmee wil rekenen kiest "van toen" bij de instellingen.
+belasting en opslag van nu"). De heffing van toen lag in 2024 en 2025 ruim een
+derde hoger (17,1 à 18,0 ct tegen 12,9 ct nu; `heffingToenTekst` leidt de zin
+op de pagina af uit de prijsdata). De besparing groeit veel minder hard mee:
+voor de standaardbatterij met zonnepanelen 13% (`BESPARING_MET_HEFFING_TOEN`,
+nagerekend in `tests/voorbeeld.test.ts`), zonder panelen zelfs iets minder,
+want dan betaalt ook het laden uit het net de hogere heffing. Wie met de
+heffing van toen wil rekenen, kiest "van toen" bij de instellingen.
 
 **Een dag is geen sluitende eenheid.** Een batterij houdt zich niet aan de
 kalender: laden in de nacht van de 19e om te ontladen op de 20e is precies wat
@@ -899,13 +919,14 @@ De winterpiek loopt van 16:00 tot en met 22:00; in de zomer begint de piek pas o
 voorstel en de bedragen van 2030, op centen afgerond, cel voor cel met Figuur 4.
 
 **De heffing in het scenario.** Het nettarief komt bovenop de energiebelasting en
-de inkoopopslag. Op de historische prijzen staat de heffing van toen, 13 tot 17
-cent; in 2029 en 2030 ligt de energiebelasting volgens CE Delft op EUR 0,075
+de inkoopopslag. De gewone doorrekening rekent standaard met de heffing van nu
+(12,9 ct), op verzoek met die van toen (17 à 18 ct in 2023 tot en met 2025); in
+2029 en 2030 ligt de energiebelasting volgens CE Delft op EUR 0,075
 respectievelijk 0,076 per kWh exclusief btw. Het scenario rekent daarom met de
 heffing van het scenariojaar (energiebelasting van dat jaar plus de opslag zoals
-die in 2026 in de data zit, ongeveer 11,2 ct in 2029) in plaats van die van toen.
-Anders stapelt het een nettarief van 2030 op een belasting van 2024, en de
-besparing schaalt bijna één-op-één met de heffing. `scenarioConfiguratie` in
+die in 2026 in de data zit, ongeveer 10,9 ct in 2029), ongeacht de keuze tussen
+nu en toen: het nettarief van straks hoort bij de belasting van straks.
+`scenarioConfiguratie` in
 `lib/nettarief.ts` is de ene plek waar het scenario wordt afgeleid, voor de
 hoofdpagina, de build van het standaardantwoord en de vergelijker; anders zou de
 cachesleutel op drie plekken net anders uitkomen.
@@ -937,9 +958,11 @@ zonder batterij.
 - Het profiel is een gemiddelde over veel huishoudens en daardoor gladder dan één
   aansluiting. Of dat de waarde van een batterij onder- of overschat, is niet
   onderbouwd; de spreidingsfactor laat zien hoe gevoelig de uitkomst ervoor is.
-- Het eigen stroomverbruik van de batterij (standby, typisch 7 tot 25 W, 60 tot
-  220 kWh per jaar). Bewust niet gemodelleerd; de pagina zegt dat bij het
-  antwoord en in de Methode-tab.
+- Het eigen stroomverbruik van de batterij (stand-by). Fabrikanten en testers
+  noemen enkele watts tot zo'n 25 W; 7 tot 25 W is 60 tot 220 kWh per jaar
+  (Indevolt: 7 W in diepe stand-by, 20 W voor de hoofdunit; energienerds.nl mat
+  ongeveer 6 W aan de HomeWizard). Een indicatie, bewust niet gemodelleerd; de
+  pagina zegt dat bij het antwoord en in de Methode-tab.
 - De uitstoot van het maken van de batterij. De CO2-cijfers zijn een
   toerekening met de gemiddelde (niet de marginale) uitstoot per uur.
 - Kwartierprijzen. Sinds 1 oktober 2025 zijn day-ahead-prijzen per kwartier;
