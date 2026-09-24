@@ -6,7 +6,7 @@
  * data geeft altijd hetzelfde antwoord, want er zit geen willekeur in het model.
  *
  * De sleutel is een hash van de dispatch-velden van de configuratie plus een
- * versienummer. Velden die alleen de financiën of de zelfvoorzieningscijfers
+ * versienummer en de stand van de data (`gegenereerd` uit het manifest). Velden die alleen de financiën of de zelfvoorzieningscijfers
  * raken (looptijd, rente, prijsstijging, degradatie, restwaarde, jaaropwek)
  * zitten er bewust niet in: daarvoor wordt een bewaard resultaat hergebruikt
  * en alleen de afleiding opnieuw gedaan (`pasAfleidingToe`). Het versienummer
@@ -96,7 +96,21 @@ export interface Bundel {
  */
 export const MODEL_VERSIE = 15;
 
-const SLEUTEL_PREFIX = "tbat:v" + MODEL_VERSIE + ":";
+/**
+ * Alles van de cache staat onder zijn eigen voorvoegsel, `tbat:cache:`.
+ *
+ * Eerder was dat `tbat:v14:` met de index op `tbat:index`, en ruimden het
+ * opruimen en `wisAlles` alles op wat met `tbat:` begon. Maar de bewaarde
+ * instellingen en profielen (lib/opslag.ts) staan óók onder `tbat:`, op
+ * `tbat:instellingen:v1`. Zes doorrekeningen of één volle opslag waren genoeg
+ * om de profielen van een bezoeker stilzwijgend weg te gooien. Nu raakt de
+ * cache alleen zijn eigen sleutels, en de sleutels van het oude schema.
+ */
+const CACHE_PREFIX = "tbat:cache:";
+const SLEUTEL_PREFIX = CACHE_PREFIX + "v" + MODEL_VERSIE + ":";
+/** Het oude schema: bundels op `tbat:v<n>:…` en de index op `tbat:index`. */
+const OUD_SCHEMA = /^tbat:v\d+:/;
+const OUDE_INDEX = "tbat:index";
 /**
  * Hoeveel doorrekeningen we bewaren voordat de oudste eruit gaat.
  *
@@ -111,7 +125,12 @@ export const MAX_ITEMS = 6;
  * tijdstempel uit te halen; dat kostte tot tientallen milliseconden op de
  * hoofdthread, precies op het moment dat het antwoord verschijnt.
  */
-const INDEX_SLEUTEL = "tbat:index";
+export const INDEX_SLEUTEL = "tbat:cache:index";
+
+/** Is dit een sleutel die de cache beheert (bundel van welke versie ook, of een index)? */
+function vanDeCache(sleutel: string): boolean {
+  return sleutel.startsWith(CACHE_PREFIX) || OUD_SCHEMA.test(sleutel) || sleutel === OUDE_INDEX;
+}
 
 /**
  * JSON met de sleutels op elk niveau gesorteerd, zodat de volgorde waarin een
@@ -134,6 +153,11 @@ export function stabielJson(waarde: unknown): string {
       .map((k) => `${JSON.stringify(k)}:${stabielJson(o[k])}`);
     return `{${delen.join(",")}}`;
   }
+  // JSON kent geen NaN of Infinity en schrijft ze allebei als null. Dan kregen
+  // een kapotte invoer en een ontbrekend veld dezelfde sleutel, en deelden ze
+  // een bundel. Ze horen er na lib/normaliseer.ts niet meer in te komen, maar
+  // de sleutel mag er niet op leunen.
+  if (typeof waarde === "number" && !Number.isFinite(waarde)) return `"#${String(waarde)}"`;
   return JSON.stringify(waarde) ?? "null";
 }
 
@@ -190,9 +214,18 @@ export function dispatchDeel(config: Configuration): Partial<Configuration> {
  * alleen in looptijd, rente, prijsstijging, degradatie, restwaarde of
  * jaaropwek verschillen, delen dezelfde bundel; de afleiding wordt bij het
  * lezen opnieuw gedaan (`pasAfleidingToe` in lib/model/analysis.ts).
+ *
+ * Met `dataVersie` — het tijdstip `gegenereerd` uit het manifest — hoort de
+ * sleutel ook bij één stand van de data. Zonder die versie kreeg een
+ * terugkerende bezoeker na een dataverversing het oude antwoord uit zijn
+ * browser, over prijzen die inmiddels waren aangevuld. De cache en het
+ * vooruitgerekende antwoord geven hem daarom altijd mee; binnen één sessie
+ * (de worker, de vergelijking "is dit dezelfde dispatch?") is hij overbodig,
+ * want daar is de data per definitie dezelfde.
  */
-export function dispatchSleutel(config: Configuration): string {
-  return SLEUTEL_PREFIX + fnv(stabielJson(dispatchDeel(config)));
+export function dispatchSleutel(config: Configuration, dataVersie?: string): string {
+  const data = dataVersie ? "d" + fnv(dataVersie) + ":" : "";
+  return SLEUTEL_PREFIX + data + fnv(stabielJson(dispatchDeel(config)));
 }
 
 /** FNV-1a: kort, snel en ruim voldoende om configuraties uit elkaar te houden. */
@@ -209,18 +242,66 @@ interface Bewaard extends Bundel {
   opgeslagen: number;
 }
 
-export function leesCache(config: Configuration): Bundel | null {
+/**
+ * Is dit een bruikbare bundel? Een bundel kan half geschreven zijn, met de
+ * hand bewerkt, of van een versie waarin een veld anders heette. Die geven we
+ * niet door: de pagina zou er op een `undefined` op stuklopen in plaats van
+ * gewoon opnieuw te rekenen.
+ */
+function isBundel(o: unknown): o is Bewaard {
+  if (typeof o !== "object" || o === null) return false;
+  const r = (o as Bewaard).result as unknown;
+  if (typeof r !== "object" || r === null) return false;
+  const res = r as Partial<AnalysisResult>;
+  if (!Array.isArray(res.perYear) || typeof res.finance !== "object" || res.finance === null) return false;
+  const b = o as Bewaard;
+  if (b.grid !== undefined && !Array.isArray(b.grid)) return false;
+  if (b.huishoudens !== undefined && !Array.isArray(b.huishoudens)) return false;
+  if (b.scenario !== undefined && (typeof b.scenario !== "object" || b.scenario === null)) return false;
+  return true;
+}
+
+function leesSleutel(sleutel: string): Bundel | null {
   if (typeof window === "undefined") return null;
   try {
-    const ruw = window.localStorage.getItem(dispatchSleutel(config));
+    const ruw = window.localStorage.getItem(sleutel);
     if (!ruw) return null;
-    const { result, scenario, scenarioOpTeruglevering, scenarioJaar, grid, huishoudens } = JSON.parse(ruw) as Bewaard;
+    const bewaard = JSON.parse(ruw) as unknown;
+    if (!isBundel(bewaard)) {
+      window.localStorage.removeItem(sleutel);
+      return null;
+    }
+    const { result, scenario, scenarioOpTeruglevering, scenarioJaar, grid, huishoudens } = bewaard;
     return { result, scenario, scenarioOpTeruglevering, scenarioJaar, grid, huishoudens };
   } catch {
     // Een volle of geblokkeerde opslag mag de tool nooit stukmaken; dan rekenen
     // we gewoon opnieuw.
     return null;
   }
+}
+
+/** De bundel bij deze configuratie en deze stand van de data, of null. */
+export function leesCache(config: Configuration, dataVersie: string): Bundel | null {
+  return leesSleutel(dispatchSleutel(config, dataVersie));
+}
+
+/**
+ * De meest recente bundel bij deze configuratie, van welke stand van de data
+ * ook. Alleen voor als het manifest niet te laden is (offline, een storing):
+ * dan is een antwoord over iets oudere data beter dan geen antwoord, mits de
+ * pagina zegt dat het uit een eerdere doorrekening komt.
+ */
+export function leesCacheZonderData(config: Configuration): Bundel | null {
+  if (typeof window === "undefined") return null;
+  const eind = ":" + fnv(stabielJson(dispatchDeel(config)));
+  const kandidaten = leesIndex()
+    .filter((r) => r.sleutel.startsWith(SLEUTEL_PREFIX) && r.sleutel.endsWith(eind))
+    .sort((a, b) => b.opgeslagen - a.opgeslagen);
+  for (const k of kandidaten) {
+    const bundel = leesSleutel(k.sleutel);
+    if (bundel) return bundel;
+  }
+  return null;
 }
 
 /**
@@ -231,17 +312,18 @@ export function leesCache(config: Configuration): Bundel | null {
  * een los scenario of raster zonder antwoord is voor niemand bruikbaar, en het
  * zou bij de volgende lezing als hoofdantwoord kunnen worden aangezien.
  */
-export function schrijfCache(config: Configuration, deel: Partial<Bundel>): void {
+export function schrijfCache(config: Configuration, dataVersie: string, deel: Partial<Bundel>): void {
   if (typeof window === "undefined") return;
-  const bestaand = leesCache(config);
+  const bestaand = leesCache(config, dataVersie);
   if (!bestaand && !deel.result) return;
   const bewaard: Bewaard = { ...bestaand!, ...deel, opgeslagen: Date.now() };
-  const sleutel = dispatchSleutel(config);
+  const sleutel = dispatchSleutel(config, dataVersie);
   try {
     window.localStorage.setItem(sleutel, JSON.stringify(bewaard));
     ruimOp(sleutel, bewaard.opgeslagen);
   } catch {
-    // Opslag vol: gooi alles van ons weg en probeer het één keer opnieuw.
+    // Opslag vol: gooi alles van de cache weg — alleen van de cache, de
+    // bewaarde instellingen blijven staan — en probeer het één keer opnieuw.
     try {
       wisAlles();
       window.localStorage.setItem(sleutel, JSON.stringify(bewaard));
@@ -276,16 +358,23 @@ function leesIndex(): IndexRegel[] {
 /**
  * Houd de opslag klein: alleen de meest recente doorrekeningen blijven.
  *
- * Bundels die buiten de index om in de opslag staan (van vóór de index, of
- * van een oudere modelversie) worden met tijdstempel nul opgenomen, zodat ze
- * als eerste wijken. Sleutels in de index die niet meer bestaan vallen eruit.
+ * Bundels van het oude schema (`tbat:v<n>:`) en van een andere modelversie
+ * gaan meteen weg: die worden nooit meer gelezen. Bundels van deze versie die
+ * buiten de index om in de opslag staan, worden met tijdstempel nul opgenomen,
+ * zodat ze als eerste wijken. Sleutels in de index die niet meer bestaan
+ * vallen eruit. Alles wat niet van de cache is — de bewaarde instellingen —
+ * blijft onaangeroerd.
  */
 function ruimOp(zojuist: string, opgeslagen: number): void {
   const aanwezig = new Set<string>();
+  const weg: string[] = [];
   for (let i = 0; i < window.localStorage.length; i++) {
     const k = window.localStorage.key(i);
-    if (k && k.startsWith("tbat:") && k !== INDEX_SLEUTEL) aanwezig.add(k);
+    if (!k || !vanDeCache(k) || k === INDEX_SLEUTEL) continue;
+    if (k.startsWith(SLEUTEL_PREFIX)) aanwezig.add(k);
+    else weg.push(k);
   }
+  for (const k of weg) window.localStorage.removeItem(k);
   const index = new Map<string, number>();
   for (const r of leesIndex()) {
     if (aanwezig.has(r.sleutel)) index.set(r.sleutel, Number(r.opgeslagen) || 0);
@@ -307,12 +396,13 @@ function ruimOp(zojuist: string, opgeslagen: number): void {
   window.localStorage.setItem(INDEX_SLEUTEL, JSON.stringify(blijft));
 }
 
+/** Wis de cache: alle bundels en de index, van dit en het oude schema. Niets anders. */
 export function wisAlles(): void {
   if (typeof window === "undefined") return;
   const teWissen: string[] = [];
   for (let i = 0; i < window.localStorage.length; i++) {
     const sleutel = window.localStorage.key(i);
-    if (sleutel?.startsWith("tbat:")) teWissen.push(sleutel);
+    if (sleutel && vanDeCache(sleutel)) teWissen.push(sleutel);
   }
   for (const s of teWissen) window.localStorage.removeItem(s);
 }

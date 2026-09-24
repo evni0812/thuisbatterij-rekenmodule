@@ -20,6 +20,8 @@ import { wearCostPerKwh } from "../lib/model/battery";
 import { STANDAARD } from "../lib/configuratie";
 import { STRATEGIEEN, strategieVoor } from "../lib/strategie";
 import type { Instellingen } from "../lib/url-state";
+import { GRENZEN, MAG_LEEG, klem, type GetalVeld } from "../lib/normaliseer";
+import { GetalInvoer } from "./GetalInvoer";
 
 /**
  * Hoeveel instellingen afwijken van de standaard.
@@ -44,49 +46,52 @@ function id(label: string): string {
   return `inst-${label.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`;
 }
 
-/** Een getal dat je intikt, met eenheid en grenzen. */
+/**
+ * Een getal dat je intikt, met eenheid en grenzen.
+ *
+ * De grenzen komen uit lib/normaliseer.ts: dezelfde die gelden voor een waarde
+ * uit de URL of uit een bewaarde set. Het veld zelf (components/GetalInvoer.tsx)
+ * klemt pas als je het verlaat, niet bij elke toets.
+ */
 function Getal({
   label,
   uitleg,
   waarde,
   eenheid,
-  min,
-  max,
-  stap,
+  veld,
+  schaal = 1,
   onChange,
   eenheidVoor = false,
 }: {
   label: string;
   uitleg: string;
-  /** De getoonde waarde, in de eenheid van het veld. */
-  waarde: number;
+  /** De waarde zoals de instelling hem bewaart. */
+  waarde: number | null;
   eenheid: string;
-  min: number;
-  max: number;
-  stap: number;
-  onChange: (v: number) => void;
+  /** Welke instelling: bepaalt de grenzen, de afronding en of het veld leeg mag. */
+  veld: GetalVeld;
+  /** Toon de waarde maal dit getal, zoals een fractie als percentage (100). */
+  schaal?: number;
+  onChange: (v: number | null) => void;
   /** Zet de eenheid vóór het getal, zoals bij een bedrag. */
   eenheidVoor?: boolean;
 }) {
   const veldId = id(label);
+  const g = GRENZEN[veld];
+  const decimalen = Math.max(0, g.decimalen - Math.round(Math.log10(schaal)));
   return (
     <div className="instelling">
       <label htmlFor={veldId}>{label}</label>
       <div className={eenheidVoor ? "getal-veld klein eenheid-voor" : "getal-veld klein"}>
         {eenheidVoor ? <span className="eenheid">{eenheid}</span> : null}
-        <input
+        <GetalInvoer
           id={veldId}
-          type="number"
-          inputMode="decimal"
-          min={min}
-          max={max}
-          step={stap}
-          value={Number.isFinite(waarde) ? waarde : ""}
-          onChange={(e) => {
-            const n = Number(e.target.value);
-            if (!Number.isFinite(n)) return;
-            onChange(Math.min(max, Math.max(min, n)));
-          }}
+          waarde={waarde === null ? null : waarde * schaal}
+          min={g.min * schaal}
+          max={g.max * schaal}
+          decimalen={decimalen}
+          magLeeg={MAG_LEEG.has(veld)}
+          onWaarde={(v) => onChange(v === null ? null : klem(veld, v / schaal))}
         />
         {!eenheidVoor ? <span className="eenheid">{eenheid}</span> : null}
       </div>
@@ -100,21 +105,20 @@ function Percentage(props: {
   label: string;
   uitleg: string;
   fractie: number;
-  min: number;
-  max: number;
-  stap: number;
+  veld: GetalVeld;
   onChange: (fractie: number) => void;
 }) {
   return (
     <Getal
       label={props.label}
       uitleg={props.uitleg}
-      waarde={Math.round(props.fractie * 10000) / 100}
+      waarde={props.fractie}
       eenheid="%"
-      min={props.min}
-      max={props.max}
-      stap={props.stap}
-      onChange={(v) => props.onChange(v / 100)}
+      veld={props.veld}
+      schaal={100}
+      onChange={(v) => {
+        if (v !== null) props.onChange(v);
+      }}
     />
   );
 }
@@ -303,20 +307,15 @@ export function Geavanceerd({
               <div className="instelling">
                 <label htmlFor="opwek">Opwek van je panelen</label>
                 <div className="getal-veld klein">
-                  <input
+                  <GetalInvoer
                     id="opwek"
-                    type="number"
-                    inputMode="numeric"
-                    min={0}
-                    max={30000}
-                    step={100}
-                    value={inst.opwekKwh ?? ""}
+                    waarde={inst.opwekKwh}
+                    min={GRENZEN.opwekKwh.min}
+                    max={GRENZEN.opwekKwh.max}
+                    decimalen={GRENZEN.opwekKwh.decimalen}
+                    magLeeg
                     placeholder="bijvoorbeeld 3500"
-                    onChange={(e) =>
-                      onChange({
-                        opwekKwh: e.target.value === "" ? null : Number(e.target.value),
-                      })
-                    }
+                    onWaarde={(v) => onChange({ opwekKwh: v })}
                   />
                   <span className="eenheid">kWh per jaar</span>
                 </div>
@@ -331,8 +330,8 @@ export function Geavanceerd({
                 label="Pieken in je verbruik"
                 uitleg="Het gemeten patroon is een gemiddelde over veel huishoudens en daardoor vlakker dan één huis. Hoger zet de pieken en dalen aan. Je jaarverbruik blijft gelijk."
                 waarde={inst.spreiding}
-                min={0.5}
-                max={2}
+                min={GRENZEN.spreiding.min}
+                max={GRENZEN.spreiding.max}
                 stap={0.05}
                 formatteer={(v) => `${v.toLocaleString("nl-NL", { maximumFractionDigits: 2 })}×`}
                 onChange={(v) => onChange({ spreiding: v })}
@@ -347,71 +346,59 @@ export function Geavanceerd({
             </p>
             <div className="instelling-grid">
               <Getal
+                veld="capaciteitKwh"
                 label="Capaciteit"
                 uitleg="Hoeveel stroom er in past. Groter helpt alleen zolang je hem ook vol krijgt."
                 waarde={capaciteit}
                 eenheid="kWh"
-                min={0.5}
-                max={30}
-                stap={0.1}
                 onChange={(v) => onChange({ capaciteitKwh: v })}
               />
               <Getal
+                veld="vermogenKw"
                 label="Laad- en ontlaadvermogen"
                 uitleg="Hoe snel hij kan laden en leveren. Te weinig vermogen betekent dat je de zonnepiek niet kunt wegvangen."
                 waarde={vermogen}
                 eenheid="kW"
-                min={0.3}
-                max={10}
-                stap={0.1}
                 onChange={(v) => onChange({ vermogenKw: v })}
               />
               <Getal
+                veld="prijsEur"
                 label="Aanschafprijs"
                 uitleg="Inclusief installatie. Bepaalt de terugverdientijd, en via de slijtageprijs per laadbeurt ook hoe zuinig de accu met zijn beurten omgaat."
                 waarde={prijs}
                 eenheid="€"
                 eenheidVoor
-                min={100}
-                max={20000}
-                stap={10}
                 onChange={(v) => onChange({ prijsEur: v })}
               />
               {/* De kostenregel voor de kaart van maten: wat een andere maat dan
                   deze batterij zou kosten. Verankerd aan de aanschafprijs
                   hierboven; deze drie zeggen wat er per stap bijkomt. */}
               <Getal
+                veld="kostenPerKwh"
                 label="Meerprijs per kWh"
                 uitleg="Wat elke kilowattuur extra capaciteit kost in de kaart van maten. Uitbreidingsmodules kosten bij vrijwel elk merk 310 tot 450 euro per kWh (peildatum september 2026)."
                 waarde={inst.kostenPerKwh}
                 eenheid="€"
                 eenheidVoor
-                min={0}
-                max={2000}
-                stap={10}
-                onChange={(v) => onChange({ kostenPerKwh: v })}
+                onChange={(v) => v !== null && onChange({ kostenPerKwh: v })}
               />
               <Getal
+                veld="kostenPerKw"
                 label="Meerprijs per kW"
                 uitleg="Wat elke kilowatt extra vermogen kost: een grotere omvormer. Een hybride omvormer van 3 tot 5 kW kost 1.000 tot 2.500 euro."
                 waarde={inst.kostenPerKw}
                 eenheid="€"
                 eenheidVoor
-                min={0}
-                max={2000}
-                stap={10}
-                onChange={(v) => onChange({ kostenPerKw: v })}
+                onChange={(v) => v !== null && onChange({ kostenPerKw: v })}
               />
               <Getal
+                veld="installatieEur"
                 label="Eigen groep door installateur"
                 uitleg="Boven 800 W is een vaste aansluiting op een eigen groep de norm; dit is wat een installateur daarvoor rekent. Gangbaar 300 euro, tot 1.200 als de meterkast op de schop moet."
                 waarde={inst.installatieEur}
                 eenheid="€"
                 eenheidVoor
-                min={0}
-                max={3000}
-                stap={50}
-                onChange={(v) => onChange({ installatieEur: v })}
+                onChange={(v) => v !== null && onChange({ installatieEur: v })}
               />
               {/* De strategie is een keuze, geen eigenschap van de accu, maar hij
                   hoort hier omdat hij bepaalt hoe de accu met zijn beurten omgaat.
@@ -458,12 +445,10 @@ export function Geavanceerd({
               {/* Capaciteitsverlies hoort bij de accu, niet bij de doorrekening:
                   het is een fysieke eigenschap, naast rendement en levensduur. */}
               <Percentage
+                veld="degradatie"
                 label="Capaciteitsverlies per jaar"
                 uitleg="Hoeveel capaciteit hij per jaar kwijtraakt door ouderdom, ook als je hem niet gebruikt. Slijtage door laden en ontladen zit apart in de levensduur hieronder."
                 fractie={inst.degradatie}
-                min={0}
-                max={5}
-                stap={0.25}
                 onChange={(v) => onChange({ degradatie: v })}
               />
             </div>
@@ -483,14 +468,12 @@ export function Geavanceerd({
             </p>
             <div className="instelling-grid">
               <Getal
+                veld="terugleverkostenCt"
                 label="Terugleverkosten"
                 uitleg="Wat je leverancier per teruggeleverde kilowattuur rekent. ANWB Energie rekent geen terugleverkosten, daarom staat dit standaard op 0; andere leveranciers doen het vaak wel."
                 waarde={inst.terugleverkostenCt}
                 eenheid="ct/kWh"
-                min={0}
-                max={15}
-                stap={0.5}
-                onChange={(v) => onChange({ terugleverkostenCt: v })}
+                onChange={(v) => v !== null && onChange({ terugleverkostenCt: v })}
               />
 
               {/* Een keuze tussen twee even geldige opties, geen aan-uitschakelaar:
@@ -559,31 +542,25 @@ export function Geavanceerd({
             </p>
             <div className="instelling-grid">
               <Getal
+                veld="analysejaren"
                 label="Looptijd"
                 uitleg="Over hoeveel jaar je de investering beoordeelt. De accu zelf gaat door tot zijn eigen levensduur op is."
                 waarde={inst.analysejaren}
                 eenheid="jaar"
-                min={5}
-                max={25}
-                stap={1}
-                onChange={(v) => onChange({ analysejaren: Math.round(v) })}
+                onChange={(v) => v !== null && onChange({ analysejaren: v })}
               />
               <Percentage
+                veld="prijsstijging"
                 label="Prijsstijging per jaar"
                 uitleg="Hoe hard je verwacht dat het gat tussen afname en teruglevering groeit. Standaard 0%: de energiebelasting op stroom daalt eerder dan dat hij stijgt (2026 en 2027 vast op 11,1 ct) en PBL noemt de prijsontwikkeling tot 2030 zeer onzeker. Zet hem hoger als je anders verwacht."
                 fractie={inst.prijsstijging}
-                min={0}
-                max={8}
-                stap={0.5}
                 onChange={(v) => onChange({ prijsstijging: v })}
               />
               <Percentage
+                veld="discontovoet"
                 label="Rente die je misloopt"
                 uitleg="Wat je geld elders had opgebracht. Hiermee worden toekomstige besparingen teruggerekend naar vandaag."
                 fractie={inst.discontovoet}
-                min={0}
-                max={10}
-                stap={0.5}
                 onChange={(v) => onChange({ discontovoet: v })}
               />
             </div>

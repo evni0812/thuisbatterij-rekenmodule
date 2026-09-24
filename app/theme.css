@@ -32,7 +32,9 @@
 
   --text-primary: #1a1f1e;
   --text-secondary: #4b5654;
-  --text-muted: #6f7a78;
+  /* 5,6:1 op wit, 5,2:1 op --page, 4,7:1 op --acs. Was #6f7a78: 4,4:1 en 4,1:1,
+     onder de 4,5:1 die kleine tekst nodig heeft. */
+  --text-muted: #5f6a68;
 
   --grid: #e6eae7;
   --axis: #d3d9d5;
@@ -43,7 +45,7 @@
   --series-1: #0e7490; /* afname van het net */
   --series-2: #b4530a; /* teruglevering */
   --series-3: #1a6b40; /* batterij / besparing */
-  --series-4: #c98500; /* vierde post */
+  --series-4: #b87a00; /* vierde post; 3,6:1 op wit, 3,3:1 op --page (was #c98500: 3,1 en 2,8) */
   --series-5: #7c5cbf; /* de zon die de meter haalde */
 
   /* Sequentieel: één hue, licht naar donker, voor magnitude. */
@@ -60,6 +62,11 @@
   /* De winnaar in de kaart van maten. Geel omdat het van de hele teal-schaal
      in kleurtoon verschilt: het leest op de lichtste én de donkerste cel. */
   --winnaar: #f2b01e;
+  /* Geel haalt op de lichte helft van de schaal geen 3:1 (1,1 tot 2,4). Daarom
+     draagt de winnaar ook een donkere binnenrand: die haalt 3,7:1 tot 13,9:1
+     op de lichte cellen, het geel 3,6:1 en 6,3:1 op de twee donkerste. Elke
+     cel heeft zo een markering van minstens 3:1. */
+  --winnaar-rand: #1a1f1e;
   --critical: #b3261e;
   --success-text: #1a6b40;
 
@@ -280,6 +287,12 @@ select {
 
 .getal-veld input:focus {
   outline: none;
+}
+
+/* Een getal dat niet te lezen is (components/GetalInvoer.tsx): bij het
+   verlaten springt het terug, maar tijdens het typen zie je het al. */
+.getal-veld:has(input[aria-invalid="true"]) {
+  border-color: var(--critical);
 }
 
 .getal-veld:focus-within {
@@ -1830,7 +1843,9 @@ details.voetnoot-uitklap .schakel {
  */
 .heat-cel.beste {
   position: relative;
-  box-shadow: inset 0 0 0 2px var(--winnaar);
+  box-shadow:
+    inset 0 0 0 2px var(--winnaar),
+    inset 0 0 0 3px var(--winnaar-rand);
 }
 
 .heat-cel.leeg {
@@ -1883,7 +1898,9 @@ details.voetnoot-uitklap .schakel {
 
 /* Is de beste cel er zelf een die geld kost, dan wint de gele ring. */
 .heat-cel.negatief.beste {
-  box-shadow: inset 0 0 0 2px var(--winnaar);
+  box-shadow:
+    inset 0 0 0 2px var(--winnaar),
+    inset 0 0 0 3px var(--winnaar-rand);
 }
 
 /* De adviesregel boven de kaart: één zin, met nadruk. */

@@ -15,6 +15,8 @@ import { DOELEN, doelInfo } from "../lib/model/doel";
 import type { Doel } from "../lib/model/types";
 import { STRATEGIEEN, strategieVoor } from "../lib/strategie";
 import { centPerKwh, euro, getal, kwh, procent } from "../lib/format";
+import { GRENZEN } from "../lib/normaliseer";
+import { GetalInvoer } from "./GetalInvoer";
 
 export interface Waarschuwing {
   ernst: "info" | "let-op";
@@ -222,14 +224,14 @@ export function Invoer({
           hintId="afname-hint"
         >
           <div className="getal-veld">
-            <input
-              type="number"
-              inputMode="numeric"
-              min={0}
-              max={30000}
-              step={50}
-              value={afnameKwh}
-              onChange={(e) => onAfname(Math.max(0, Number(e.target.value)))}
+            {/* Klemt pas bij het verlaten van het veld (components/GetalInvoer.tsx):
+                een leeg veld is "nog niet ingevuld", niet 0. */}
+            <GetalInvoer
+              waarde={afnameKwh}
+              min={GRENZEN.afnameKwh.min}
+              max={GRENZEN.afnameKwh.max}
+              decimalen={GRENZEN.afnameKwh.decimalen}
+              onWaarde={(v) => v !== null && onAfname(v)}
               aria-describedby="afname-hint"
             />
             <span className="eenheid">kWh</span>
@@ -243,14 +245,12 @@ export function Invoer({
           hintId="teruglevering-hint"
         >
           <div className="getal-veld">
-            <input
-              type="number"
-              inputMode="numeric"
-              min={0}
-              max={30000}
-              step={50}
-              value={terugleveringKwh}
-              onChange={(e) => onTeruglevering(Math.max(0, Number(e.target.value)))}
+            <GetalInvoer
+              waarde={terugleveringKwh}
+              min={GRENZEN.terugleveringKwh.min}
+              max={GRENZEN.terugleveringKwh.max}
+              decimalen={GRENZEN.terugleveringKwh.decimalen}
+              onWaarde={(v) => v !== null && onTeruglevering(v)}
               aria-describedby="teruglevering-hint"
             />
             <span className="eenheid">kWh</span>

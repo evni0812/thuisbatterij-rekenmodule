@@ -1,5 +1,6 @@
 import type { Metadata, Viewport } from "next";
 import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
+import { Foutgrens } from "../components/Foutgrens";
 import "./theme.css";
 import "./verloop.css";
 
@@ -39,7 +40,9 @@ export default function RootLayout({
 }) {
   return (
     <html lang="nl" className={`${plexSans.variable} ${plexMono.variable}`}>
-      <body>{children}</body>
+      <body>
+        <Foutgrens>{children}</Foutgrens>
+      </body>
     </html>
   );
 }

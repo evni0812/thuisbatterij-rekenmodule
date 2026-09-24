@@ -24,6 +24,7 @@ import {
 import { STANDAARD_CO2_DREMPEL_G } from "./model/co2";
 import { STANDAARD_DOEL } from "./model/doel";
 import { STANDAARD_KOSTENREGEL, kostenVan } from "./model/kosten";
+import { normaliseer } from "./normaliseer";
 import { STANDAARD_SLIJTAGEDEEL } from "./strategie";
 import type { Instellingen } from "./url-state";
 import type { Configuration } from "./worker/protocol";
@@ -84,8 +85,14 @@ export function kiesPreset(presetId: string): BatteryPreset {
  * volgt de prijs uit de kostenregel vanaf de preset: een Zendure van 10 kWh
  * kost niet 699 euro. Bij de presetmaat is dat exact de presetprijs, zodat de
  * standaardconfiguratie en haar hash niet veranderen.
+ *
+ * De instellingen gaan eerst door `normaliseer` (lib/normaliseer.ts): wat hier
+ * binnenkomt kan uit een URL of een oude bewaarde set komen, en een negatief
+ * vermogen of een looptijd van tien miljoen jaar hoort nooit bij de worker aan
+ * te komen. Voor instellingen binnen de grenzen verandert er niets.
  */
-export function maakConfiguratie(inst: Instellingen): Configuration {
+export function maakConfiguratie(invoer: Instellingen): Configuration {
+  const inst = normaliseer(invoer, STANDAARD);
   const preset = kiesPreset(inst.presetId);
   const kosten = {
     perKwhEur: inst.kostenPerKwh,

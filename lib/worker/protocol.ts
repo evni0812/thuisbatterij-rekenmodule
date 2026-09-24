@@ -121,7 +121,23 @@ export interface GridPoint {
 }
 
 export type WorkerRequest =
-  | { type: "init"; baseUrl: string }
+  | {
+      type: "init";
+      baseUrl: string;
+      /**
+       * Haal de bestanden via de hoofdthread (lib/worker/ophalen.ts) in plaats
+       * van zelf met fetch, zodat vier workers één download delen. Zonder dit
+       * (de tests, een losse worker) haalt de worker zelf op.
+       */
+      viaHoofdthread?: boolean;
+    }
+  | {
+      /** Antwoord van de hoofdthread op een `haal`: de bytes, of waarom niet. */
+      type: "gehaald";
+      verzoek: number;
+      buffer?: ArrayBuffer;
+      fout?: string;
+    }
   | { type: "analyse"; id: number; config: Configuration }
   | {
       /**
@@ -287,4 +303,14 @@ export type WorkerResponse =
   | { type: "perfect"; id: number; groep: number; besparing: number }
   /** Een pooltaak is afgerond (ook na een fout of annulering); de worker is vrij. */
   | { type: "klaar"; id: number }
+  /**
+   * Vraag de hoofdthread om een bestand (alleen na `init` met
+   * `viaHoofdthread`); die antwoordt met `gehaald` en hetzelfde verzoeknummer.
+   */
+  | { type: "haal"; verzoek: number; url: string }
+  /**
+   * Een fout. Met `id: null` is het de initialisatie die mislukte (manifest
+   * onbereikbaar, offline): dan kan deze worker niets, en de pagina moet dat
+   * zeggen in plaats van te blijven wachten.
+   */
   | { type: "error"; id: number | null; message: string };

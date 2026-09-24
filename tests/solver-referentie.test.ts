@@ -99,6 +99,11 @@ beforeAll(async () => {
   await bron.init();
   for (const g of GEVALLEN) {
     const cfg = maakConfiguratie({ ...STANDAARD, ...g.inst, van: "2025-01-01", tot: "2025-12-31" });
+    // maakConfiguratie houdt de invoer binnen de grenzen van de pagina
+    // (lib/normaliseer.ts: minstens 0,8 kW). Dit is een solvertest, geen
+    // realistische batterij: het extreme vermogen gaat er daarna direct in.
+    const kw = g.inst.vermogenKw;
+    if (typeof kw === "number") cfg.battery = { ...cfg.battery, maxChargeKw: kw, maxDischargeKw: kw };
     invoeren.set(g.naam, await bron.bouwInvoer(cfg));
   }
 }, 120_000);

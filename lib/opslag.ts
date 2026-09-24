@@ -14,6 +14,7 @@
  */
 
 import { STANDAARD } from "./configuratie";
+import { normaliseer } from "./normaliseer";
 import type { Instellingen } from "./url-state";
 
 const SLEUTEL = "tbat:instellingen:v1";
@@ -62,23 +63,17 @@ function schrijf(o: Opslag): boolean {
   }
 }
 
-/** Vul een (oude of onvolledige) set aan met de standaardwaarden. */
+/**
+ * Vul een (oude of onvolledige) set aan met de standaardwaarden.
+ *
+ * Een waarde van het verkeerde type, een onbekende batterij of een getal buiten
+ * de grenzen — een oude of met de hand bewerkte set — gaat door dezelfde
+ * controle als een URL (lib/normaliseer.ts): onleesbaar wordt de standaard,
+ * te groot of te klein wordt geklemd. De rest van de set blijft bruikbaar.
+ */
 export function vulAan(inst: Partial<Instellingen>): Instellingen {
-  const uit = { ...STANDAARD } as unknown as Record<string, unknown>;
-  const standaard = STANDAARD as unknown as Record<string, unknown>;
-  /** Velden die leeg (null) mogen zijn: "neem de waarde van de batterij". */
-  const magNull = new Set(["prijsEur", "capaciteitKwh", "vermogenKw", "opwekKwh"]);
-  for (const k of Object.keys(STANDAARD)) {
-    const v = (inst as Record<string, unknown>)[k];
-    if (v === undefined) continue;
-    const past =
-      (v === null && magNull.has(k)) ||
-      (v !== null && typeof v === (standaard[k] === null ? "number" : typeof standaard[k]));
-    // Een waarde van het verkeerde type — een oude of bewerkte set — houdt de
-    // standaard; de rest van de set blijft bruikbaar.
-    if (past) uit[k] = v;
-  }
-  return uit as unknown as Instellingen;
+  const ruw = typeof inst === "object" && inst !== null ? inst : {};
+  return normaliseer({ ...STANDAARD, ...ruw } as Instellingen, STANDAARD);
 }
 
 export function leesLaatste(): { inst: Instellingen; bewaard: string | null } | null {
