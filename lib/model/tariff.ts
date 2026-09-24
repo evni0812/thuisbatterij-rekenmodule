@@ -20,10 +20,18 @@ import type { PriceSeries, TariffSpec } from "./types";
  *   EUR/kWh. Vervangt de vaste `energyTaxEurPerKwh` uit het tarief.
  *
  *   De heffing is binnen een jaar niet constant: in 2025 was hij tot september
- *   17,13 ct en daarna 14,29 ct, en in 2026 verschoof hij halverwege van 12,88
- *   naar 13,00 ct. Eén jaarconstante rekent dan een kwartaal lang 2,8 ct per
- *   kWh te veel op elke afname. Met de reeks uit allInPrijs − marktprijs klopt
- *   elk uur.
+ *   17,13 ct en daarna 14,29 ct. Eén jaarconstante rekent dan een kwartaal
+ *   lang 2,8 ct per kWh te veel op elke afname. Met de reeks uit allInPrijs −
+ *   marktprijs klopt elk uur.
+ *
+ *   Let op de afronding van de bron: sinds 20 juni 2026 geeft de ANWB-API
+ *   marktprijs en allInPrijs op hele centen. Het verschil springt daardoor per
+ *   uur tussen 12 en 13 cent rond de echte heffing van 12,885 ct; de "stap
+ *   naar 13,00 ct" die hier eerst stond, was dat afrondingsartefact en geen
+ *   tariefwijziging. De ANWB-API blijft de prijsbron: het zijn de prijzen die
+ *   een klant werkelijk betaalt. De build meet het aandeel afgeronde uren
+ *   (`aandeel_hele_centen` in het manifest) en neemt de jaarconstante over de
+ *   uren zonder afronding.
  */
 export function buildPriceSeries(
   marketPrice: Float64Array,

@@ -5,7 +5,8 @@
  * prijskoppeling en dispatch, op de werkelijke MFFBAS- en ANWB-data in plaats
  * van op een verzonnen profiel.
  */
-import { readFileSync } from "node:fs";
+import { createHash } from "node:crypto";
+import { readdirSync, readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import {
   decodeBinary,
@@ -99,6 +100,77 @@ function tariffFor(year: number, over: Partial<TariffSpec> = {}): TariffSpec {
     ...over,
   };
 }
+
+describe("de bestanden", () => {
+  it("komen overeen met de sha256 in het manifest", () => {
+    const bestanden: [string, { sha256?: string; bytes: number }][] = [
+      ...Object.entries(manifest.prijzen).map(([j, i]) => [`prices-${j}.bin`, i] as [string, typeof i]),
+      ...Object.entries(manifest.co2 ?? {}).map(([j, i]) => [`co2-${j}.bin`, i] as [string, typeof i]),
+      ...Object.entries(manifest.profielen).flatMap(([g, jaren]) =>
+        Object.entries(jaren).map(([j, i]) => [`profile-${g}-${j}.bin`, i] as [string, typeof i]),
+      ),
+      ...Object.entries(manifest.profielen_zonder ?? {}).flatMap(([g, jaren]) =>
+        Object.entries(jaren).map(([j, i]) => [`profile-${g}-${j}-azi.bin`, i] as [string, typeof i]),
+      ),
+    ];
+    expect(bestanden.length).toBeGreaterThan(100);
+    for (const [naam, info] of bestanden) {
+      const b = readFileSync(`${DATA}/${naam}`);
+      expect(b.byteLength, naam).toBe(info.bytes);
+      expect(createHash("sha256").update(b).digest("hex"), naam).toBe(info.sha256);
+    }
+  });
+
+  it("levert geen prijsjaren die niets gebruikt", () => {
+    // De profielen beginnen op 2023-04-01; de prijzen van 2021 en 2022 hadden
+    // bovendien een te lage heffing en in 2022 H2 21% btw in plaats van 9%.
+    expect(Object.keys(manifest.prijzen).sort()[0]).toBe("2023");
+    expect(readdirSync(DATA).filter((f) => /^prices-202[12]/.test(f))).toEqual([]);
+  });
+
+  it("kapt de profielen af op de laatste volledige prijsdag", () => {
+    const tot = manifest.profielen_tot!;
+    expect(tot).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    for (const soort of [manifest.profielen, manifest.profielen_zonder ?? {}]) {
+      for (const jaren of Object.values(soort)) {
+        for (const info of Object.values(jaren)) expect(info.laatste_dag <= tot).toBe(true);
+      }
+    }
+    // En die dag heeft ook echt een prijs voor elk uur.
+    const jaar = Number(tot.slice(0, 4));
+    const p = priceYear(jaar);
+    const laatsteUur = (localMidnightUtcMs(addDays(tot, 1)) - p.firstHourMs) / 3_600_000 - 1;
+    expect(p.marketPrice.length).toBeGreaterThan(laatsteUur);
+  });
+
+  it("meet de afronding op hele centen van de bron", () => {
+    // Sinds 20 juni 2026 rondt de ANWB-API af; de heffing van nu blijft de
+    // echte 12,885 ct en kantelt niet naar 13,00.
+    const p26 = manifest.prijzen["2026"]!;
+    expect(p26.hele_centen_vanaf).toBe("2026-06-20");
+    expect(p26.aandeel_hele_centen!).toBeGreaterThan(0.1);
+    expect(p26.jaarconstante_eur_per_kwh).toBeCloseTo(0.128848, 6);
+    expect(manifest.prijzen["2025"]!.aandeel_hele_centen).toBeLessThan(0.01);
+  });
+
+  it("weigert een bestand met een ander aantal reeksen of bytes", () => {
+    const buf = readBin(`${DATA}/prices-2025.bin`);
+    expect(() => decodeBinary(buf, 2)).not.toThrow();
+    expect(() => decodeBinary(buf, 1)).toThrow(/reeksen/);
+    const langer = new Uint8Array(buf.byteLength + 4);
+    langer.set(new Uint8Array(buf));
+    expect(() => decodeBinary(langer.buffer)).toThrow(/bytes/);
+    expect(() => decodeBinary(buf.slice(0, buf.byteLength - 4))).toThrow(/bytes/);
+  });
+
+  it("geeft een uur zonder emissiefactor NaN, geen nul", () => {
+    const { series } = decodeBinary(readBin(`${DATA}/co2-2023.bin`), 1);
+    let nul = 0;
+    for (const v of series[0]!) if (v === 0) nul++;
+    expect(nul).toBe(0);
+    expect(Number.isNaN(series[0]![0]!)).toBe(true);
+  });
+});
 
 describe("assets", () => {
   it("dekt de verwachte periode", () => {

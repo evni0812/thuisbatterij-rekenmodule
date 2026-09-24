@@ -7,7 +7,7 @@
  *   magic    4 bytes   "TBAT"
  *   versie   uint16
  *   opvulling uint16   zodat de data op een veelvoud van 4 begint
- *   reeksen  uint32    aantal reeksen in het bestand (altijd 2)
+ *   reeksen  uint32    aantal reeksen in het bestand (2, of 1 bij de CO2)
  *   lengte   uint32    waarden per reeks
  *   data     float32[] reeksen achter elkaar
  *
@@ -29,7 +29,12 @@ export interface BinarySeries {
   series: Float32Array[];
 }
 
-export function decodeBinary(buffer: ArrayBuffer): BinarySeries {
+/**
+ * @param verwachteReeksen  hoeveel reeksen het bestand hoort te hebben; een
+ *   ander aantal is een ander bestand dan gedacht, en dan zou `series[1]`
+ *   stil `undefined` zijn.
+ */
+export function decodeBinary(buffer: ArrayBuffer, verwachteReeksen?: number): BinarySeries {
   const view = new DataView(buffer);
   if (view.getUint32(0, true) !== MAGIC) {
     throw new Error("onbekend bestandsformaat: magic klopt niet");
@@ -40,12 +45,17 @@ export function decodeBinary(buffer: ArrayBuffer): BinarySeries {
   }
   const count = view.getUint32(8, true);
   const length = view.getUint32(12, true);
+  if (verwachteReeksen !== undefined && count !== verwachteReeksen) {
+    throw new Error(`${count} reeksen in het bestand, ${verwachteReeksen} verwacht`);
+  }
 
+  // Precies zo lang, niet "minstens": een bestand met bytes achter de data is
+  // net zo goed kapot (half overschreven, of een ander bestand dan gedacht).
   const headerBytes = 16;
   const expected = headerBytes + count * length * 4;
-  if (buffer.byteLength < expected) {
+  if (buffer.byteLength !== expected) {
     throw new Error(
-      `bestand te kort: ${buffer.byteLength} bytes, ${expected} verwacht`,
+      `bestand van ${buffer.byteLength} bytes, ${expected} verwacht`,
     );
   }
 
@@ -133,6 +143,7 @@ export async function loadProfileYear(
   const achtervoegsel = afnametype === "AZI" ? "-azi" : "";
   const { length, series } = decodeBinary(
     await fetchBuffer(`${base}/profile-${domain}-${year}${achtervoegsel}.bin`, haal),
+    2,
   );
   const startMs = buildQuarterAxis(info.eerste_dag, addDays(info.laatste_dag, 1));
   if (startMs.length !== length) {
@@ -164,6 +175,7 @@ export async function loadPriceYear(
   if (!info) throw new Error(`geen prijzen voor ${year}`);
   const { series } = decodeBinary(
     await fetchBuffer(`${base}/prices-${year}.bin`, haal),
+    2,
   );
   return {
     year,
@@ -182,7 +194,7 @@ export async function loadCo2Year(
 ): Promise<Co2Year> {
   const info = manifest.co2?.[String(year)];
   if (!info) throw new Error(`geen emissiefactoren voor ${year}`);
-  const { series } = decodeBinary(await fetchBuffer(`${base}/co2-${year}.bin`, haal));
+  const { series } = decodeBinary(await fetchBuffer(`${base}/co2-${year}.bin`, haal), 1);
   return { year, firstHourMs: localMidnightUtcMs(`${year}-01-01`), gPerKwh: series[0]! };
 }
 

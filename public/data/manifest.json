@@ -1,5 +1,5 @@
 {
-  "gegenereerd": "2026-09-16T19:23:33.824857+00:00",
+  "gegenereerd": "2026-09-24T09:39:44.133951+00:00",
   "categorie": "E1A",
   "afnametype": "AMI",
   "afnametype_zonder": "AZI",
@@ -8,31 +8,10 @@
   "toelichting": {
     "prijzen": "EUR/kWh inclusief 21% btw, uurwaarden, UTC-instants",
     "fracties": "genormaliseerd op jaarsom 1 per kalenderjaar; een deelperiode sommeert bewust op minder dan 1",
+    "profielen_tot": "profielen zijn afgekapt op de laatste dag met een volledige dag prijzen",
     "co2": "emissiefactor van de Nederlandse elektriciteitsmix (NED.nl, type 27 ElectricityMix, opwek exclusief import), gram CO2 per kWh, uurwaarden, UTC-instants"
   },
   "prijzen": {
-    "2021": {
-      "uren": 8760,
-      "volledig": true,
-      "eerste_uur_utc": "2020-12-31T23:00:00+00:00",
-      "laatste_uur_utc": "2021-12-31T22:00:00+00:00",
-      "ontbrekend": 0,
-      "eerste_ontbrekend": null,
-      "jaarconstante_eur_per_kwh": 0.122549,
-      "jaarconstante_spreiding": 0.0,
-      "bytes": 70096
-    },
-    "2022": {
-      "uren": 8760,
-      "volledig": true,
-      "eerste_uur_utc": "2021-12-31T23:00:00+00:00",
-      "laatste_uur_utc": "2022-12-31T22:00:00+00:00",
-      "ontbrekend": 0,
-      "eerste_ontbrekend": null,
-      "jaarconstante_eur_per_kwh": 0.060815,
-      "jaarconstante_spreiding": 0.0,
-      "bytes": 70096
-    },
     "2023": {
       "uren": 8760,
       "volledig": true,
@@ -42,7 +21,10 @@
       "eerste_ontbrekend": null,
       "jaarconstante_eur_per_kwh": 0.173623,
       "jaarconstante_spreiding": 0.0,
-      "bytes": 70096
+      "aandeel_hele_centen": 0.0,
+      "hele_centen_vanaf": null,
+      "bytes": 70096,
+      "sha256": "c6a9b7fe4debbfd813188540d7d42ce26c64fb90782a06bb05242cea79b55473"
     },
     "2024": {
       "uren": 8784,
@@ -53,7 +35,10 @@
       "eerste_ontbrekend": null,
       "jaarconstante_eur_per_kwh": 0.180048,
       "jaarconstante_spreiding": 0.0,
-      "bytes": 70288
+      "aandeel_hele_centen": 0.0,
+      "hele_centen_vanaf": null,
+      "bytes": 70288,
+      "sha256": "68632b69fb57125cab7acafbc7acc0f95bd8899d8f490f7cc6ac74095a9bb68a"
     },
     "2025": {
       "uren": 8760,
@@ -64,7 +49,10 @@
       "eerste_ontbrekend": null,
       "jaarconstante_eur_per_kwh": 0.171263,
       "jaarconstante_spreiding": 0.028399,
-      "bytes": 70096
+      "aandeel_hele_centen": 0.0,
+      "hele_centen_vanaf": null,
+      "bytes": 70096,
+      "sha256": "ed252b0d02a70000b78ca12912a73e55dec05a652c54ce248124f36eeb126a3b"
     },
     "2026": {
       "uren": 6204,
@@ -74,8 +62,11 @@
       "ontbrekend": 0,
       "eerste_ontbrekend": null,
       "jaarconstante_eur_per_kwh": 0.128848,
-      "jaarconstante_spreiding": 0.01,
-      "bytes": 49648
+      "jaarconstante_spreiding": 0.0,
+      "aandeel_hele_centen": 0.3425,
+      "hele_centen_vanaf": "2026-06-20",
+      "bytes": 49648,
+      "sha256": "19d43f7744828d6cc048fd0469d4776ee5c06cb4aff00cd9407de45ee4490ff8"
     }
   },
   "profielen": {
@@ -90,7 +81,8 @@
         "normalisatie_E17": 1.017794,
         "normalisatie_E18": 1.04954,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 211248
+        "bytes": 211248,
+        "sha256": "b8bd5cf6098ecfa4697e0d283f02fc43ce7d0c834b32d80f98ac2d6aaa3155b1"
       },
       "2024": {
         "kwartieren": 35136,
@@ -102,7 +94,8 @@
         "normalisatie_E17": 1.028738,
         "normalisatie_E18": 1.029857,
         "normalisatie_geleend": null,
-        "bytes": 281104
+        "bytes": 281104,
+        "sha256": "b48937b7d4b6dce9ffae8bab731c949b21795dacfca02b46a3773a959aa9f467"
       },
       "2025": {
         "kwartieren": 35040,
@@ -114,7 +107,8 @@
         "normalisatie_E17": 1.017794,
         "normalisatie_E18": 1.04954,
         "normalisatie_geleend": null,
-        "bytes": 280336
+        "bytes": 280336,
+        "sha256": "b17862dc650d51e7e789ca0dae6b65fd5fb287abb8316b3bb9f54fe691bec4e5"
       },
       "2026": {
         "kwartieren": 24476,
@@ -126,7 +120,8 @@
         "normalisatie_E17": 1.017794,
         "normalisatie_E18": 1.04954,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 195824
+        "bytes": 195824,
+        "sha256": "d2226baa79cbe302d1ec42cd908fa82e7f229f020f32bdb328f09d86fee174f0"
       }
     },
     "871687120000052782": {
@@ -140,7 +135,8 @@
         "normalisatie_E17": 1.025687,
         "normalisatie_E18": 1.041009,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 211248
+        "bytes": 211248,
+        "sha256": "3bc2b1e3ead95e34609cd24d5fc84c8108983ce5eed36fe5912017c5dfc5fb11"
       },
       "2024": {
         "kwartieren": 35136,
@@ -152,7 +148,8 @@
         "normalisatie_E17": 1.03969,
         "normalisatie_E18": 1.014935,
         "normalisatie_geleend": null,
-        "bytes": 281104
+        "bytes": 281104,
+        "sha256": "06ac93b83d8ed9d0e1e1eb5b9d4ba5ff54640485b3e6439e6a6b38bde2aefcbc"
       },
       "2025": {
         "kwartieren": 35040,
@@ -164,7 +161,8 @@
         "normalisatie_E17": 1.025687,
         "normalisatie_E18": 1.041009,
         "normalisatie_geleend": null,
-        "bytes": 280336
+        "bytes": 280336,
+        "sha256": "d8ecebdadfac82d1580618f263ca1c738c5b1119ab3a69a5e75a6d1948e86929"
       },
       "2026": {
         "kwartieren": 24476,
@@ -176,7 +174,8 @@
         "normalisatie_E17": 1.025687,
         "normalisatie_E18": 1.041009,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 195824
+        "bytes": 195824,
+        "sha256": "09bcf367ede4aae0861f957a14efe13d25d679d61e79f7843677c721604fb8b4"
       }
     },
     "871687400000002254": {
@@ -190,7 +189,8 @@
         "normalisatie_E17": 1.015818,
         "normalisatie_E18": 1.071603,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 211248
+        "bytes": 211248,
+        "sha256": "f4365f1bbaae655c3b0115dd41c7896b12193c94229859d6dac907828ded8eb9"
       },
       "2024": {
         "kwartieren": 35136,
@@ -202,7 +202,8 @@
         "normalisatie_E17": 1.030645,
         "normalisatie_E18": 1.016627,
         "normalisatie_geleend": null,
-        "bytes": 281104
+        "bytes": 281104,
+        "sha256": "d0356f672a42448edf2d9915f5db15923ea314260437c5a6a3e636cdd238351e"
       },
       "2025": {
         "kwartieren": 35040,
@@ -214,7 +215,8 @@
         "normalisatie_E17": 1.015818,
         "normalisatie_E18": 1.071603,
         "normalisatie_geleend": null,
-        "bytes": 280336
+        "bytes": 280336,
+        "sha256": "947319d77c37ab88f7b75ceddcf54ef1bd01afe8eff49bb91e4596bcf86b07a6"
       },
       "2026": {
         "kwartieren": 24476,
@@ -226,7 +228,8 @@
         "normalisatie_E17": 1.015818,
         "normalisatie_E18": 1.071603,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 195824
+        "bytes": 195824,
+        "sha256": "f2c18e6816d6501cb84cf641086d504f773824b2190c0989d1a804f7a24e91a3"
       }
     },
     "871687800090000015": {
@@ -240,7 +243,8 @@
         "normalisatie_E17": 1.004133,
         "normalisatie_E18": 1.09334,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 211248
+        "bytes": 211248,
+        "sha256": "7af556ff818516741815a2335aa44788651ded783c632370b7c07c5ce0894533"
       },
       "2024": {
         "kwartieren": 35136,
@@ -252,7 +256,8 @@
         "normalisatie_E17": 1.035379,
         "normalisatie_E18": 0.987101,
         "normalisatie_geleend": null,
-        "bytes": 281104
+        "bytes": 281104,
+        "sha256": "56e58714a8370f8b15d467cb0f8309fe6e10c2acbc3f3259755ee9fd07bd0ced"
       },
       "2025": {
         "kwartieren": 35040,
@@ -264,7 +269,8 @@
         "normalisatie_E17": 1.004133,
         "normalisatie_E18": 1.09334,
         "normalisatie_geleend": null,
-        "bytes": 280336
+        "bytes": 280336,
+        "sha256": "a458a990ff836f756e4bb83d2209c6a3c0d14cfcae30edb0cf3b883f0fbcfda3"
       },
       "2026": {
         "kwartieren": 24476,
@@ -276,7 +282,8 @@
         "normalisatie_E17": 1.004133,
         "normalisatie_E18": 1.09334,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 195824
+        "bytes": 195824,
+        "sha256": "c36197179a1421a2b9cab337c2292685c84843002b8f2a260095ce4654cc642c"
       }
     },
     "871687910000219120": {
@@ -290,7 +297,8 @@
         "normalisatie_E17": 1.02088,
         "normalisatie_E18": 1.087486,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 211248
+        "bytes": 211248,
+        "sha256": "4b7ccdab706de5d959b887f7e89603d99a5e23c6e6f5eee35cbdf7dcb85e5790"
       },
       "2024": {
         "kwartieren": 35136,
@@ -302,7 +310,8 @@
         "normalisatie_E17": 1.044853,
         "normalisatie_E18": 0.988012,
         "normalisatie_geleend": null,
-        "bytes": 281104
+        "bytes": 281104,
+        "sha256": "5b9d34f5506e6c654ed5bb4394f358a9db154650c92ba6ab22cc90dba94527b9"
       },
       "2025": {
         "kwartieren": 35040,
@@ -314,7 +323,8 @@
         "normalisatie_E17": 1.02088,
         "normalisatie_E18": 1.087486,
         "normalisatie_geleend": null,
-        "bytes": 280336
+        "bytes": 280336,
+        "sha256": "e3c3f0424f2468e0bd12890d645dab51c64c54325fd1563d24f8c89e9c7f9ecf"
       },
       "2026": {
         "kwartieren": 24476,
@@ -326,7 +336,8 @@
         "normalisatie_E17": 1.02088,
         "normalisatie_E18": 1.087486,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 195824
+        "bytes": 195824,
+        "sha256": "b7f318635c8d89e04613b15dfe7e3f45b7f71ab98fdf4acd09c1ae6241603117"
       }
     },
     "871688520000076884": {
@@ -340,7 +351,8 @@
         "normalisatie_E17": 1.021592,
         "normalisatie_E18": 1.092349,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 211248
+        "bytes": 211248,
+        "sha256": "165e0f62eaac8b64ed1e09fd17f83ad244639a8220a7a9614cd9e0e506b6fdf1"
       },
       "2024": {
         "kwartieren": 35136,
@@ -352,7 +364,8 @@
         "normalisatie_E17": 1.047372,
         "normalisatie_E18": 0.975618,
         "normalisatie_geleend": null,
-        "bytes": 281104
+        "bytes": 281104,
+        "sha256": "c63467b1f8f1289a55fbd54c74c02e146f8ccac42e07a6a43f8037fce2696a8e"
       },
       "2025": {
         "kwartieren": 35040,
@@ -364,7 +377,8 @@
         "normalisatie_E17": 1.021592,
         "normalisatie_E18": 1.092349,
         "normalisatie_geleend": null,
-        "bytes": 280336
+        "bytes": 280336,
+        "sha256": "dcae4b8fc736313b5b4d21d98fb7b151a771f86944090afcf1e687c5e69df980"
       },
       "2026": {
         "kwartieren": 24476,
@@ -376,7 +390,8 @@
         "normalisatie_E17": 1.021592,
         "normalisatie_E18": 1.092349,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 195824
+        "bytes": 195824,
+        "sha256": "2dbb572df29fa37c09cb04c9e0cfd101cfbf1689d4eb19376dc98187cf60366d"
       }
     },
     "871688600000002202": {
@@ -390,7 +405,8 @@
         "normalisatie_E17": 1.008115,
         "normalisatie_E18": 1.096002,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 211248
+        "bytes": 211248,
+        "sha256": "b3729c8f3c23f739c399b0e2d798c1eb0b06fadb75f50e02a36587ece382dcd3"
       },
       "2024": {
         "kwartieren": 35136,
@@ -402,7 +418,8 @@
         "normalisatie_E17": 1.026219,
         "normalisatie_E18": 0.991865,
         "normalisatie_geleend": null,
-        "bytes": 281104
+        "bytes": 281104,
+        "sha256": "21e210494ddb34aea83eca60d9581e1dca07ea638aeb64727c96b569466348cd"
       },
       "2025": {
         "kwartieren": 35040,
@@ -414,7 +431,8 @@
         "normalisatie_E17": 1.008115,
         "normalisatie_E18": 1.096002,
         "normalisatie_geleend": null,
-        "bytes": 280336
+        "bytes": 280336,
+        "sha256": "4407121e347eca5e8e98eb394fc057c66ec4b07f9ab482f0e5b53332d4a7e844"
       },
       "2026": {
         "kwartieren": 24476,
@@ -426,7 +444,8 @@
         "normalisatie_E17": 1.008115,
         "normalisatie_E18": 1.096002,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 195824
+        "bytes": 195824,
+        "sha256": "3f16a77b690e2caed6e3affb999d839a8a67480fe24cf77034c0e91618b77e0f"
       }
     },
     "871689200000010161": {
@@ -440,7 +459,8 @@
         "normalisatie_E17": 1.013104,
         "normalisatie_E18": 1.092739,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 211248
+        "bytes": 211248,
+        "sha256": "fed8df9497ac67b50b42a3e507a55760194545cf114ff796d720dd7e4b83763c"
       },
       "2024": {
         "kwartieren": 35136,
@@ -452,7 +472,8 @@
         "normalisatie_E17": 1.030291,
         "normalisatie_E18": 1.000794,
         "normalisatie_geleend": null,
-        "bytes": 281104
+        "bytes": 281104,
+        "sha256": "ba8c512e9e7ec0301202499c4342ddac53c7e7f9a10c586fc41dc8a6d12fa58d"
       },
       "2025": {
         "kwartieren": 35040,
@@ -464,7 +485,8 @@
         "normalisatie_E17": 1.013104,
         "normalisatie_E18": 1.092739,
         "normalisatie_geleend": null,
-        "bytes": 280336
+        "bytes": 280336,
+        "sha256": "b0cc643ecf05ba9d24953a624971e6ab15802a00fda099c36c264398efa5aae1"
       },
       "2026": {
         "kwartieren": 24476,
@@ -476,7 +498,8 @@
         "normalisatie_E17": 1.013104,
         "normalisatie_E18": 1.092739,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 195824
+        "bytes": 195824,
+        "sha256": "b8e5da2c90ae76261ce1d3c1eeaeab6ceaa95f4fe272e5ab38fe36d1757d7e6e"
       }
     },
     "871690200000000007": {
@@ -490,7 +513,8 @@
         "normalisatie_E17": 1.023423,
         "normalisatie_E18": 1.098799,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 211248
+        "bytes": 211248,
+        "sha256": "a93d0f1c64116c239473db4e49051e0d876e71a7f4c3e406464352253fe8da82"
       },
       "2024": {
         "kwartieren": 35136,
@@ -502,7 +526,8 @@
         "normalisatie_E17": 1.055769,
         "normalisatie_E18": 0.981355,
         "normalisatie_geleend": null,
-        "bytes": 281104
+        "bytes": 281104,
+        "sha256": "1d1c1c4e1d62bb8f83653a24613a55bb3d5626a30409fb2fd371b12e59c8ed59"
       },
       "2025": {
         "kwartieren": 35040,
@@ -514,7 +539,8 @@
         "normalisatie_E17": 1.023423,
         "normalisatie_E18": 1.098799,
         "normalisatie_geleend": null,
-        "bytes": 280336
+        "bytes": 280336,
+        "sha256": "d596564dafae0f639dda225f82d6cf4791ef73d615acd42eb0c4c66c225010d1"
       },
       "2026": {
         "kwartieren": 24476,
@@ -526,7 +552,8 @@
         "normalisatie_E17": 1.023423,
         "normalisatie_E18": 1.098799,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 195824
+        "bytes": 195824,
+        "sha256": "8d643185b137733d3fb94c179793fb3bd69d71156b8dd20a003c8bae21389eb4"
       }
     },
     "871690499910000003": {
@@ -540,7 +567,8 @@
         "normalisatie_E17": 1.017084,
         "normalisatie_E18": 1.120636,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 211248
+        "bytes": 211248,
+        "sha256": "6b389b994dbcb8f9eeb3fc733abc19dc2a52971c65bbcc34fdc2df4ca652b78e"
       },
       "2024": {
         "kwartieren": 35136,
@@ -552,7 +580,8 @@
         "normalisatie_E17": 1.030925,
         "normalisatie_E18": 0.992674,
         "normalisatie_geleend": null,
-        "bytes": 281104
+        "bytes": 281104,
+        "sha256": "a05b0880c10eeb0539d506b0ea2c1e47b928cab886f4025ccc86567bb73f3735"
       },
       "2025": {
         "kwartieren": 35040,
@@ -564,7 +593,8 @@
         "normalisatie_E17": 1.017084,
         "normalisatie_E18": 1.120636,
         "normalisatie_geleend": null,
-        "bytes": 280336
+        "bytes": 280336,
+        "sha256": "aeaec9d87fa979baac27b7c36e2d1e566271deba255f7376718c6842cdf448e8"
       },
       "2026": {
         "kwartieren": 24476,
@@ -576,7 +606,8 @@
         "normalisatie_E17": 1.017084,
         "normalisatie_E18": 1.120636,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 195824
+        "bytes": 195824,
+        "sha256": "c517d3d3337ca8dcbe8d50cdcd74494860bd92db0afa66c4966a3107a3536f65"
       }
     },
     "871690910000025589": {
@@ -590,7 +621,8 @@
         "normalisatie_E17": 1.008909,
         "normalisatie_E18": 1.065309,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 211248
+        "bytes": 211248,
+        "sha256": "922c6a22d997eb2622164ce017df8cf96343a468740f24d344e377a315b091e2"
       },
       "2024": {
         "kwartieren": 35136,
@@ -602,7 +634,8 @@
         "normalisatie_E17": 1.023098,
         "normalisatie_E18": 1.012993,
         "normalisatie_geleend": null,
-        "bytes": 281104
+        "bytes": 281104,
+        "sha256": "6a1d93f20890a84b72462e511957892e7abdcc7449766266401178f9e5683fa1"
       },
       "2025": {
         "kwartieren": 35040,
@@ -614,7 +647,8 @@
         "normalisatie_E17": 1.008909,
         "normalisatie_E18": 1.065309,
         "normalisatie_geleend": null,
-        "bytes": 280336
+        "bytes": 280336,
+        "sha256": "c48eac217a8f5ee948530b5012a8b376bfd09e35c9486e60d636291920fc8b43"
       },
       "2026": {
         "kwartieren": 24476,
@@ -626,7 +660,8 @@
         "normalisatie_E17": 1.008909,
         "normalisatie_E18": 1.065309,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 195824
+        "bytes": 195824,
+        "sha256": "3b3273a2edb19bc0517d2b980f4dab2acd94f46320de0ad34cdb325e0d8f0fff"
       }
     },
     "871691280000000008": {
@@ -640,7 +675,8 @@
         "normalisatie_E17": 1.030317,
         "normalisatie_E18": 1.055562,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 211248
+        "bytes": 211248,
+        "sha256": "5d5714dfc9ad7cc273d9ea3da6ba1e54e2fcac59bd4da5fc50559f58b8dee91c"
       },
       "2024": {
         "kwartieren": 35136,
@@ -652,7 +688,8 @@
         "normalisatie_E17": 1.051689,
         "normalisatie_E18": 1.026526,
         "normalisatie_geleend": null,
-        "bytes": 281104
+        "bytes": 281104,
+        "sha256": "eb624b037e026e4b0da44cc84c77f65cd38f843824530368e36b3d59fc1d8d20"
       },
       "2025": {
         "kwartieren": 35040,
@@ -664,7 +701,8 @@
         "normalisatie_E17": 1.030317,
         "normalisatie_E18": 1.055562,
         "normalisatie_geleend": null,
-        "bytes": 280336
+        "bytes": 280336,
+        "sha256": "36f97a9ba1ad50ec6ecf8bf93adf3cf29b7be3807ad80bbe1b9b64d8cf5bc3d5"
       },
       "2026": {
         "kwartieren": 24476,
@@ -676,7 +714,8 @@
         "normalisatie_E17": 1.030317,
         "normalisatie_E18": 1.055562,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 195824
+        "bytes": 195824,
+        "sha256": "0861e3e842e319e71b1ea9253e3000157038cb3e49591a1815138ca84d1453d4"
       }
     },
     "871691600019188908": {
@@ -690,7 +729,8 @@
         "normalisatie_E17": 1.027157,
         "normalisatie_E18": 1.044455,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 211248
+        "bytes": 211248,
+        "sha256": "ab26f76465aa22fa61d37e013e3bcab4931d7639e5de0cf2bb1d235edbe4fc52"
       },
       "2024": {
         "kwartieren": 35136,
@@ -702,7 +742,8 @@
         "normalisatie_E17": 1.046791,
         "normalisatie_E18": 1.01739,
         "normalisatie_geleend": null,
-        "bytes": 281104
+        "bytes": 281104,
+        "sha256": "e5a8afac5d06130a0b7cee2f84bf0512fd50cb31e8c95d17711c25aebc6e1379"
       },
       "2025": {
         "kwartieren": 35040,
@@ -714,7 +755,8 @@
         "normalisatie_E17": 1.027157,
         "normalisatie_E18": 1.044455,
         "normalisatie_geleend": null,
-        "bytes": 280336
+        "bytes": 280336,
+        "sha256": "ce28eeaf8d00de3a880269e00dcd333418df41a7050a6f3fa47692c48d7fada1"
       },
       "2026": {
         "kwartieren": 24476,
@@ -726,7 +768,8 @@
         "normalisatie_E17": 1.027157,
         "normalisatie_E18": 1.044455,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 195824
+        "bytes": 195824,
+        "sha256": "6641e1c96eea7bd09df747339716e9210c45e5db702d6a2d9b45bff057b472c3"
       }
     },
     "871692100000010038": {
@@ -740,7 +783,8 @@
         "normalisatie_E17": 1.017747,
         "normalisatie_E18": 1.08269,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 211248
+        "bytes": 211248,
+        "sha256": "0842b8a4b553544ab44eba5bdcb1297c51156b91e5967b70c39a18031de2fbab"
       },
       "2024": {
         "kwartieren": 35136,
@@ -752,7 +796,8 @@
         "normalisatie_E17": 1.025146,
         "normalisatie_E18": 1.003701,
         "normalisatie_geleend": null,
-        "bytes": 281104
+        "bytes": 281104,
+        "sha256": "f9d9acf9422d4c426f66eaec1150c913ad2a617e9ab97ec681b14379412f3d08"
       },
       "2025": {
         "kwartieren": 35040,
@@ -764,7 +809,8 @@
         "normalisatie_E17": 1.017747,
         "normalisatie_E18": 1.08269,
         "normalisatie_geleend": null,
-        "bytes": 280336
+        "bytes": 280336,
+        "sha256": "148cf175ecb9fbfc7e244d0c450beb4b4d0c49ba2719cdf9df18faed23e723d3"
       },
       "2026": {
         "kwartieren": 24476,
@@ -776,7 +822,8 @@
         "normalisatie_E17": 1.017747,
         "normalisatie_E18": 1.08269,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 195824
+        "bytes": 195824,
+        "sha256": "7e3bd3f87865fb797188e1a51d36a44ec3f18e234480ac6a633b8acf3481885a"
       }
     },
     "871692510000000005": {
@@ -790,7 +837,8 @@
         "normalisatie_E17": 1.006472,
         "normalisatie_E18": 1.102071,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 211248
+        "bytes": 211248,
+        "sha256": "a95c01f9145570e4797afbef57f8f958e5a23f917fd0e2d5c0019a166a2c2a85"
       },
       "2024": {
         "kwartieren": 35136,
@@ -802,7 +850,8 @@
         "normalisatie_E17": 1.036321,
         "normalisatie_E18": 0.99378,
         "normalisatie_geleend": null,
-        "bytes": 281104
+        "bytes": 281104,
+        "sha256": "40cdcc5450968e7f7824a79ad7b7997c0eddfb88d2ecec2a52645dd6b0d9838a"
       },
       "2025": {
         "kwartieren": 35040,
@@ -814,7 +863,8 @@
         "normalisatie_E17": 1.006472,
         "normalisatie_E18": 1.102071,
         "normalisatie_geleend": null,
-        "bytes": 280336
+        "bytes": 280336,
+        "sha256": "42fbb0be07f287dde4d44c61743860ea1a02311186ada5e59048cf1813e56cb1"
       },
       "2026": {
         "kwartieren": 24476,
@@ -826,7 +876,8 @@
         "normalisatie_E17": 1.006472,
         "normalisatie_E18": 1.102071,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 195824
+        "bytes": 195824,
+        "sha256": "05efe8ceb54eca20e0269635fa9184b2b43ad963638cd225aca88c9809821334"
       }
     },
     "871694600000002173": {
@@ -840,7 +891,8 @@
         "normalisatie_E17": 1.013769,
         "normalisatie_E18": 1.066707,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 211248
+        "bytes": 211248,
+        "sha256": "573c5585f6189b7e76319082195948b63ad93f8f61655335b2c90edc63b07e2b"
       },
       "2024": {
         "kwartieren": 35136,
@@ -852,7 +904,8 @@
         "normalisatie_E17": 1.028021,
         "normalisatie_E18": 1.051078,
         "normalisatie_geleend": null,
-        "bytes": 281104
+        "bytes": 281104,
+        "sha256": "4ec5e51e69da4da3bc1e2182ae76f620d9c2fd1708ce62e3a559a608ec7c199f"
       },
       "2025": {
         "kwartieren": 35040,
@@ -864,7 +917,8 @@
         "normalisatie_E17": 1.013769,
         "normalisatie_E18": 1.066707,
         "normalisatie_geleend": null,
-        "bytes": 280336
+        "bytes": 280336,
+        "sha256": "6f2742e1d19c04efe9cbad1392c084032d8518aa99f5b29c2dd83e74bb389061"
       },
       "2026": {
         "kwartieren": 24476,
@@ -876,7 +930,8 @@
         "normalisatie_E17": 1.013769,
         "normalisatie_E18": 1.066707,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 195824
+        "bytes": 195824,
+        "sha256": "8594705040a12fc1d42fe64b70b661afd36e9ebbad1e7881c771d30f616ee02f"
       }
     },
     "871694830000000309": {
@@ -890,7 +945,8 @@
         "normalisatie_E17": 1.033863,
         "normalisatie_E18": 1.041912,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 211248
+        "bytes": 211248,
+        "sha256": "3e7b60d9479119741f8f23e9e5747ba79ebf48a462f4163298597383aa5d737b"
       },
       "2024": {
         "kwartieren": 35136,
@@ -902,7 +958,8 @@
         "normalisatie_E17": 1.046735,
         "normalisatie_E18": 1.036159,
         "normalisatie_geleend": null,
-        "bytes": 281104
+        "bytes": 281104,
+        "sha256": "0a83542eac595dfbf0424bddf678069ea0a71f0253d038b7c756159a032e5b29"
       },
       "2025": {
         "kwartieren": 35040,
@@ -914,7 +971,8 @@
         "normalisatie_E17": 1.033863,
         "normalisatie_E18": 1.041912,
         "normalisatie_geleend": null,
-        "bytes": 280336
+        "bytes": 280336,
+        "sha256": "e3f13f9cf41231533f2f8bfdf4c1c557d2bcacad4108759603245ec44d56cc6d"
       },
       "2026": {
         "kwartieren": 24476,
@@ -926,7 +984,8 @@
         "normalisatie_E17": 1.033863,
         "normalisatie_E18": 1.041912,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 195824
+        "bytes": 195824,
+        "sha256": "4fca1ecfbf9b213582fda174842d3bc7a019c997c911becae62c3ade6604bf39"
       }
     }
   },
@@ -942,7 +1001,8 @@
         "normalisatie_E17": 1.01221,
         "normalisatie_E18": 1.04954,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 211248
+        "bytes": 211248,
+        "sha256": "97c6f5ccf0b4e79b66f464d72f27f1fe57a7ea9ccbd1f3823b7048056b863d54"
       },
       "2024": {
         "kwartieren": 35136,
@@ -954,7 +1014,8 @@
         "normalisatie_E17": 1.014501,
         "normalisatie_E18": 1.029857,
         "normalisatie_geleend": null,
-        "bytes": 281104
+        "bytes": 281104,
+        "sha256": "d226f7747b8cca92ea95a7f9c2605fccbb8d6b7c0a3585aa0ce14fe04b3201e5"
       },
       "2025": {
         "kwartieren": 35040,
@@ -966,7 +1027,8 @@
         "normalisatie_E17": 1.01221,
         "normalisatie_E18": 1.04954,
         "normalisatie_geleend": null,
-        "bytes": 280336
+        "bytes": 280336,
+        "sha256": "b0abecfa74b2bb8a70b8d854214acac4427a7e64b3238a158101e5828b2a910c"
       },
       "2026": {
         "kwartieren": 24476,
@@ -978,7 +1040,8 @@
         "normalisatie_E17": 1.01221,
         "normalisatie_E18": 1.04954,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 195824
+        "bytes": 195824,
+        "sha256": "209e468dab847cb3a03a85c53e61d292a49f368d05cd3d28fc472037464aa652"
       }
     },
     "871687120000052782": {
@@ -992,7 +1055,8 @@
         "normalisatie_E17": 1.015729,
         "normalisatie_E18": 1.041009,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 211248
+        "bytes": 211248,
+        "sha256": "c7da5f0eb3cd330c11c09a5626793b5463a8a9c0ab74e902070527175d096da0"
       },
       "2024": {
         "kwartieren": 35136,
@@ -1004,7 +1068,8 @@
         "normalisatie_E17": 1.016456,
         "normalisatie_E18": 1.014935,
         "normalisatie_geleend": null,
-        "bytes": 281104
+        "bytes": 281104,
+        "sha256": "13bef5b57860c0a6ae32f6602294812596d4b26110594f4828b2efa3df7620cd"
       },
       "2025": {
         "kwartieren": 35040,
@@ -1016,7 +1081,8 @@
         "normalisatie_E17": 1.015729,
         "normalisatie_E18": 1.041009,
         "normalisatie_geleend": null,
-        "bytes": 280336
+        "bytes": 280336,
+        "sha256": "61167d28f641ab86f9d4705078d1309b40accafc14d04eade32506c6d6b590eb"
       },
       "2026": {
         "kwartieren": 24476,
@@ -1028,7 +1094,8 @@
         "normalisatie_E17": 1.015729,
         "normalisatie_E18": 1.041009,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 195824
+        "bytes": 195824,
+        "sha256": "be7a7bd46a1ffe0e72f9098c31fdd5dace6ba7811a20200ddb32cd6a615afe41"
       }
     },
     "871687400000002254": {
@@ -1042,7 +1109,8 @@
         "normalisatie_E17": 1.01459,
         "normalisatie_E18": 1.071603,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 211248
+        "bytes": 211248,
+        "sha256": "ef79903cdda1d5d3fb1cf53d63056e2a29a105d6dac38ef12ab07578136e2708"
       },
       "2024": {
         "kwartieren": 35136,
@@ -1054,7 +1122,8 @@
         "normalisatie_E17": 1.014066,
         "normalisatie_E18": 1.016627,
         "normalisatie_geleend": null,
-        "bytes": 281104
+        "bytes": 281104,
+        "sha256": "a5ae2236e9c9903f2265171f0d2fcc123e0c63bd8aebf98d8c5fcd3ca8894b9f"
       },
       "2025": {
         "kwartieren": 35040,
@@ -1066,7 +1135,8 @@
         "normalisatie_E17": 1.01459,
         "normalisatie_E18": 1.071603,
         "normalisatie_geleend": null,
-        "bytes": 280336
+        "bytes": 280336,
+        "sha256": "53b2e2598127a5d8eb876eb38f73ece1da74db3be5812c8f49b0fecaf2555336"
       },
       "2026": {
         "kwartieren": 24476,
@@ -1078,7 +1148,8 @@
         "normalisatie_E17": 1.01459,
         "normalisatie_E18": 1.071603,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 195824
+        "bytes": 195824,
+        "sha256": "dd91ae77a3a68551cbc76faacc60bc7ba6843b7e0cffa8b87eaa80b7d164c856"
       }
     },
     "871687800090000015": {
@@ -1092,7 +1163,8 @@
         "normalisatie_E17": 1.015908,
         "normalisatie_E18": 1.09334,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 211248
+        "bytes": 211248,
+        "sha256": "1a83167e2875492a47edb9d6bbf66f64007aef16f99e795c3166976e255cf067"
       },
       "2024": {
         "kwartieren": 35136,
@@ -1104,7 +1176,8 @@
         "normalisatie_E17": 1.018104,
         "normalisatie_E18": 0.987101,
         "normalisatie_geleend": null,
-        "bytes": 281104
+        "bytes": 281104,
+        "sha256": "a338301454b08c111f7109f466e48c02c1b6535c5744694f264425ee7d862d30"
       },
       "2025": {
         "kwartieren": 35040,
@@ -1116,7 +1189,8 @@
         "normalisatie_E17": 1.015908,
         "normalisatie_E18": 1.09334,
         "normalisatie_geleend": null,
-        "bytes": 280336
+        "bytes": 280336,
+        "sha256": "f8b903cc3940bba925b7d20b367b86ad6e02e3231af4de89b3e62debcc4dba40"
       },
       "2026": {
         "kwartieren": 24476,
@@ -1128,7 +1202,8 @@
         "normalisatie_E17": 1.015908,
         "normalisatie_E18": 1.09334,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 195824
+        "bytes": 195824,
+        "sha256": "faebef0fa5f411abd1d33c1f2157002653b936404792aeffe6478bc3d8ae6def"
       }
     },
     "871687910000219120": {
@@ -1142,7 +1217,8 @@
         "normalisatie_E17": 1.018598,
         "normalisatie_E18": 1.087486,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 211248
+        "bytes": 211248,
+        "sha256": "b1d453dadd27ce4627191c0f512c0638de042bd4a9cf296930ce9a9a667e137b"
       },
       "2024": {
         "kwartieren": 35136,
@@ -1154,7 +1230,8 @@
         "normalisatie_E17": 1.0184,
         "normalisatie_E18": 0.988012,
         "normalisatie_geleend": null,
-        "bytes": 281104
+        "bytes": 281104,
+        "sha256": "d8e0ac7b873f4d530803efff928f7bd4a8d35fc7ebc41fd233fa470ac89dd55c"
       },
       "2025": {
         "kwartieren": 35040,
@@ -1166,7 +1243,8 @@
         "normalisatie_E17": 1.018598,
         "normalisatie_E18": 1.087486,
         "normalisatie_geleend": null,
-        "bytes": 280336
+        "bytes": 280336,
+        "sha256": "6572cbb8345b6146f93084e53bddc04300190fc9e89e6579c4c40fd78c5038b7"
       },
       "2026": {
         "kwartieren": 24476,
@@ -1178,7 +1256,8 @@
         "normalisatie_E17": 1.018598,
         "normalisatie_E18": 1.087486,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 195824
+        "bytes": 195824,
+        "sha256": "2547f388a22a41b3c162e1c84a72d23a14af8d12138ae7d66917653ec093f085"
       }
     },
     "871688520000076884": {
@@ -1192,7 +1271,8 @@
         "normalisatie_E17": 1.021878,
         "normalisatie_E18": 1.092349,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 211248
+        "bytes": 211248,
+        "sha256": "7e7931652c17aa942c0e4296fdcbaaa8f949945c6850862bba80f8c549e260cc"
       },
       "2024": {
         "kwartieren": 35136,
@@ -1204,7 +1284,8 @@
         "normalisatie_E17": 1.020689,
         "normalisatie_E18": 0.975618,
         "normalisatie_geleend": null,
-        "bytes": 281104
+        "bytes": 281104,
+        "sha256": "3753e156255160e8373457fc34cfd02b7cfe6e580fac64adc33cf8b2be0deb06"
       },
       "2025": {
         "kwartieren": 35040,
@@ -1216,7 +1297,8 @@
         "normalisatie_E17": 1.021878,
         "normalisatie_E18": 1.092349,
         "normalisatie_geleend": null,
-        "bytes": 280336
+        "bytes": 280336,
+        "sha256": "650a050b4b6bb5d17bd194e2f01bddc6d1056862e69c2252460b9351430563ed"
       },
       "2026": {
         "kwartieren": 24476,
@@ -1228,7 +1310,8 @@
         "normalisatie_E17": 1.021878,
         "normalisatie_E18": 1.092349,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 195824
+        "bytes": 195824,
+        "sha256": "b8f5667ad4c68396c11cecca9ae53e1285da99fca15b2b658ee051ced7d70013"
       }
     },
     "871688600000002202": {
@@ -1242,7 +1325,8 @@
         "normalisatie_E17": 1.007424,
         "normalisatie_E18": 1.096002,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 211248
+        "bytes": 211248,
+        "sha256": "70276c3435c7b0e99a0bbb452be16d8c89934c5d8bbfb63162e59d7fcd7b6008"
       },
       "2024": {
         "kwartieren": 35136,
@@ -1254,7 +1338,8 @@
         "normalisatie_E17": 1.0116,
         "normalisatie_E18": 0.991865,
         "normalisatie_geleend": null,
-        "bytes": 281104
+        "bytes": 281104,
+        "sha256": "ffd7d18c542b59399f07a629d0c46fdccaffbc015090e83081620fc2a29ff0b2"
       },
       "2025": {
         "kwartieren": 35040,
@@ -1266,7 +1351,8 @@
         "normalisatie_E17": 1.007424,
         "normalisatie_E18": 1.096002,
         "normalisatie_geleend": null,
-        "bytes": 280336
+        "bytes": 280336,
+        "sha256": "f56177748a05f6b6bc98c537eef79223f0b3b43c239c1aebee227765f0f437dc"
       },
       "2026": {
         "kwartieren": 24476,
@@ -1278,7 +1364,8 @@
         "normalisatie_E17": 1.007424,
         "normalisatie_E18": 1.096002,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 195824
+        "bytes": 195824,
+        "sha256": "8df3eab6acbb713729d7f40ac25e3617d6a441917d673ef7ce3b8047e4b6db43"
       }
     },
     "871689200000010161": {
@@ -1292,7 +1379,8 @@
         "normalisatie_E17": 1.012074,
         "normalisatie_E18": 1.092739,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 211248
+        "bytes": 211248,
+        "sha256": "2eeaf238109617336e083049370dd91b430bb8ea9170a280b94d300269f76d22"
       },
       "2024": {
         "kwartieren": 35136,
@@ -1304,7 +1392,8 @@
         "normalisatie_E17": 1.014028,
         "normalisatie_E18": 1.000794,
         "normalisatie_geleend": null,
-        "bytes": 281104
+        "bytes": 281104,
+        "sha256": "e083ecd6aa01ff9beb827dd7f5b6f804d2f23d00a7c3076c0e2a3739525e61f5"
       },
       "2025": {
         "kwartieren": 35040,
@@ -1316,7 +1405,8 @@
         "normalisatie_E17": 1.012074,
         "normalisatie_E18": 1.092739,
         "normalisatie_geleend": null,
-        "bytes": 280336
+        "bytes": 280336,
+        "sha256": "8c10ad48a326cad9406cfc8049f8d01b73abdfa0b03e3c4e861be99a031d5934"
       },
       "2026": {
         "kwartieren": 24476,
@@ -1328,7 +1418,8 @@
         "normalisatie_E17": 1.012074,
         "normalisatie_E18": 1.092739,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 195824
+        "bytes": 195824,
+        "sha256": "0104e4c33d28770de559810e842659e6ba91b12219d6213b47d97d9ddb967eac"
       }
     },
     "871690200000000007": {
@@ -1342,7 +1433,8 @@
         "normalisatie_E17": 1.036618,
         "normalisatie_E18": 1.098799,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 211248
+        "bytes": 211248,
+        "sha256": "8111af1c67d56a04bfbab17bc32c2f6e620cde6c5d2779bbc41f31dbaca0003e"
       },
       "2024": {
         "kwartieren": 35136,
@@ -1354,7 +1446,8 @@
         "normalisatie_E17": 1.04043,
         "normalisatie_E18": 0.981355,
         "normalisatie_geleend": null,
-        "bytes": 281104
+        "bytes": 281104,
+        "sha256": "2ba49f39fa3a7ed0736d0ec3c33a01de57d3a46a8e70e9b632cbfa0c6dd749eb"
       },
       "2025": {
         "kwartieren": 35040,
@@ -1366,7 +1459,8 @@
         "normalisatie_E17": 1.036618,
         "normalisatie_E18": 1.098799,
         "normalisatie_geleend": null,
-        "bytes": 280336
+        "bytes": 280336,
+        "sha256": "99f9980caf29844ad0b8ef15ee119148423f2c22b818eb31e04f5c3a02c43d3a"
       },
       "2026": {
         "kwartieren": 24476,
@@ -1378,7 +1472,8 @@
         "normalisatie_E17": 1.036618,
         "normalisatie_E18": 1.098799,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 195824
+        "bytes": 195824,
+        "sha256": "d8927570067b027ed24a4214121dd99b6ec961901c9cc19ed9819aae71f25731"
       }
     },
     "871690499910000003": {
@@ -1392,7 +1487,8 @@
         "normalisatie_E17": 1.012342,
         "normalisatie_E18": 1.120636,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 211248
+        "bytes": 211248,
+        "sha256": "60b031f72ccbae940a4af05cc0e0f9d1eee8697c5abca3948d4b2dc1d5125a12"
       },
       "2024": {
         "kwartieren": 35136,
@@ -1404,7 +1500,8 @@
         "normalisatie_E17": 1.016781,
         "normalisatie_E18": 0.992674,
         "normalisatie_geleend": null,
-        "bytes": 281104
+        "bytes": 281104,
+        "sha256": "89cb78b4ffc50075392396d6aa589703080980a1987e2f35097d28e1db4a7279"
       },
       "2025": {
         "kwartieren": 35040,
@@ -1416,7 +1513,8 @@
         "normalisatie_E17": 1.012342,
         "normalisatie_E18": 1.120636,
         "normalisatie_geleend": null,
-        "bytes": 280336
+        "bytes": 280336,
+        "sha256": "c637f89742dfa4c33ae219f1aa849f76ed5c85c76437e6585e6f72a1ca53118f"
       },
       "2026": {
         "kwartieren": 24476,
@@ -1428,7 +1526,8 @@
         "normalisatie_E17": 1.012342,
         "normalisatie_E18": 1.120636,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 195824
+        "bytes": 195824,
+        "sha256": "ba9cef5494320691ca9a72c4d98fa9c01674e49e3dd77816ea506908d51012c0"
       }
     },
     "871690910000025589": {
@@ -1442,7 +1541,8 @@
         "normalisatie_E17": 1.009354,
         "normalisatie_E18": 1.065309,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 211248
+        "bytes": 211248,
+        "sha256": "eef08e026bce59b719c69e88d894e6f75324b2e8c626296b3d4c70f9d0a23f66"
       },
       "2024": {
         "kwartieren": 35136,
@@ -1454,7 +1554,8 @@
         "normalisatie_E17": 1.010239,
         "normalisatie_E18": 1.012993,
         "normalisatie_geleend": null,
-        "bytes": 281104
+        "bytes": 281104,
+        "sha256": "f6d5ad10d699b0b080dd889aaa437cb8713afaa13a67981c9c06805aaca55e35"
       },
       "2025": {
         "kwartieren": 35040,
@@ -1466,7 +1567,8 @@
         "normalisatie_E17": 1.009354,
         "normalisatie_E18": 1.065309,
         "normalisatie_geleend": null,
-        "bytes": 280336
+        "bytes": 280336,
+        "sha256": "6a68e9eb9e8f14adf6edce439dd2371df14d64d5d569396b409a3149c37a2c95"
       },
       "2026": {
         "kwartieren": 24476,
@@ -1478,7 +1580,8 @@
         "normalisatie_E17": 1.009354,
         "normalisatie_E18": 1.065309,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 195824
+        "bytes": 195824,
+        "sha256": "2824ad14ec268d0c48ade6f5565ec3057cf763a86b401f70a599686928729013"
       }
     },
     "871691280000000008": {
@@ -1492,7 +1595,8 @@
         "normalisatie_E17": 1.022947,
         "normalisatie_E18": 1.055562,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 211248
+        "bytes": 211248,
+        "sha256": "8e1507fd4867d55b84080f18adfea2b1abc9ad4a81bc65109c8a04b16e96056d"
       },
       "2024": {
         "kwartieren": 35136,
@@ -1504,7 +1608,8 @@
         "normalisatie_E17": 1.030343,
         "normalisatie_E18": 1.026526,
         "normalisatie_geleend": null,
-        "bytes": 281104
+        "bytes": 281104,
+        "sha256": "5e7f709120e7d4203c5c542a81840c1bfdbf9695bacfc15b8f64e401d02459ec"
       },
       "2025": {
         "kwartieren": 35040,
@@ -1516,7 +1621,8 @@
         "normalisatie_E17": 1.022947,
         "normalisatie_E18": 1.055562,
         "normalisatie_geleend": null,
-        "bytes": 280336
+        "bytes": 280336,
+        "sha256": "a8b871994a43c348683717aa37af60efda0ac31429713c2388e47ad88953bdbd"
       },
       "2026": {
         "kwartieren": 24476,
@@ -1528,7 +1634,8 @@
         "normalisatie_E17": 1.022947,
         "normalisatie_E18": 1.055562,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 195824
+        "bytes": 195824,
+        "sha256": "835b03a653693ea2e1a498a8e23f7f356a9a47df3488c8b15b5c62c738352ec3"
       }
     },
     "871691600019188908": {
@@ -1542,7 +1649,8 @@
         "normalisatie_E17": 1.02901,
         "normalisatie_E18": 1.044455,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 211248
+        "bytes": 211248,
+        "sha256": "66a2b294db1f551dc819d0a4094120803d432802cde80667bab34577f67614a8"
       },
       "2024": {
         "kwartieren": 35136,
@@ -1554,7 +1662,8 @@
         "normalisatie_E17": 1.022695,
         "normalisatie_E18": 1.01739,
         "normalisatie_geleend": null,
-        "bytes": 281104
+        "bytes": 281104,
+        "sha256": "23bb08104347c0b71e6a24ffa4a6b0c33b093d57303e3db3c971ad821705413d"
       },
       "2025": {
         "kwartieren": 35040,
@@ -1566,7 +1675,8 @@
         "normalisatie_E17": 1.02901,
         "normalisatie_E18": 1.044455,
         "normalisatie_geleend": null,
-        "bytes": 280336
+        "bytes": 280336,
+        "sha256": "0440b1c2fdaad262997d311ae7473666a8aa43b2f874bd1e8e38e646cf4c8ed3"
       },
       "2026": {
         "kwartieren": 24476,
@@ -1578,7 +1688,8 @@
         "normalisatie_E17": 1.02901,
         "normalisatie_E18": 1.044455,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 195824
+        "bytes": 195824,
+        "sha256": "f6b1b3587af6321e025426c4fabc7f0250f38d504bc08285cddc5f9ab84f4cb1"
       }
     },
     "871692100000010038": {
@@ -1592,7 +1703,8 @@
         "normalisatie_E17": 1.010658,
         "normalisatie_E18": 1.08269,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 211248
+        "bytes": 211248,
+        "sha256": "6dcc8a63b48f03968c2c6adad9863867ea5787e70ce162879a14123487cb4876"
       },
       "2024": {
         "kwartieren": 35136,
@@ -1604,7 +1716,8 @@
         "normalisatie_E17": 1.012754,
         "normalisatie_E18": 1.003701,
         "normalisatie_geleend": null,
-        "bytes": 281104
+        "bytes": 281104,
+        "sha256": "d127d697921983b742e1a732571f7786e606a5a5debca843c58774f1bd4d711b"
       },
       "2025": {
         "kwartieren": 35040,
@@ -1616,7 +1729,8 @@
         "normalisatie_E17": 1.010658,
         "normalisatie_E18": 1.08269,
         "normalisatie_geleend": null,
-        "bytes": 280336
+        "bytes": 280336,
+        "sha256": "283028d01a32d9c2cdc42a4418d45f636653e5b2a31afd935126d6e3b303a8ab"
       },
       "2026": {
         "kwartieren": 24476,
@@ -1628,7 +1742,8 @@
         "normalisatie_E17": 1.010658,
         "normalisatie_E18": 1.08269,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 195824
+        "bytes": 195824,
+        "sha256": "ccc9bb0ff6717ec96c8de118a87d88e5a9c92e7c1600565dd0f7efe28b968fcc"
       }
     },
     "871692510000000005": {
@@ -1642,7 +1757,8 @@
         "normalisatie_E17": 1.015998,
         "normalisatie_E18": 1.102071,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 211248
+        "bytes": 211248,
+        "sha256": "9c5ea280b1d15b7219622d9bb8ffb8022da038e48ac9f6d69e018628d5cbb48a"
       },
       "2024": {
         "kwartieren": 35136,
@@ -1654,7 +1770,8 @@
         "normalisatie_E17": 1.016504,
         "normalisatie_E18": 0.99378,
         "normalisatie_geleend": null,
-        "bytes": 281104
+        "bytes": 281104,
+        "sha256": "9124a2352a3befb271238d792703743ddb686be2a2a76759285054f415197983"
       },
       "2025": {
         "kwartieren": 35040,
@@ -1666,7 +1783,8 @@
         "normalisatie_E17": 1.015998,
         "normalisatie_E18": 1.102071,
         "normalisatie_geleend": null,
-        "bytes": 280336
+        "bytes": 280336,
+        "sha256": "9aefeec6e79cdf799320634760cc38bce5289e70410628ad9506c983ab5858b6"
       },
       "2026": {
         "kwartieren": 24476,
@@ -1678,7 +1796,8 @@
         "normalisatie_E17": 1.015998,
         "normalisatie_E18": 1.102071,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 195824
+        "bytes": 195824,
+        "sha256": "2450a6e4f140021c3ae53f0df00aea4224b63fdbda099ba8de1d3c552aacbe21"
       }
     },
     "871694600000002173": {
@@ -1692,7 +1811,8 @@
         "normalisatie_E17": 1.006313,
         "normalisatie_E18": 1.066707,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 211248
+        "bytes": 211248,
+        "sha256": "58ae730cfa52fc40318d586d62169531b772e754e8f8353c269b576489162999"
       },
       "2024": {
         "kwartieren": 35136,
@@ -1704,7 +1824,8 @@
         "normalisatie_E17": 1.015981,
         "normalisatie_E18": 1.051078,
         "normalisatie_geleend": null,
-        "bytes": 281104
+        "bytes": 281104,
+        "sha256": "fdd588a2230487e8c776c1d90e94b020e7b346430aea2662a12556847d10f39f"
       },
       "2025": {
         "kwartieren": 35040,
@@ -1716,7 +1837,8 @@
         "normalisatie_E17": 1.006313,
         "normalisatie_E18": 1.066707,
         "normalisatie_geleend": null,
-        "bytes": 280336
+        "bytes": 280336,
+        "sha256": "0eddf3075370ede9e5e04bae85cfa4251e7c9288f678d6c1b309e35aa1a13ad7"
       },
       "2026": {
         "kwartieren": 24476,
@@ -1728,7 +1850,8 @@
         "normalisatie_E17": 1.006313,
         "normalisatie_E18": 1.066707,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 195824
+        "bytes": 195824,
+        "sha256": "0d7c735d8fef9e3886ca6a7bfafdc9145637272584d920fbdfdfb0fd9d8d1e6e"
       }
     },
     "871694830000000309": {
@@ -1742,7 +1865,8 @@
         "normalisatie_E17": 1.025342,
         "normalisatie_E18": 1.041912,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 211248
+        "bytes": 211248,
+        "sha256": "fc7a4a396cf44fe79a351ea78e453144f6086f8a442814846756ccc099a307a5"
       },
       "2024": {
         "kwartieren": 35136,
@@ -1754,7 +1878,8 @@
         "normalisatie_E17": 1.025726,
         "normalisatie_E18": 1.036159,
         "normalisatie_geleend": null,
-        "bytes": 281104
+        "bytes": 281104,
+        "sha256": "ce19a4f183de123ef6009ed741793c727cb503ee213753f5485e54f47e818679"
       },
       "2025": {
         "kwartieren": 35040,
@@ -1766,7 +1891,8 @@
         "normalisatie_E17": 1.025342,
         "normalisatie_E18": 1.041912,
         "normalisatie_geleend": null,
-        "bytes": 280336
+        "bytes": 280336,
+        "sha256": "9a01f93e9de21de751b9ab8f021ce05100b490d2d8973177cd465a7ec1c396dc"
       },
       "2026": {
         "kwartieren": 24476,
@@ -1778,7 +1904,8 @@
         "normalisatie_E17": 1.025342,
         "normalisatie_E18": 1.041912,
         "normalisatie_geleend": "volledig jaar",
-        "bytes": 195824
+        "bytes": 195824,
+        "sha256": "44ff248c7498b64b6ad7d33cce09b4720589f63e4a46b7fa52b10f2fd880e4b2"
       }
     }
   },
@@ -1801,6 +1928,7 @@
     "871694600000002173",
     "871694830000000309"
   ],
+  "profielen_tot": "2026-09-15",
   "co2": {
     "2023": {
       "uren": 8760,
@@ -1809,7 +1937,8 @@
       "laatste_uur_utc": "2023-12-31T22:00:00+00:00",
       "ontbrekend": 1,
       "gemiddelde_g_per_kwh": 218.8,
-      "bytes": 35056
+      "bytes": 35056,
+      "sha256": "13011f2b4c02ee5bd5ca59eaf1143fec8ec074ab8ed3991b82f7806233661cb9"
     },
     "2024": {
       "uren": 8784,
@@ -1818,7 +1947,8 @@
       "laatste_uur_utc": "2024-12-31T22:00:00+00:00",
       "ontbrekend": 0,
       "gemiddelde_g_per_kwh": 200.9,
-      "bytes": 35152
+      "bytes": 35152,
+      "sha256": "5f2eddea9547b52f2d87896b80ce5adc66496ed296bd3e12c029bb843c1d5be7"
     },
     "2025": {
       "uren": 8760,
@@ -1827,7 +1957,8 @@
       "laatste_uur_utc": "2025-12-31T22:00:00+00:00",
       "ontbrekend": 0,
       "gemiddelde_g_per_kwh": 211.5,
-      "bytes": 35056
+      "bytes": 35056,
+      "sha256": "18c0d9deef821e2b120668de3a5d65f8d9ccc1485e7a15964f9b28326847c103"
     },
     "2026": {
       "uren": 6231,
@@ -1836,7 +1967,8 @@
       "laatste_uur_utc": "2026-09-17T13:00:00+00:00",
       "ontbrekend": 0,
       "gemiddelde_g_per_kwh": 216.4,
-      "bytes": 24940
+      "bytes": 24940,
+      "sha256": "eba46e61f8899d3cd20c0212cc3c62d4db4bd3b880f571289a68eb7468ea8d72"
     }
   }
 }

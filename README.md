@@ -294,7 +294,7 @@ Python-scripts nodig — zie [Data verversen](#data-verversen).
 | Wat | Bron | Periode |
 |---|---|---|
 | Verbruik en teruglevering per kwartier | MFFBAS/EDSN **DYNAMIC** profielfracties, categorie E1A, afnametype AMI (met zonnepanelen) en AZI (zonder) | vanaf 2023-04-01 |
-| Uurtarieven | ANWB Energie, marktprijs en all-in, incl. btw | vanaf 2021 |
+| Uurtarieven | ANWB Energie, marktprijs en all-in, incl. btw | vanaf 2023 (sinds 20-06-2026 op hele centen) |
 
 Beide via de `energiedata-nl` skill.
 

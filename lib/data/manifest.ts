@@ -13,7 +13,17 @@ export interface PriceYearInfo {
    */
   jaarconstante_eur_per_kwh: number;
   jaarconstante_spreiding: number;
+  /**
+   * Deel van de uren waarin marktprijs en allInPrijs op hele centen staan. De
+   * ANWB-API rondt sinds 20 juni 2026 af; de build waarschuwt boven 10%.
+   * Optioneel, zodat een ouder manifest blijft laden.
+   */
+  aandeel_hele_centen?: number;
+  /** Vanaf welke dag elk uur op hele centen staat, of null. */
+  hele_centen_vanaf?: string | null;
   bytes: number;
+  /** sha256 van het bestand, hex. Optioneel voor een ouder manifest. */
+  sha256?: string;
 }
 
 /** Eén jaar emissiefactoren van de stroommix, uurwaarden in g/kWh. */
@@ -25,6 +35,7 @@ export interface Co2YearInfo {
   ontbrekend: number;
   gemiddelde_g_per_kwh: number;
   bytes: number;
+  sha256?: string;
 }
 
 export interface ProfileYearInfo {
@@ -40,6 +51,7 @@ export interface ProfileYearInfo {
   /** Niet-null als de factor van een ander jaar is geleend (deeljaar). */
   normalisatie_geleend: string | null;
   bytes: number;
+  sha256?: string;
 }
 
 export interface Manifest {
@@ -64,6 +76,11 @@ export interface Manifest {
   profielen_zonder?: Record<string, Record<string, ProfileYearInfo>>;
   afnametype_zonder?: string;
   netgebieden: string[];
+  /**
+   * De laatste dag met een volledige dag prijzen; de profielen zijn daarop
+   * afgekapt, zodat elk profielkwartier een prijs heeft.
+   */
+  profielen_tot?: string;
 }
 
 /**

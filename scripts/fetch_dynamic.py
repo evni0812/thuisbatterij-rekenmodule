@@ -14,6 +14,14 @@ Output: data/raw/dynamic/<netgebied>.csv met kolommen
     calendar_date, pos, afnametype, direction, qnt, quality
 De tijdas wordt niet meegeschreven maar deterministisch gereconstrueerd uit
 (calendar_date, pos) — zie lib/data/timeaxis.ts en scripts/build_assets.py.
+
+Gebruik:
+    fetch_dynamic.py [start] [eind] [--opnieuw N]
+
+Dagen die al in het bestand staan worden overgeslagen. Maar DYNAMIC wordt de
+eerste dagen na publicatie nog bijgesteld (D+2 is een eerste versie), dus met
+--opnieuw N worden de laatste N dagen vóór het einde van de periode eerst uit
+het bestand gehaald en opnieuw opgehaald.
 """
 from __future__ import annotations
 
@@ -83,8 +91,33 @@ def existing_dates(path: str) -> set[str]:
         return {row["calendar_date"] for row in csv.DictReader(fh)}
 
 
-def fetch_domain(domain: str, start: date, end: date) -> None:
+def drop_dates_from(path: str, vanaf: date) -> int:
+    """Haal alle dagen vanaf `vanaf` uit het bestand; geeft het aantal rijen terug."""
+    if not os.path.exists(path):
+        return 0
+    with open(path, newline="") as fh:
+        rijen = list(csv.reader(fh))
+    kop, data = rijen[0], rijen[1:]
+    grens = vanaf.isoformat()
+    blijft = [r for r in data if r[0] < grens]
+    if len(blijft) == len(data):
+        return 0
+    tmp = path + ".tmp"
+    with open(tmp, "w", newline="") as fh:
+        w = csv.writer(fh)
+        w.writerow(kop)
+        w.writerows(blijft)
+    os.replace(tmp, path)
+    return len(data) - len(blijft)
+
+
+def fetch_domain(domain: str, start: date, end: date, opnieuw: int = 0) -> None:
     path = os.path.join(OUTDIR, f"{domain}.csv")
+    if opnieuw > 0:
+        weg = drop_dates_from(path, end - timedelta(days=opnieuw))
+        if weg:
+            print(f"    {weg} rijen van de laatste {opnieuw} dagen opnieuw ophalen",
+                  file=sys.stderr)
     have = existing_dates(path)
     nieuw = not os.path.exists(path)
 
@@ -122,10 +155,16 @@ def main() -> None:
     # DYNAMIC loopt D+2 achter; neem 3 dagen marge.
     end = date.today() - timedelta(days=3)
     start = DYNAMIC_START
-    if len(sys.argv) > 1:
-        start = date.fromisoformat(sys.argv[1])
-    if len(sys.argv) > 2:
-        end = date.fromisoformat(sys.argv[2])
+    args = sys.argv[1:]
+    opnieuw = 0
+    if "--opnieuw" in args:
+        i = args.index("--opnieuw")
+        opnieuw = int(args[i + 1])
+        del args[i:i + 2]
+    if len(args) > 0:
+        start = date.fromisoformat(args[0])
+    if len(args) > 1:
+        end = date.fromisoformat(args[1])
 
     domains = list_domains()
     print(f"netgebieden: {len(domains)}", file=sys.stderr)
@@ -133,7 +172,7 @@ def main() -> None:
 
     for i, dom in enumerate(domains, 1):
         print(f"[{i}/{len(domains)}] {dom}", file=sys.stderr)
-        fetch_domain(dom, start, end)
+        fetch_domain(dom, start, end, opnieuw)
 
     print("✓ klaar", file=sys.stderr)
 
