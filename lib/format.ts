@@ -82,6 +82,23 @@ export function procent(fraction: number, decimalen = 0): string {
   return f.format(fraction);
 }
 
+/**
+ * Een verandering als "12% minder" of "3% meer", op het teken van het verschil.
+ *
+ * Eerder stond er vast "minder" achter een percentage, en dan werd een
+ * toename "-3% minder": zonder zonnepanelen laadt de batterij van het net en
+ * neem je met het omzettingsverlies erbij iets méér af. Het woord volgt nu het
+ * teken en het getal is altijd positief. Zonder vertrekpunt (van nul) bestaat
+ * er geen percentage; dan komt er null terug en kiest de aanroeper iets anders.
+ */
+export function meerMinder(van: number, naar: number, decimalen = 0): string | null {
+  if (!(van > 0)) return null;
+  const r = (naar - van) / van;
+  const p = procent(Math.abs(r), decimalen);
+  if (p === procent(0, decimalen)) return "gelijk";
+  return `${p} ${r < 0 ? "minder" : "meer"}`;
+}
+
 export function getal(value: number, decimalen = 0): string {
   /*
    * Intl.NumberFormat accepteert alleen 0 tot en met 100 decimalen en gooit

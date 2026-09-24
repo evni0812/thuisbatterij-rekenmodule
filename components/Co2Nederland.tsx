@@ -101,6 +101,14 @@ export function Co2Nederland({
               : "daarvan vangt de batterij vrijwel niets op."}{" "}
             De drempel is een benadering van overschot, geen meting.
           </>
+        ) : co2.exportBatKwh > 0.5 ? (
+          <>
+            Zonder zonnepanelen lever je zelf niets terug. Wat de batterij in dure uren aan het net
+            verkoopt ({kwh(co2.exportBatKwh)} per jaar), gebruikt een buur; dat vermijdt elders{" "}
+            {kg(nl.vermedenMetKg)}. Voor Nederland komt de batterij daardoor op{" "}
+            {nl.winstKg >= 0 ? `${kg(nl.winstKg)} minder` : `${kg(-nl.winstKg)} meer`}, tegen{" "}
+            {h.winstKg >= 0 ? `${kg(h.winstKg)} minder` : `${kg(-h.winstKg)} meer`} voor jou.
+          </>
         ) : (
           <>
             Zonder zonnepanelen lever je niets terug. Voor Nederland telt dan alleen je afname, en is

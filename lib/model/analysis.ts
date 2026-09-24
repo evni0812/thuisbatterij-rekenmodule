@@ -1578,7 +1578,10 @@ export function metZelfvoorziening(stats: KeyStats, opwek: number | undefined): 
   // eigen verbruik zonder batterij met elke negatieve middag.
   const nietGebruiktBasis = expBasis + stats.curtailedBaselineKwh;
   const nietGebruiktBat = expBat + stats.curtailedBatteryKwh;
-  const directEigen = opwek !== undefined ? Math.max(0, opwek - nietGebruiktBasis) : null;
+  // Zonder opwek (zonder zonnepanelen) is er niets zelf te dekken: autarkie
+  // bestaat dan niet. Eerder kwam er 0% → −3% uit, omdat een batterij die van
+  // het net laadt met zijn omzettingsverlies de afname laat stijgen.
+  const directEigen = opwek !== undefined && opwek > 0 ? Math.max(0, opwek - nietGebruiktBasis) : null;
   const brutoVerbruik = directEigen !== null ? impBasis + directEigen : null;
   return {
     ...stats,

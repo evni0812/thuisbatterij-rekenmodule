@@ -45,7 +45,8 @@ import { Invoer, controleerInvoer, slijtageHint } from "../components/Invoer";
 import { expandPricesToQuarters, loadManifest, loadPriceYear, loadProfileYear } from "../lib/data/loader";
 import type { Manifest } from "../lib/data/manifest";
 import { addDays, localMidnightUtcMs } from "../lib/data/timeaxis";
-import { runAnalysis, type AnalysisResult, type SampleDay } from "../lib/model/analysis";
+import { metZelfvoorziening, runAnalysis, type AnalysisResult, type SampleDay } from "../lib/model/analysis";
+import { meerMinder } from "../lib/format";
 import { buildResidual } from "../lib/model/residual";
 import { buildPriceSeries } from "../lib/model/tariff";
 import { PRESETS } from "../lib/presets";
@@ -507,6 +508,40 @@ describe("kerncijfers en herberekenen", () => {
     expect(tekst).toMatch(/\+32 procentpunt/);
     expect(tekst).toMatch(/\+9,4 procentpunt/);
     expect(tekst).not.toMatch(/rusten op een schatting/);
+  });
+
+  it("zegt zonder zonnepanelen niets over zelfvoorziening, en noemt een toename een toename", () => {
+    /**
+     * Zonder panelen stond er "Onafhankelijk van het net 0% → −3%", "2.500 →
+     * 2.586 kWh, -3% minder" en "0 → 10 kWh, 0% minder": een batterij die van
+     * het net laadt, neemt met zijn omzettingsverlies iets méér af, en er is
+     * geen eigen opwek om zelf te dekken.
+     */
+    const zonder = metZelfvoorziening(
+      {
+        ...result.stats,
+        gridImportBaselineKwh: 2500,
+        gridImportBatteryKwh: 2586,
+        gridExportBaselineKwh: 0,
+        gridExportBatteryKwh: 10,
+        curtailedBaselineKwh: 0,
+        curtailedBatteryKwh: 0,
+      },
+      0,
+    );
+    expect(zonder.selfSufficiencyBaseline).toBeNull();
+    expect(zonder.selfConsumptionBaseline).toBeNull();
+    render(<Statistieken stats={zonder} opwekBekend={false} geschatteOpwek={0} zonnepanelen={false} />);
+    const tekst = document.body.textContent ?? "";
+    expect(tekst).not.toMatch(/Onafhankelijk van het net/);
+    expect(tekst).not.toMatch(/Eigen verbruik/);
+    expect(tekst).not.toMatch(/Naar het net/);
+    expect(tekst).not.toMatch(/rusten op een schatting/);
+    expect(tekst).toMatch(/3% meer/);
+    expect(tekst).not.toMatch(/-\d+% minder/);
+    expect(meerMinder(2500, 2586)).toBe("3% meer");
+    expect(meerMinder(2500, 2000)).toBe("20% minder");
+    expect(meerMinder(0, 10)).toBeNull();
   });
 
   it("drukt de afname in de piekuren uit als aandeel, zonder en met batterij en onder het nettarief", () => {

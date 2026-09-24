@@ -15,7 +15,7 @@
 
 import type { ReactNode } from "react";
 import type { KeyStats } from "../lib/model/analysis";
-import { centPerKwh, euro, getal, kwh, procent } from "../lib/format";
+import { centPerKwh, euro, getal, kwh, meerMinder, procent } from "../lib/format";
 import { DIRECT_EIGEN_VERBRUIK_ZONDER_BATTERIJ } from "../lib/presets";
 import { UITLEG, type UitlegContext, type UitlegId } from "../lib/uitleg";
 import { Uitleg } from "./Uitleg";
@@ -109,6 +109,7 @@ export function Statistieken({
   scenarioStats = null,
   opwekBekend,
   geschatteOpwek,
+  zonnepanelen = true,
   context = null,
 }: {
   stats: KeyStats;
@@ -121,17 +122,21 @@ export function Statistieken({
   opwekBekend: boolean;
   /** De jaaropwek waarmee is gerekend; alleen nodig als hij geschat is. */
   geschatteOpwek: number;
+  /**
+   * Rekende het resultaat met het profiel met zonnepanelen? Zonder panelen is
+   * er geen eigen verbruik, geen autarkie en geen teruglevering van jezelf:
+   * die tegels en de noot over de geschatte opwek vallen dan weg. Er stond
+   * "Onafhankelijk van het net 0% → −3%" en "0 → 10 kWh, 0% minder".
+   */
+  zonnepanelen?: boolean;
   /** Voor de "Hoe is dit berekend?"-knoppen; zonder context geen knoppen. */
   context?: UitlegContext | null;
 }) {
-  const importReductie =
-    stats.gridImportBaselineKwh > 0
-      ? 1 - stats.gridImportBatteryKwh / stats.gridImportBaselineKwh
-      : 0;
-  const exportReductie =
-    stats.gridExportBaselineKwh > 0
-      ? 1 - stats.gridExportBatteryKwh / stats.gridExportBaselineKwh
-      : 0;
+  // Op het teken: een batterij die van het net laadt, kan je afname laten
+  // stijgen, en dan is het "3% meer", niet "-3% minder".
+  const importDelta = meerMinder(stats.gridImportBaselineKwh, stats.gridImportBatteryKwh);
+  const importStijgt = stats.gridImportBatteryKwh > stats.gridImportBaselineKwh + 0.5;
+  const exportDelta = meerMinder(stats.gridExportBaselineKwh, stats.gridExportBatteryKwh);
   const piekBasis = piekAandeel(stats.peakHourImportBaselineKwh, stats.gridImportBaselineKwh);
   const piekBatterij = piekAandeel(stats.peakHourImportBatteryKwh, stats.gridImportBatteryKwh);
   const piekScenario = scenarioStats
@@ -153,7 +158,8 @@ export function Statistieken({
         {/* Eerst de drie percentages: die zeggen iets los van hoe groot je
             huishouden is, en ze zijn waar een batterij over gaat. De
             kilowatturen erachter geven ze hun schaal. */}
-        {stats.selfConsumptionBaseline !== null &&
+        {zonnepanelen &&
+        stats.selfConsumptionBaseline !== null &&
         stats.selfConsumptionBattery !== null ? (
           <Tegel
             label="Eigen verbruik"
@@ -169,7 +175,8 @@ export function Statistieken({
           />
         ) : null}
 
-        {stats.selfSufficiencyBaseline !== null &&
+        {zonnepanelen &&
+        stats.selfSufficiencyBaseline !== null &&
         stats.selfSufficiencyBattery !== null ? (
           <Tegel
             label="Onafhankelijk van het net"
@@ -207,19 +214,24 @@ export function Statistieken({
           label="Van het net"
           van={kwh(stats.gridImportBaselineKwh)}
           naar={kwh(stats.gridImportBatteryKwh)}
-          delta={`${procent(importReductie)} minder`}
-          deltaGoed={importReductie > 0}
-          uitleg="Wat je in een jaar van het net haalt, zonder en met batterij."
+          delta={importDelta ?? undefined}
+          deltaGoed={stats.gridImportBatteryKwh < stats.gridImportBaselineKwh}
+          uitleg={
+            importStijgt
+              ? "Wat je in een jaar van het net haalt, zonder en met batterij. De batterij laadt ook van het net, en met het omzettingsverlies erbij neem je per saldo iets meer af. De besparing zit in wánneer je afneemt, niet in hoeveel."
+              : "Wat je in een jaar van het net haalt, zonder en met batterij."
+          }
           accent="var(--series-1)"
           knop={knop("vanHetNet")}
         />
 
+        {zonnepanelen ? (
         <Tegel
           label="Naar het net"
           van={kwh(stats.gridExportBaselineKwh)}
           naar={kwh(stats.gridExportBatteryKwh)}
-          delta={`${procent(exportReductie)} minder`}
-          deltaGoed={exportReductie > 0}
+          delta={exportDelta ?? undefined}
+          deltaGoed={stats.gridExportBatteryKwh < stats.gridExportBaselineKwh}
           extra={
             // Het afgeregelde deel expliciet: het is geen teruglevering en geen
             // eigen verbruik, en de batterij vangt er een deel van op.
@@ -236,6 +248,7 @@ export function Statistieken({
           accent="var(--series-2)"
           knop={knop("naarHetNet")}
         />
+        ) : null}
 
         <Tegel
           label="Laadbeurten"
@@ -262,7 +275,7 @@ export function Statistieken({
         />
       </div>
 
-      {!opwekBekend ? (
+      {zonnepanelen && !opwekBekend ? (
         <p className="statistieken-noot">
           <b>Eigen verbruik en onafhankelijkheid rusten op een schatting.</b> Ze
           vragen je bruto jaaropwek, en die staat niet op je jaarafrekening: daar

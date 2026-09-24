@@ -303,12 +303,21 @@ export const UITLEG: Record<UitlegId, (ctx: UitlegContext) => UitlegBlok> = {
       ),
       bronnen: [PROFIEL_BRON(config), PRIJS_BRON, BATTERIJ_BRON(preset)],
       stappen: [
-        <>
-          Het gemeten gemiddelde profiel van je netgebied geeft per kwartier
-          hoeveel er van het net kwam en hoeveel ernaartoe ging. Beide worden zo geschaald dat het jaartotaal
-          exact op jouw meterstanden uitkomt: {kwh(config.household.annualGridImportKwh)} afname en{" "}
-          {kwh(config.household.annualGridExportKwh)} teruglevering.
-        </>,
+        zonderPanelen(config) ? (
+          <>
+            Het gemeten gemiddelde profiel van je netgebied geeft per kwartier
+            hoeveel er van het net kwam. Het wordt zo geschaald dat elk vol jaar
+            exact op jouw meterstand uitkomt: {kwh(config.household.annualGridImportKwh)} afname.
+          </>
+        ) : (
+          <>
+            Het gemeten gemiddelde profiel van je netgebied geeft per kwartier
+            hoeveel er van het net kwam en hoeveel ernaartoe ging. Beide worden zo
+            geschaald dat elk vol jaar exact op jouw meterstanden uitkomt:{" "}
+            {kwh(config.household.annualGridImportKwh)} afname en{" "}
+            {kwh(config.household.annualGridExportKwh)} teruglevering.
+          </>
+        ),
         <>
           Zonder batterij kost elk kwartier afname de uurprijs plus heffing
           ({config.useHistoricalLevy === false ? "die van nu" : "die van toen"}),
@@ -319,9 +328,15 @@ export const UITLEG: Record<UitlegId, (ctx: UitlegContext) => UitlegBlok> = {
         <>
           Met batterij plant een strategie elke dag om 13:00 de komende uren,
           op de day-ahead-prijzen die dan bekend zijn en een verwachting van je
-          verbruik uit de afgelopen week. Ze laadt bij zonoverschot of goedkope
-          uren en levert bij dure uren, binnen het vermogen en het rendement
-          van de batterij.
+          verbruik uit de afgelopen week.{" "}
+          {config.doel === "zelfconsumptie"
+            ? "Ze laadt alleen uit eigen zonoverschot en levert alleen aan je eigen huis"
+            : config.doel === "uitstoot"
+              ? "Ze laadt op uren waarop de stroom uit het net schoon is en levert op de vuile uren"
+              : zonderPanelen(config)
+                ? "Ze laadt op goedkope uren en levert op dure uren"
+                : "Ze laadt bij zonoverschot of goedkope uren en levert bij dure uren"}
+          , binnen het vermogen en het rendement van de batterij.
         </>,
         <>
           De besparing is het verschil tussen de kosten zonder en met batterij,
@@ -524,8 +539,10 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP, STANDBY_LETOP, GEMIDDELD_LETOP, EEN_LE
 
   vanHetNet: ({ result, config }) => {
     const s = result.stats;
+    const verschil = s.gridImportBaselineKwh - s.gridImportBatteryKwh;
+    const stijgt = verschil < -0.5;
     return {
-      titel: "Van het net: hoeveel minder je afneemt",
+      titel: stijgt ? "Van het net: wat de batterij aan je afname verandert" : "Van het net: hoeveel minder je afneemt",
       watZieJe: <>Je netafname per jaar zonder en met batterij, gemiddeld over de volledige jaren.</>,
       bronnen: [PROFIEL_BRON(config)],
       stappen: [
@@ -535,27 +552,45 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP, STANDBY_LETOP, GEMIDDELD_LETOP, EEN_LE
           je verbruik min wat de batterij levert, plus wat de batterij van het
           net laadt.
         </>,
-        <>Het verschil is wat de batterij aan eigen zon voor later bewaarde, min wat hij zelf aan het net kocht.</>,
+        zonderPanelen(config) ? (
+          <>Zonder zonnepanelen laadt de batterij alleen van het net. Wat hij later levert, haal je eerder van het net, plus het omzettingsverlies; het verschil is dat verlies, en wat hij in dure uren aan het net verkoopt.</>
+        ) : (
+          <>Het verschil is wat de batterij aan eigen zon voor later bewaarde, min wat hij zelf aan het net kocht.</>
+        ),
       ],
       voorbeeld: {
         regels: [
           { wat: "Netafname zonder batterij", waarde: kwh(s.gridImportBaselineKwh) },
           { wat: "Netafname met batterij", waarde: kwh(s.gridImportBatteryKwh) },
-          { wat: "Minder van het net", waarde: `${kwh(s.gridImportBaselineKwh - s.gridImportBatteryKwh)} (${procent(1 - aandeel(s.gridImportBatteryKwh, s.gridImportBaselineKwh))})`, uitkomst: true },
+          {
+            wat: stijgt ? "Meer van het net" : "Minder van het net",
+            waarde: `${kwh(Math.abs(verschil))}${s.gridImportBaselineKwh > 0 ? ` (${procent(Math.abs(verschil) / s.gridImportBaselineKwh)})` : ""}`,
+            uitkomst: true,
+          },
         ],
       },
       letop: [
-        <>
-          Bij goedkope uren kan de batterij ook van het net laden om later te
-          leveren. Dan stijgt de afname op dat moment; netto daalt hij toch,
-          zolang er eigen zon te bewaren valt.
-        </>,
+        stijgt ? (
+          <>
+            Hier stijgt je afname per saldo: de batterij laadt van het net om
+            later te leveren, en het omzettingsverlies komt erbovenop. De
+            besparing zit in wánneer je afneemt, niet in hoeveel: goedkoop
+            laden, duur uitsparen.
+          </>
+        ) : (
+          <>
+            Bij goedkope uren kan de batterij ook van het net laden om later te
+            leveren. Dan stijgt de afname op dat moment; netto daalt hij hier
+            toch, omdat er eigen zon te bewaren valt.
+          </>
+        ),
       ],
     };
   },
 
   naarHetNet: ({ result, config }) => {
     const s = result.stats;
+    const verschil = s.gridExportBaselineKwh - s.gridExportBatteryKwh;
     return {
       titel: "Naar het net: hoeveel minder je teruglevert",
       watZieJe: <>Je teruglevering per jaar zonder en met batterij. Wat je minder teruglevert, gaat de batterij in, of wordt bij een negatieve prijs afgeregeld. Afgeregelde stroom telt niet als eigen verbruik.</>,
@@ -569,7 +604,11 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP, STANDBY_LETOP, GEMIDDELD_LETOP, EEN_LE
         regels: [
           { wat: "Teruglevering zonder batterij", waarde: kwh(s.gridExportBaselineKwh) },
           { wat: "Teruglevering met batterij", waarde: kwh(s.gridExportBatteryKwh) },
-          { wat: "Minder teruggeleverd", waarde: `${kwh(s.gridExportBaselineKwh - s.gridExportBatteryKwh)} (${procent(1 - aandeel(s.gridExportBatteryKwh, s.gridExportBaselineKwh))})`, uitkomst: true },
+          {
+            wat: verschil < -0.5 ? "Meer teruggeleverd" : "Minder teruggeleverd",
+            waarde: `${kwh(Math.abs(verschil))}${s.gridExportBaselineKwh > 0 ? ` (${procent(Math.abs(verschil) / s.gridExportBaselineKwh)})` : ""}`,
+            uitkomst: true,
+          },
           ...(s.curtailedBaselineKwh > 0.5 || s.curtailedBatteryKwh > 0.5
             ? [
                 {
@@ -1228,7 +1267,11 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP, STANDBY_LETOP, GEMIDDELD_LETOP, EEN_LE
         <>Behalve op uren waarop de mix al onder de drempel zit ({getal(drempel)} g/kWh): dan is er vaak, maar niet altijd, meer aanbod dan vraag in Nederland, en gaat de kWh de grens over of wordt hij afgeschakeld. Die teruglevering telt hier niet mee. De drempel is een benadering van overschot, geen meting.</>,
         <>De balans bewaart afname en teruglevering per klasse van {CO2_KLASSE_G} g/kWh. Daardoor kun je de drempel verschuiven zonder opnieuw te rekenen; hij rondt af op de klassegrens.</>,
         zonderPanelen(config) ? (
-          <>Zonder zonnepanelen lever je niets terug, en is het perspectief van Nederland gelijk aan dat van je eigen afname.</>
+          c && c.exportBatKwh > 0.5 ? (
+            <>Zonder zonnepanelen lever je zelf niets terug. Alleen wat de batterij in dure uren aan het net verkoopt ({kwh(c.exportBatKwh)} per jaar) telt voor Nederland extra mee; daardoor wijkt het perspectief van Nederland een fractie af van dat van je eigen afname.</>
+          ) : (
+            <>Zonder zonnepanelen lever je niets terug, en is het perspectief van Nederland gelijk aan dat van je eigen afname.</>
+          )
         ) : (
           <>De batterij kan Nederland op twee manieren helpen: hij kan afname weghalen uit vuile uren (net als voor jou), en wat hij opslaat, kan uit overschot-uren komen, waar het toch weinig verdrong. Wat hij opslaat uit de andere uren gaat er juist van af: die buur moet dan toch naar de centrale.</>
         ),

@@ -429,6 +429,7 @@ export default function Page() {
                 scenarioStats={scenario?.stats ?? null}
                 opwekBekend={toonOpwekBekend}
                 geschatteOpwek={toon?.annualProductionKwh ?? 0}
+                zonnepanelen={toonZonnepanelen}
                 context={ctx}
               />
             </>
@@ -481,6 +482,7 @@ export default function Page() {
                 gap={result.priceGap}
                 afnameKwh={toonAfname}
                 terugleveringKwh={toonTeruglevering}
+                zonnepanelen={toonZonnepanelen}
                 actie={uitleg("prijskloof")}
               />
               <Uitsplitsing

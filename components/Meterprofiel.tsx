@@ -143,7 +143,11 @@ export function Meterprofiel({
           <dt>Van het net</dt>
           <dd>
             {kwh(afnameZonder)} → {kwh(afnameMet)}
-            <span className="dd-noot">{kwh(afnameZonder - afnameMet)} minder afname {periode}</span>
+            <span className="dd-noot">
+              {afnameMet <= afnameZonder
+                ? `${kwh(afnameZonder - afnameMet)} minder afname ${periode}`
+                : `${kwh(afnameMet - afnameZonder)} méér afname ${periode}: de batterij laadde van het net`}
+            </span>
           </dd>
         </div>
         <div>
