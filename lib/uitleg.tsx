@@ -434,8 +434,20 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP, STANDBY_LETOP, GEMIDDELD_LETOP, EEN_LE
             waarde: kwh(opwek),
           },
           { wat: "Teruglevering zonder batterij", waarde: kwh(s.gridExportBaselineKwh) },
-          { wat: "Zelf gebruikt zonder batterij: 1 − teruglevering ÷ opwek", waarde: procent(s.selfConsumptionBaseline ?? 0) },
+          ...(s.curtailedBaselineKwh > 0.5
+            ? [{ wat: "Afgeregeld bij negatieve prijzen, zonder batterij", waarde: kwh(s.curtailedBaselineKwh) }]
+            : []),
+          {
+            wat:
+              s.curtailedBaselineKwh > 0.5
+                ? "Zelf gebruikt zonder batterij: 1 − (teruglevering + afgeregeld) ÷ opwek"
+                : "Zelf gebruikt zonder batterij: 1 − teruglevering ÷ opwek",
+            waarde: procent(s.selfConsumptionBaseline ?? 0),
+          },
           { wat: "Teruglevering met batterij", waarde: kwh(s.gridExportBatteryKwh) },
+          ...(s.curtailedBaselineKwh > 0.5 || s.curtailedBatteryKwh > 0.5
+            ? [{ wat: "Afgeregeld met batterij", waarde: kwh(s.curtailedBatteryKwh) }]
+            : []),
           { wat: "Zelf gebruikt met batterij", waarde: procent(s.selfConsumptionBattery ?? 0), uitkomst: true },
         ],
       },
@@ -462,7 +474,10 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP, STANDBY_LETOP, GEMIDDELD_LETOP, EEN_LE
   autarkie: ({ result, config }) => {
     const s = result.stats;
     const opwek = config.annualProductionKwh ?? 0;
-    const direct = Math.max(0, opwek - s.gridExportBaselineKwh);
+    // Afgeregelde stroom is niet gebruikt: hij hoort niet bij "direct zelf
+    // gebruikt", net zo min als teruglevering. Dezelfde regel als
+    // `metZelfvoorziening` in lib/model/analysis.ts.
+    const direct = Math.max(0, opwek - s.gridExportBaselineKwh - s.curtailedBaselineKwh);
     return {
       titel: "Onafhankelijk van het net: welk deel van je verbruik je zelf dekt",
       watZieJe: (
@@ -473,13 +488,19 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP, STANDBY_LETOP, GEMIDDELD_LETOP, EEN_LE
       ),
       bronnen: [PROFIEL_BRON(config)],
       stappen: [
-        <>Bruto verbruik is netafname plus wat je direct van je eigen zon gebruikte (opwek min teruglevering).</>,
+        <>Bruto verbruik is netafname plus wat je direct van je eigen zon gebruikte: opwek min teruglevering, min wat de omvormer bij een negatieve prijs afregelde.</>,
         <>Zelf gedekt is 1 min netafname gedeeld door bruto verbruik.</>,
         <>Met batterij daalt de netafname, dus stijgt het aandeel.</>,
       ],
       voorbeeld: {
         regels: [
-          { wat: "Direct zelf gebruikt: opwek − teruglevering", waarde: kwh(direct) },
+          {
+            wat:
+              s.curtailedBaselineKwh > 0.5
+                ? "Direct zelf gebruikt: opwek − teruglevering − afgeregeld"
+                : "Direct zelf gebruikt: opwek − teruglevering",
+            waarde: kwh(direct),
+          },
           { wat: "Bruto verbruik: netafname + direct zelf gebruikt", waarde: kwh(s.gridImportBaselineKwh + direct) },
           { wat: "Zelf gedekt zonder batterij", waarde: procent(s.selfSufficiencyBaseline ?? 0) },
           { wat: "Netafname met batterij", waarde: kwh(s.gridImportBatteryKwh) },
@@ -545,7 +566,23 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP, STANDBY_LETOP, GEMIDDELD_LETOP, EEN_LE
           { wat: "Teruglevering zonder batterij", waarde: kwh(s.gridExportBaselineKwh) },
           { wat: "Teruglevering met batterij", waarde: kwh(s.gridExportBatteryKwh) },
           { wat: "Minder teruggeleverd", waarde: `${kwh(s.gridExportBaselineKwh - s.gridExportBatteryKwh)} (${procent(1 - aandeel(s.gridExportBatteryKwh, s.gridExportBaselineKwh))})`, uitkomst: true },
+          ...(s.curtailedBaselineKwh > 0.5 || s.curtailedBatteryKwh > 0.5
+            ? [
+                {
+                  wat: "Afgeregeld bij negatieve prijzen, zonder → met batterij",
+                  waarde: `${kwh(s.curtailedBaselineKwh)} → ${kwh(s.curtailedBatteryKwh)}`,
+                },
+              ]
+            : []),
         ],
+        toelichting:
+          s.curtailedBaselineKwh > 0.5 ? (
+            <>
+              Afregelen telt niet als teruglevering en niet als eigen verbruik:
+              die stroom is nooit opgewekt. De batterij vangt er een deel van
+              op; wat hij opvangt, gebruik je later zelf.
+            </>
+          ) : undefined,
       },
     };
   },

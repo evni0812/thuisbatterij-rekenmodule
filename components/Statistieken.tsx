@@ -220,6 +220,18 @@ export function Statistieken({
           naar={kwh(stats.gridExportBatteryKwh)}
           delta={`${procent(exportReductie)} minder`}
           deltaGoed={exportReductie > 0}
+          extra={
+            // Het afgeregelde deel expliciet: het is geen teruglevering en geen
+            // eigen verbruik, en de batterij vangt er een deel van op.
+            stats.curtailedBaselineKwh > 0.5 || stats.curtailedBatteryKwh > 0.5 ? (
+              <>
+                Afgeregeld bij negatieve prijzen:{" "}
+                <strong>
+                  {kwh(stats.curtailedBaselineKwh)} → {kwh(stats.curtailedBatteryKwh)}
+                </strong>
+              </>
+            ) : null
+          }
           uitleg="Wat je teruglevert, zonder en met batterij. Wat eraf gaat, gaat de batterij in. Stroom die de omvormer bij een negatieve prijs afregelt, telt hier niet mee en geldt ook niet als eigen verbruik."
           accent="var(--series-2)"
           knop={knop("naarHetNet")}

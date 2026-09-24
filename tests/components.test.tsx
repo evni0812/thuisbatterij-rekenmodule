@@ -458,6 +458,20 @@ describe("kerncijfers en herberekenen", () => {
     expect(screen.getAllByLabelText("wordt").length).toBeGreaterThanOrEqual(2);
   });
 
+  it("noemt het afgeregelde deel apart bij Naar het net", () => {
+    const stats = { ...result.stats, curtailedBaselineKwh: 607, curtailedBatteryKwh: 510 };
+    render(<Statistieken stats={stats} opwekBekend={false} geschatteOpwek={2800} />);
+    const tegel = screen.getByText("Naar het net").closest(".stat")!;
+    expect(tegel.textContent).toMatch(/Afgeregeld bij negatieve prijzen: 607 kWh → 510 kWh/);
+  });
+
+  it("laat de afregelregel weg als er niets is afgeregeld", () => {
+    const stats = { ...result.stats, curtailedBaselineKwh: 0, curtailedBatteryKwh: 0 };
+    render(<Statistieken stats={stats} opwekBekend={false} geschatteOpwek={2800} />);
+    const tegel = screen.getByText("Naar het net").closest(".stat")!;
+    expect(tegel.textContent).not.toMatch(/Afgeregeld/);
+  });
+
   it("zegt erbij dat eigen verbruik en onafhankelijkheid op een schatting rusten", () => {
     render(<Statistieken stats={result.stats} opwekBekend={false} geschatteOpwek={2800} />);
     const tekst = document.body.textContent ?? "";
