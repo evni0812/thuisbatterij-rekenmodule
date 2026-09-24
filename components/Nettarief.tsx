@@ -21,9 +21,10 @@
 
 import type { ReactNode } from "react";
 import type { AnalysisResult, ScenarioResult } from "../lib/model/analysis";
-import type { Overgang } from "../lib/overgang";
+import { overgangZin, type Overgang } from "../lib/overgang";
 import {
   BASISTARIEF,
+  HEFFING_NU,
   NETTARIEF_BRON,
   NETTARIEF_INGANG,
   NETTARIEF_JAAR,
@@ -132,7 +133,7 @@ export function Nettarief({
             accent="var(--ac)"
             uitleg={
               overgang && overgang.jarenOpHuidigTarief > 0
-                ? `Rechts: vanaf 1 januari ${overgang.ingangsjaar - overgang.jarenOpHuidigTarief} eerst ${overgang.jarenOpHuidigTarief} jaar op het huidige nettarief, daarna op het voorgestelde. Links: als het nettarief blijft zoals nu.`
+                ? `Rechts: ${overgangZin(overgang)} op het huidige nettarief, daarna op het voorgestelde. Links: als het nettarief blijft zoals nu.`
                 : "Links als het nettarief blijft zoals nu, rechts met het voorgestelde tarief."
             }
           />
@@ -177,7 +178,7 @@ export function Nettarief({
           De tool rekent met {NETTARIEF_JAAR}, de beoogde invoeringsdatum. De
           energiebelasting van dat jaar hoort erbij en gaat mee:{" "}
           {centPerKwh(scenarioHeffing(NETTARIEF_JAAR))} inclusief opslag, tegen
-          12,9 ct nu. Anders zou een nettarief van straks op een belasting van
+          {centPerKwh(HEFFING_NU)} nu. Anders zou een nettarief van straks op een belasting van
           toen worden gestapeld, en de besparing schaalt daar bijna
           één-op-één mee.
         </p>

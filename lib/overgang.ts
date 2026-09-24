@@ -26,6 +26,7 @@
 import { computeFinance, type FinanceResult } from "./model/finance";
 import type { AnalysisResult, ScenarioResult } from "./model/analysis";
 import { NETTARIEF_JAAR } from "./nettarief";
+import { datum, jaren } from "./format";
 import type { Configuration } from "./worker/protocol";
 
 /**
@@ -106,4 +107,14 @@ export function overgangsFinance(
       residualValueEur: config.residualValueEur,
     }),
   };
+}
+
+/**
+ * De overgang in woorden, uit de overgang zelf: "vanaf 1 januari 2027 eerst 2
+ * jaar". Eén formulering voor het antwoord, het nettarief en de uitleg, zodat
+ * ze niet elk hun eigen startjaar uitrekenen.
+ */
+export function overgangZin(o: Pick<Overgang, "start" | "jarenOpHuidigTarief">): string {
+  const duur = o.jarenOpHuidigTarief === 1 ? "een jaar" : jaren(o.jarenOpHuidigTarief);
+  return `vanaf ${datum(o.start)} eerst ${duur}`;
 }

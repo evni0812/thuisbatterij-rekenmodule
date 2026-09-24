@@ -1063,7 +1063,15 @@ describe("de pagina vertelt het verhaal in vier delen, in die volgorde", () => {
     ]);
     expect(tekst).toMatch(/gaat het voorstel voor het\s+nieuwe nettarief door/);
     expect(tekst).toMatch(/Blijft\s+het nettarief zoals nu/);
-    expect(tekst).toMatch(new RegExp(`eerst\\s+${overgang.jarenOpHuidigTarief} jaar\\s+met het huidige nettarief`));
+    expect(tekst).toMatch(new RegExp(`eerst\\s+${overgang.jarenOpHuidigTarief} jaar\\s+met\\s+het huidige nettarief`));
+    // De overgang volgt uit Overgang.start (1 januari 2027) en twee jaar op
+    // het huidige tarief, niet uit een eigen rekensom in de component.
+    expect(overgang.start).toBe("2027-01-01");
+    expect(overgang.jarenOpHuidigTarief).toBe(2);
+    expect(tekst).toMatch(/rekent vanaf 1 januari 2027 eerst 2 jaar\s+met\s+het huidige nettarief/);
+    // De standaard rekent met de heffing van nu, en dat staat er.
+    expect(STANDAARD.heffing).toBe("nu");
+    expect(tekst).toMatch(/belasting en\s+opslag van nu/);
 
     // Zolang het scenario nog loopt staat er een plaatshouder, geen lege regel.
     cleanup();

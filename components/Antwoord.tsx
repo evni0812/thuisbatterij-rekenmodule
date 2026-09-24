@@ -25,7 +25,7 @@
 
 import type { ReactNode } from "react";
 import type { AnalysisResult, ScenarioResult } from "../lib/model/analysis";
-import type { Overgang } from "../lib/overgang";
+import { overgangZin, type Overgang } from "../lib/overgang";
 import { euro, jaren, jarenReeks } from "../lib/format";
 
 /** De terugverdientijd als zinsdeel: "terugverdiend na 7 jaar" of "niet terugverdiend". */
@@ -71,7 +71,6 @@ export function Antwoord({
   const jaartallen = jarenReeks(
     (jaarBereik > 0 ? volledig : result.perYear).map((j) => j.year),
   );
-  const startjaar = overgang ? overgang.ingangsjaar - overgang.jarenOpHuidigTarief : null;
 
   return (
     <section className={bezig ? "antwoord bezig" : "antwoord"} aria-live="polite">
@@ -129,15 +128,11 @@ export function Antwoord({
             januari {overgang?.ingangsjaar ?? 2029} (mogelijk later) een
             tijdsafhankelijk nettarief. Met dat tarief was de besparing{" "}
             <strong>{euro(scenario.averageSavingEur)} per jaar</strong> geweest.
-            {overgang && overgang.jarenOpHuidigTarief > 0 && startjaar !== null ? (
+            {overgang && overgang.jarenOpHuidigTarief > 0 ? (
               <>
                 {" "}
-                De terugverdientijd hierboven rekent vanaf 1 januari {startjaar}{" "}
-                eerst{" "}
-                {overgang.jarenOpHuidigTarief === 1
-                  ? "een jaar"
-                  : `${overgang.jarenOpHuidigTarief} jaar`}{" "}
-                met het huidige nettarief en daarna met het nieuwe.
+                De terugverdientijd hierboven rekent {overgangZin(overgang)} met
+                het huidige nettarief en daarna met het nieuwe.
               </>
             ) : null}
           </>

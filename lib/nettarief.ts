@@ -238,6 +238,9 @@ const BTW = 1.21;
  */
 export const OPSLAG_2026_INCL_BTW = 0.128848 - ENERGIEBELASTING_EXCL_BTW[2026] * BTW;
 
+/** De heffing van nu (2026), energiebelasting plus opslag incl. btw: EUR 0,128848. */
+export const HEFFING_NU = ENERGIEBELASTING_EXCL_BTW[2026] * BTW + OPSLAG_2026_INCL_BTW;
+
 /**
  * De heffing (energiebelasting plus inkoopopslag, incl. btw) waarmee het
  * scenario rekent, EUR/kWh. Ongeveer 10,9 cent in 2029 tegen 12,9 in 2026.

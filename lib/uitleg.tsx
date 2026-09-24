@@ -16,7 +16,7 @@ import { centPerKwh, euro, euroPrecies, getal, jaren, kwh, procent } from "./for
 import { referentieJaar, type AnalysisResult, type ScenarioResult, type YearAnalysis } from "./model/analysis";
 import { usableCapacityKwh } from "./model/battery";
 import { RASTER_CAPACITEITEN, RASTER_VERMOGENS } from "./model/raster";
-import { overgangsFinance } from "./overgang";
+import { overgangZin, overgangsFinance } from "./overgang";
 import {
   BASISTARIEF,
   NETTARIEF_BRON,
@@ -333,8 +333,8 @@ export const UITLEG: Record<UitlegId, (ctx: UitlegContext) => UitlegBlok> = {
         <>
           Het voorgestelde nettarief gaat, als het doorgaat, naar verwachting
           op 1 januari {NETTARIEF_JAAR} in. De vetgedrukte terugverdientijd
-          rekent daarom de eerste{" "}
-          {overgang ? `${overgang.jarenOpHuidigTarief} jaar` : "jaren"} met het
+          rekent daarom{" "}
+          {overgang ? overgangZin(overgang) : "de eerste jaren"} met het
           huidige nettarief en de jaren daarna met het nieuwe, op dezelfde
           batterij die gewoon doorslijt. Ter vergelijking staat erachter wat het
           wordt als het nettarief blijft zoals nu.
