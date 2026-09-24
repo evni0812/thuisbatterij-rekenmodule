@@ -35,7 +35,8 @@ import { HUISHOUDENS_TERUGLEVERING } from "./model/huishoudens";
 import { STEKKER_GRENS_KW, kostenregelVan } from "./model/kosten";
 import { CO2_KLASSE_G, STANDAARD_CO2_DREMPEL_G, huishoudPerspectief, nederlandPerspectief } from "./model/co2";
 import { AUTO_G_PER_KM } from "../components/Co2Antwoord";
-import { doelInfo } from "./model/doel";
+import { DOELEN, GRAM_PER_CENT, doelInfo } from "./model/doel";
+import { doelKaarten, type VergelijkingDelen } from "./model/vergelijking";
 import type { Configuration } from "./worker/protocol";
 
 export interface UitlegBlok {
@@ -60,6 +61,8 @@ export interface UitlegContext {
   preset: BatteryPreset;
   /** Voor welk jaar het basistarief in het scenario geldt. */
   scenarioJaar?: NettariefJaar;
+  /** De drie doelen naast elkaar, voor zover ze al zijn doorgerekend. */
+  vergelijking?: VergelijkingDelen | null;
 }
 
 export type UitlegId =
@@ -89,6 +92,7 @@ export type UitlegId =
   | "co2maanden"
   | "co2nederland"
   | "beurten"
+  | "doelen"
   | "cashflow";
 
 // ── Bronnen ────────────────────────────────────────────────────────────────
@@ -1051,6 +1055,77 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP, STANDBY_LETOP, GEMIDDELD_LETOP, EEN_LE
       ],
       letop: [
         <>Alle huishoudens delen jouw afname. Wie meer of minder verbruikt, zit op een andere lijn; verander de afname en reken opnieuw om die te zien.</>,
+        GEMIDDELD_LETOP,
+      ],
+    };
+  },
+
+  doelen: ({ config, vergelijking }) => {
+    const kaarten = vergelijking ? doelKaarten(vergelijking, config) : {};
+    const gekozen = config.doel ?? "rendement";
+    const regels = DOELEN.flatMap(({ id, naam }) => {
+      const k = kaarten[id];
+      if (!k) return [];
+      const co2 = k.co2WinstKg === null ? "" : `, ${getal(k.co2WinstKg)} kg CO2 minder`;
+      return [{
+        wat: `${naam}${id === gekozen ? " (gekozen)" : ""}`,
+        waarde: `${euro(k.besparingEur)} per jaar${co2}`,
+        uitkomst: id === gekozen,
+      }];
+    });
+    return {
+      titel: "Drie doelen: waar de batterij op stuurt",
+      watZieJe: (
+        <>
+          Dezelfde batterij en hetzelfde huishouden, drie keer doorgerekend.
+          Alleen waar de planner op stuurt verschilt; de uurprijzen, het profiel
+          en de batterij zijn dezelfde.
+        </>
+      ),
+      bronnen: [PRIJS_BRON, PROFIEL_BRON(config), NED_BRON],
+      stappen: [
+        <>
+          <b>Rendement</b> stuurt op prijs: laden als stroom goedkoop is of als
+          er eigen zon over is, leveren als hij duur is, ook aan het net. Dit is
+          de stand van het antwoord bovenaan. De CO2-winst die je erbij ziet is
+          een bijeffect: goedkope uren zijn vaak schone uren, maar niet altijd.
+        </>,
+        <>
+          <b>Zelfconsumptie</b> gebruikt dezelfde prijzen, maar met de handen op
+          de rug: laden mag alleen uit eigen overschot, leveren alleen aan het
+          eigen huis. Nooit laden uit het net, nooit terugleveren uit de
+          batterij. Binnen die grenzen kiest de planner nog wel het beste
+          moment.
+        </>,
+        <>
+          <b>Uitstoot</b> geeft de planner de emissiefactor van elk uur in plaats
+          van de prijs: de gemiddelde uitstoot van de Nederlandse opwek op dat
+          uur (NED), niet de marginale van de centrale die bijspringt. De
+          batterij mijdt dan de vuilste uren, ongeacht de prijs. Teruglevering
+          telt voor jouw voetafdruk niet mee. Om de slijtage mee te wegen staat
+          één cent gelijk aan {GRAM_PER_CENT} gram.
+        </>,
+        <>
+          De afrekening gaat altijd in echte euro&apos;s: elke stand wordt
+          achteraf afgerekend op de werkelijke uurprijzen, en de CO2 op de
+          werkelijke uurfactoren. Alleen het plan verschilt. Daarom kost een
+          ander doel dan rendement vrijwel altijd geld; de kaarten laten zien
+          hoeveel, en wat je ervoor terugkrijgt.
+        </>,
+        <>
+          De terugverdientijd rekent voor elk doel zoals het antwoord bovenaan:
+          eerst de tarieven van nu, daarna het voorgestelde nettarief. De
+          voorbeelddag is voor alle drie dezelfde: de doorsnee zomerdag van het
+          tabblad Wanneer.
+        </>,
+      ],
+      ...(regels.length > 0 ? { voorbeeld: { regels } } : {}),
+      letop: [
+        MARGINAAL_LETOP,
+        <>
+          Zonder zonnepanelen is er geen eigen overschot, dus doet de stand
+          Zelfconsumptie dan niets.
+        </>,
         GEMIDDELD_LETOP,
       ],
     };

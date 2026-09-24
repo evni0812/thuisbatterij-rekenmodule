@@ -205,7 +205,10 @@ function lijn(punten: [number, number][]): string {
  *   ontladen — zolang er tekort is, gaat de lading daarheen; wat je meer ontlaadt
  *            dan je zelf verbruikt, gaat het net op
  */
-function splitsActies(dag: Profiel, perKw: number): {
+export function splitsActies(
+  dag: Pick<Profiel, "startMs" | "chargeKwh" | "dischargeKwh" | "residualKwh">,
+  perKw: number,
+): {
   uitZon: number[];
   uitNet: number[];
   naarHuis: number[];
@@ -234,7 +237,7 @@ function splitsActies(dag: Profiel, perKw: number): {
 }
 
 /** "13:15" binnen een dag, "wo 13:00" binnen een week. */
-function momentLabel(ms: number, perUur: boolean): string {
+export function momentLabel(ms: number, perUur: boolean): string {
   const d = new Date(ms);
   const klok = d.toLocaleTimeString("nl-NL", {
     hour: "2-digit",

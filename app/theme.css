@@ -2974,3 +2974,133 @@ details.uitklap[open] > summary {
   max-width: 520px;
   accent-color: var(--ac);
 }
+
+/* ── De drie doelen naast elkaar (Wat als) ────────────────────────────────── */
+
+.doelkaarten {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.doelkaart {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  padding: 16px;
+  border: 1px solid var(--border-strong);
+  border-radius: var(--radius);
+  background: var(--surface-1);
+  min-width: 0;
+}
+
+/* Het doel waarmee de rest van de pagina rekent: de rand van het accent. */
+.doelkaart.gekozen {
+  border: 2px solid var(--ac);
+  padding: 15px;
+  background: var(--acs);
+}
+
+.doelkaart-kop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+}
+
+.doelkaart-kop h4 {
+  margin: 0;
+  font-size: 1rem;
+}
+
+.doelkaart-kop .badge {
+  margin-left: 0;
+}
+
+.doelkaart-kort {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+}
+
+/* Label links, waarde rechts: zo lees je dezelfde regel over drie kaarten. */
+.doelcijfers {
+  margin: 0;
+  display: grid;
+  gap: 0;
+  border-top: 1px solid var(--border);
+}
+
+.doelcijfers > div {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 10px;
+  padding: 6px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.doelcijfers dt {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.doelcijfers dd {
+  margin: 0;
+  text-align: right;
+  font-size: 0.9rem;
+  font-weight: 560;
+  font-variant-numeric: tabular-nums;
+}
+
+.doelcijfers dd.doelcijfer-hoofd {
+  font-size: 1.15rem;
+  font-weight: 620;
+}
+
+.doelkaart-pijl {
+  color: var(--text-muted);
+  font-weight: 400;
+}
+
+.doelkaart-wacht {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.doelkaart-wacht.fout-tekst {
+  color: var(--text-secondary);
+  border-left: 3px solid var(--critical);
+  padding-left: 10px;
+}
+
+.doelkaart-actie {
+  margin-top: auto;
+}
+
+.doelkaart-noot {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--ac);
+  font-weight: 560;
+}
+
+.doeldag {
+  margin-top: 22px;
+  padding-top: 18px;
+  border-top: 1px solid var(--border);
+}
+
+.doeldag-kop {
+  margin: 0 0 6px;
+  font-size: 0.98rem;
+}
+
+.doeldag .figure-uitleg {
+  margin-bottom: 12px;
+}
+
+.doeldag-strook.gekozen .doeldag-titel {
+  fill: var(--ac);
+}

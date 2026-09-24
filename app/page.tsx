@@ -12,6 +12,7 @@ import { Co2Nederland } from "../components/Co2Nederland";
 import { Co2Uren } from "../components/Co2Uren";
 import { Laadbeurten } from "../components/Laadbeurten";
 import { Dagprofiel } from "../components/Dagprofiel";
+import { Doelvergelijking } from "../components/Doelvergelijking";
 import { Geavanceerd } from "../components/Geavanceerd";
 import { Invoer } from "../components/Invoer";
 import { MaandVerloop } from "../components/MaandVerloop";
@@ -135,6 +136,7 @@ export default function Page() {
     voortgang,
     grid,
     huishoudens,
+    vergelijking,
     dag,
     dagBezig,
     scenario,
@@ -211,7 +213,7 @@ export default function Page() {
 
   // De context voor "Hoe is dit berekend?": de getallen van dít resultaat.
   const ctx: UitlegContext | null =
-    result && toon ? { result, scenario, config: toon, preset, scenarioJaar } : null;
+    result && toon ? { result, scenario, config: toon, preset, scenarioJaar, vergelijking } : null;
   const uitleg = (id: keyof typeof UITLEG) => (ctx ? <Uitleg blok={UITLEG[id](ctx)} /> : undefined);
 
   // Alle jaarcijfers op de pagina rusten op dezelfde grondslag: het gemiddelde
@@ -547,14 +549,15 @@ export default function Page() {
         <Paneel id="wat-als" actief={tab}>
           <div className="sectiekop">
             <span className="eyebrow">Wat als · {TABS[3].vraag}</span>
-            <h2>Een ander nettarief of een andere maat verandert de uitkomst</h2>
+            <h2>Een ander nettarief, een ander doel of een andere maat verandert de uitkomst</h2>
             <p>
               Wat doet het tijdsafhankelijke nettarief als het voorstel van de
               ACM doorgaat (naar verwachting vanaf 1 januari 2029, mogelijk
-              later), welke maat batterij loont netto en tot waar loont
-              uitbreiden, voor wie kan deze batterij uit, hoe zuinig gaat hij met
-              zijn laadbeurten om, en hoe ziet de investering er over de
-              looptijd uit.
+              later), wat verandert er als de batterij op zelfconsumptie of
+              uitstoot stuurt in plaats van op rendement, welke maat batterij
+              loont netto en tot waar loont uitbreiden, voor wie kan deze
+              batterij uit, hoe zuinig gaat hij met zijn laadbeurten om, en hoe
+              ziet de investering er over de looptijd uit.
             </p>
           </div>
           {wachtOpResultaat}
@@ -576,6 +579,20 @@ export default function Page() {
               ) : null}
               {toon ? (
                 <>
+                  <Doelvergelijking
+                    vergelijking={vergelijking}
+                    config={toon}
+                    zonnepanelen={toonZonnepanelen}
+                    bezig={busy}
+                    onKies={(doel) => {
+                      // Een expliciete opdracht, net als een klik op de kaart
+                      // van maten: het doel in de instellingen en meteen
+                      // doorrekenen, zodat de hele pagina meeloopt.
+                      setInst((s) => ({ ...s, doel }));
+                      setRekenNa(true);
+                    }}
+                    actie={uitleg("doelen")}
+                  />
                   <BatterijMaat
                     grid={grid}
                     huidigeCapaciteit={toonCapaciteit}

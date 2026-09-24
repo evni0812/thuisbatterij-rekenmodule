@@ -25,6 +25,10 @@ import { Verschuiving } from "../components/Verschuiving";
 import { Nettarief } from "../components/Nettarief";
 import { Wachtscherm } from "../components/Wachtscherm";
 import { Co2Antwoord } from "../components/Co2Antwoord";
+import { Doelvergelijking } from "../components/Doelvergelijking";
+import { deelVan, type VergelijkingDeel } from "../lib/model/vergelijking";
+import type { VergelijkingState } from "../lib/useAnalysis";
+import type { Doel } from "../lib/model/types";
 import { Co2Maanden } from "../components/Co2Maanden";
 import { Co2Nederland } from "../components/Co2Nederland";
 import { Co2Uren } from "../components/Co2Uren";
@@ -1020,6 +1024,7 @@ describe("de pagina vertelt het verhaal in vier delen, in die volgorde", () => {
       "<Dagprofiel",
       '<Paneel id="wat-als"',
       "<Nettarief",
+      "<Doelvergelijking",
       "<BatterijMaat",
       "<Cashflow",
       '<Paneel id="methode"',
@@ -1796,5 +1801,75 @@ describe("de strategiekeuzes bij de invoer", () => {
 
   it("zegt bij een eigen stand dat het een eigen stand is", () => {
     expect(slijtageHint(0.35, 0.09, 0.88)).toMatch(/^Eigen stand \(35%\)/);
+  });
+});
+
+describe("de drie doelen naast elkaar op Wat als", () => {
+  const config = maakConfiguratie(LEGE_INSTELLINGEN);
+
+  function staat(fouten: Partial<Record<Doel, string>> = {}): VergelijkingState {
+    const deel = (besparing: number, co2Winst: number): VergelijkingDeel => ({
+      ...deelVan(result, result.sampleDays[0] ?? null),
+      averageSavingEur: besparing,
+      co2: { importBasisKg: 400, importBatKg: 400 - co2Winst },
+    });
+    const nu = {
+      rendement: deel(result.averageSavingEur, 100),
+      zelfconsumptie: fouten.zelfconsumptie ? undefined : deel(result.averageSavingEur - 18, 95),
+      uitstoot: deel(result.averageSavingEur - 31, 128),
+    };
+    return { nu, nettarief: { ...nu }, fouten, klaar: true };
+  }
+
+  it("zet drie kaarten naast elkaar, met het gekozen doel gemarkeerd", () => {
+    const gekozen: Doel[] = [];
+    const { container } = render(
+      <Doelvergelijking vergelijking={staat()} config={config} onKies={(d) => gekozen.push(d)} />,
+    );
+    const kaarten = container.querySelectorAll(".doelkaart");
+    expect(kaarten).toHaveLength(3);
+    const gemarkeerd = container.querySelectorAll(".doelkaart.gekozen");
+    expect(gemarkeerd).toHaveLength(1);
+    expect(gemarkeerd[0]!.getAttribute("data-doel")).toBe("rendement");
+    expect(gemarkeerd[0]!.textContent).toMatch(/Nu gekozen/);
+    // De titel is een stelling met de uitkomst.
+    expect(container.querySelector("h3")!.textContent).toBe(
+      "Sturen op uitstoot kost je €\u00a031 per jaar en scheelt 28 kg CO2 extra",
+    );
+    // Elke kaart dezelfde cijfers.
+    for (const k of kaarten) {
+      for (const label of ["Besparing per jaar", "CO2-winst per jaar", "Van het net", "Laadbeurten per jaar", "Terugverdiend na"]) {
+        expect(k.textContent).toContain(label);
+      }
+    }
+    // Wisselen gaat via de knop op een niet-gekozen kaart.
+    fireEvent.click(screen.getByRole("button", { name: "Reken hiermee: Uitstoot" }));
+    expect(gekozen).toEqual(["uitstoot"]);
+    expect(within(gemarkeerd[0] as HTMLElement).queryByRole("button")).toBeNull();
+    // En de voorbeelddag staat eronder, voor alle drie op dezelfde dag.
+    expect(container.querySelectorAll(".doeldag-strook")).toHaveLength(3);
+  });
+
+  it("markeert het doel uit de configuratie, niet altijd rendement", () => {
+    const { container } = render(
+      <Doelvergelijking vergelijking={staat()} config={{ ...config, doel: "uitstoot" }} onKies={() => {}} />,
+    );
+    const gemarkeerd = container.querySelectorAll(".doelkaart.gekozen");
+    expect(gemarkeerd).toHaveLength(1);
+    expect(gemarkeerd[0]!.getAttribute("data-doel")).toBe("uitstoot");
+  });
+
+  it("toont een plaatshouder zolang er gerekend wordt, en een fout per doel", () => {
+    const { container } = render(<Doelvergelijking vergelijking={null} config={config} onKies={() => {}} />);
+    expect(container.querySelectorAll(".doelkaart")).toHaveLength(3);
+    expect(screen.getAllByText("Wordt doorgerekend…")).toHaveLength(3);
+    cleanup();
+    render(
+      <Doelvergelijking vergelijking={staat({ zelfconsumptie: "kapot" })} config={config} onKies={() => {}} />,
+    );
+    const fout = screen.getByRole("alert");
+    expect(fout.textContent).toMatch(/Dit doel kon niet worden doorgerekend/);
+    expect(fout.textContent).toMatch(/kapot/);
+    expect(fout.closest(".doelkaart")!.getAttribute("data-doel")).toBe("zelfconsumptie");
   });
 });

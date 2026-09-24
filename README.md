@@ -282,7 +282,10 @@ bestand rekende elke bezoeker het alsnog zelf (zeventien seconden in de
 achtergrondworker), ook bij een treffer op de rest. `VOORBEELD_ZONDER_RASTER=1`
 bij de build laat het weg als een bouwmachine te traag blijkt; de pagina bouwt
 dan zonder raster in plaats van helemaal niet. De reeks huishoudens (Voor wie)
-gaat onder dezelfde vlag mee: zeven jaarsimulaties, een paar seconden.
+gaat onder dezelfde vlag mee: zeven jaarsimulaties, een paar seconden. En de
+vergelijking van de doelen ook: zelfconsumptie en uitstoot, elk op de tarieven
+van nu (met de voorbeelddag) en met het nettarief, vier doorrekeningen zonder
+optimum.
 
 De route-handler in `app/voorbeeld.json/route.ts` draait tijdens de build en
 leest de assets van schijf in plaats van via `fetch`. Daarom neemt
@@ -541,6 +544,25 @@ Gebalanceerd, Volop; heette "Maximaal rendement", maar dat botste met het doel
 Rendement). Elke knop draagt zijn uitleg als tooltip en de regel eronder zegt
 wat de stand in centen betekent: drempel per geleverde kWh, en het minimale
 prijsverschil bij inkoop tegen 20 ct inclusief omzettingsverlies.
+
+**De drie doelen naast elkaar** staan op het tabblad Wat als
+(`components/Doelvergelijking.tsx`): per doel een kaart met besparing, CO2-winst
+voor het huishouden, eigen verbruik, netafname en teruglevering, laadbeurten en
+de terugverdientijd met de overgang naar het nettarief (dezelfde grondslag als
+het antwoord bovenaan), het gekozen doel gemarkeerd, en daaronder dezelfde
+zomerdag drie keer. "Reken hiermee" zet het doel in de instellingen en rekent
+door. Het gekozen doel ís het antwoord en zijn scenario; de andere twee rekent
+`useAnalysis` als achtergrondgroep in de pool (scenario-doorrekening zonder
+optimum, plus de dag uit de dispatch bij het samenvoegen), pas als het tabblad
+open is en vóór het raster in de rij. Wat er per doel bewaard wordt is klein
+(`VergelijkingDeel` in `lib/model/vergelijking.ts`) en hangt in het geheugen aan
+`dispatchSleutel` van de werkconfiguratie; een eerder antwoord met dat doel uit
+de browsercache telt ook. Zo rekent terugwisselen van doel niets opnieuw. De
+hoofddoorrekening en haar scenario krijgen voorrang in de pool (`voorrang` in
+`PoolTaak`), zodat "Reken hiermee" niet achter de vergelijking of het raster
+wacht. `tests/vergelijking.test.ts` bewaakt dat het gekozen doel bit-gelijk is
+aan het antwoord, dat zelfconsumptie niet via de batterij met het net handelt,
+en de rangorde op de standaardinvoer.
 
 **Wat er door de meter ging** staat sinds september 2026 weer als losse figuur
 onder het dagprofiel (`components/Meterprofiel.tsx`): afname boven, teruglevering
