@@ -30,6 +30,8 @@
  */
 
 import { PRESETS } from "./presets";
+import { normaliseerCo2Drempel } from "./model/co2";
+import { DOELEN } from "./model/doel";
 import type { Doel } from "./model/types";
 import type { Instellingen } from "./url-state";
 
@@ -81,9 +83,6 @@ export const MAG_LEEG: ReadonlySet<GetalVeld> = new Set<GetalVeld>([
   "opwekKwh",
 ]);
 
-/** De klassebreedte van de CO2-drempel, g/kWh (CO2_KLASSE_G in lib/model/co2.ts). */
-const CO2_STAP_G = 20;
-
 /** Een getal binnen de grenzen van dit veld, afgerond; null of de standaard als het onleesbaar is. */
 export function klem(veld: GetalVeld, waarde: number): number {
   const g = GRENZEN[veld];
@@ -91,7 +90,8 @@ export function klem(veld: GetalVeld, waarde: number): number {
   if (veld === "co2Drempel") {
     // Zoals nederlandPerspectief hem gebruikt: naar boven afgerond op de
     // volgende klassegrens, zodat wat er staat ook is wat er gerekend wordt.
-    v = Math.min(g.max, Math.ceil(v / CO2_STAP_G - 1e-9) * CO2_STAP_G);
+    // Eén bron voor die regel: normaliseerCo2Drempel in lib/model/co2.ts.
+    v = normaliseerCo2Drempel(v);
   }
   const f = 10 ** g.decimalen;
   // Via toFixed in plaats van Math.round(v * f) / f: 0,015 * 10000 is
@@ -99,7 +99,7 @@ export function klem(veld: GetalVeld, waarde: number): number {
   return Number((Math.round(v * f) / f).toFixed(g.decimalen));
 }
 
-const DOELEN: readonly Doel[] = ["rendement", "zelfconsumptie", "uitstoot"];
+const DOEL_IDS: readonly Doel[] = DOELEN.map((d) => d.id);
 const HEFFINGEN: readonly Instellingen["heffing"][] = ["toen", "nu"];
 
 /** Een EAN-code van een netgebied: achttien cijfers. De lijst zelf staat in het manifest. */
@@ -158,7 +158,7 @@ export function normaliseerDeel(
         else meld(k);
         break;
       case "doel":
-        if (DOELEN.includes(v as Doel)) uit[k] = v;
+        if (DOEL_IDS.includes(v as Doel)) uit[k] = v;
         else meld(k);
         break;
       case "presetId":
