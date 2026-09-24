@@ -72,6 +72,11 @@ function hash(arrs: Float64Array[]): string {
  * heffing van nu. De maat "15 kWh / 0,5 kW" is "20 kWh / 0,8 kW" geworden: een
  * batterij van 0,5 kW bestaat niet, en 20 kWh op 0,8 kW houdt het grid op
  * ruim 390 niveaus, waar dit geval voor bedoeld is.
+ *
+ * MODEL_VERSIE 16: de nettingschaling lost met bisectie op tot 1e-12 in plaats
+ * van tot 1e-6. De factoren schuiven daardoor in het zesde cijfer, de bedragen
+ * minder dan een duizendste euro, en de hashes veranderen mee. Zonder
+ * zonnepanelen valt er niets te netten; dat geval staat nog op dezelfde bit.
  */
 const GEVALLEN: {
   naam: string;
@@ -81,13 +86,13 @@ const GEVALLEN: {
   optimal: number;
   optimalHash: string;
 }[] = [
-  { naam: "Zendure 1,92 kWh / 0,8 kW", inst: {}, rolling: 460.01503597489676, rollingHash: "6a26fb0a", optimal: 451.98777892600737, optimalHash: "4fe2e8" },
-  { naam: "Marstek 5,1 kWh, volle slijtage", inst: { presetId: "marstek-venus-e3", slijtageDeel: 1, prijsEur: 1199 }, rolling: 369.45798588322634, rollingHash: "12dd4fc4", optimal: 342.92522672774214, optimalHash: "ab57905f" },
+  { naam: "Zendure 1,92 kWh / 0,8 kW", inst: {}, rolling: 460.01506358841135, rollingHash: "bd3c2233", optimal: 451.98773242333397, optimalHash: "78610b30" },
+  { naam: "Marstek 5,1 kWh, volle slijtage", inst: { presetId: "marstek-venus-e3", slijtageDeel: 1, prijsEur: 1199 }, rolling: 369.45785150994215, rollingHash: "a89d293a", optimal: 342.9252004979733, optimalHash: "6c163c2c" },
   // De prijs staat hier vast: sinds de kostenregel krijgt een overschreven maat
   // anders een eigen prijs, en daarmee een andere slijtagedrempel. Dit harnas
   // gaat over de solver, niet over de prijs.
-  { naam: "20 kWh / 0,8 kW", inst: { capaciteitKwh: 20, vermogenKw: 0.8, prijsEur: 699 }, rolling: 347.96636603607084, rollingHash: "be77a58d", optimal: 305.5329230933238, optimalHash: "6b8bb14e" },
-  { naam: "20 kWh / 0,8 kW zonder afregelen", inst: { capaciteitKwh: 20, vermogenKw: 0.8, prijsEur: 699, curtailment: false }, rolling: 355.8728992055789, rollingHash: "a0b2bd37", optimal: 313.1948498324358, optimalHash: "6b8bb14e" },
+  { naam: "20 kWh / 0,8 kW", inst: { capaciteitKwh: 20, vermogenKw: 0.8, prijsEur: 699 }, rolling: 347.9663942540348, rollingHash: "a9a2881d", optimal: 305.53295264343274, optimalHash: "f0482bb8" },
+  { naam: "20 kWh / 0,8 kW zonder afregelen", inst: { capaciteitKwh: 20, vermogenKw: 0.8, prijsEur: 699, curtailment: false }, rolling: 355.8729262496463, rollingHash: "46c19364", optimal: 313.1948782293686, optimalHash: "f0482bb8" },
   { naam: "zonder zonnepanelen", inst: { zonnepanelen: false }, rolling: 537.9500824103864, rollingHash: "7fe491c", optimal: 537.4753299500354, optimalHash: "21b73bb9" },
 ];
 
