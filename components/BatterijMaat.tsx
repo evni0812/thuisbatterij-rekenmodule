@@ -25,7 +25,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import type { GridState } from "../lib/useAnalysis";
 import type { Configuration, GridPoint } from "../lib/worker/protocol";
 import type { SavingCurvePoint } from "../lib/model/finance";
-import { advies, rasterFinance, type CelFinance } from "../lib/model/dimensionering";
+import { advies, rasterFinance, type CelFinance, type RasterNiveau } from "../lib/model/dimensionering";
 import { STEKKER_GRENS_KW, isVasteAansluiting, kostenregelVan } from "../lib/model/kosten";
 import { euro, getal, jaren, procent } from "../lib/format";
 import { Figure, TipLaag, useTip, type TipInhoud } from "./chart-parts";
@@ -125,6 +125,7 @@ export function BatterijMaat({
   actie,
   config,
   curve,
+  niveau,
   jaar = null,
 }: {
   /** Null zolang het raster nog wordt doorgerekend in de achtergrond. */
@@ -138,6 +139,8 @@ export function BatterijMaat({
   config: Configuration;
   /** De besparingscurve van de gekozen batterij; elke cel leent er de vorm van. */
   curve: SavingCurvePoint[];
+  /** Van het rasterjaar naar het gemiddelde over de volledige jaren (`rasterNiveau`). */
+  niveau?: RasterNiveau;
   /** Het jaar waarop het raster rekent, voor de teksten. */
   jaar?: number | null;
 }) {
@@ -145,8 +148,16 @@ export function BatterijMaat({
   const [weergave, setWeergave] = useState<Weergave>("ncw");
   const { kader, tip, toon, wis } = useTip();
 
-  const fin = useMemo(() => (grid ? rasterFinance(grid, config, curve) : null), [grid, config, curve]);
-  const raad = useMemo(() => (grid && grid.klaar ? advies(grid, config, curve) : null), [grid, config, curve]);
+  const nb = niveau?.besparing ?? 1;
+  const nc = niveau?.cycli ?? 1;
+  const fin = useMemo(
+    () => (grid ? rasterFinance(grid, config, curve, { besparing: nb, cycli: nc }) : null),
+    [grid, config, curve, nb, nc],
+  );
+  const raad = useMemo(
+    () => (grid && grid.klaar ? advies(grid, config, curve, { besparing: nb, cycli: nc }) : null),
+    [grid, config, curve, nb, nc],
+  );
 
   if (!grid || !fin) {
     // Het raster draait automatisch in de achtergrond zodra het hoofdantwoord

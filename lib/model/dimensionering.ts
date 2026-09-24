@@ -16,16 +16,71 @@
  * niveau. Voor de cel van de gekozen batterij zelf is dat exact de gemeten
  * curve.
  *
- * ── Eén jaar tegenover een gemiddelde ───────────────────────────────────────
- * Een rastercel rust op het meest recente volledige jaar; het hoofdantwoord op
- * het gemiddelde over alle volledige jaren. De cel van de eigen batterij komt
- * daardoor niet precies op het hoofdantwoord uit. Dat is geen fout maar een
- * ander jaar, en de tekst bij de kaart zegt dat.
+ * ── Eén jaar, op het niveau van het gemiddelde ──────────────────────────────
+ * Een rastercel wordt doorgerekend op het meest recente volledige jaar; het
+ * hoofdantwoord rust op het gemiddelde over alle volledige jaren. Eerder kwam
+ * de cel van de eigen batterij daardoor op het beste jaar uit (2025: € 124
+ * tegen gemiddeld € 119) en rekende de kaart gunstiger dan het antwoord
+ * bovenaan. Nu brengt `rasterNiveau` elke cel op het niveau van het
+ * gemiddelde, met de verhouding gemiddelde : rasterjaar van de gekozen
+ * batterij. Dat is dezelfde splitsing als bij de besparingscurve: het jaar
+ * geeft de verhouding tussen de maten, het gemiddelde het niveau. Alle jaren
+ * voor elke maat doorrekenen zou het raster verdubbelen.
+ *
+ * ── Zonder de overgang naar het nettarief ───────────────────────────────────
+ * Het antwoord bovenaan en de cashflow rekenen tot 2029 met de tarieven van nu
+ * en daarna met het nettarief (lib/overgang.ts). De kaart doet dat niet: dat
+ * vraagt een tweede raster met het nettarief, weer een verdubbeling. Elke cel
+ * rekent de tarieven van nu over de hele looptijd, en `RASTER_GRONDSLAG` zegt
+ * dat in woorden voor bij de kaart.
  */
 
+import { referentieIndexVan } from "./analysis";
 import { computeFinance, type SavingCurvePoint } from "./finance";
 import { ankerVan, isVasteAansluiting, kostenVan, kostenregelVan } from "./kosten";
 import type { Configuration, GridPoint } from "../worker/protocol";
+
+/**
+ * Waarop de kaart van maten rekent, in één zin voor bij de kaart. De cellen
+ * wijken daardoor af van het antwoord bovenaan, en de lezer moet weten waarom.
+ */
+export const RASTER_GRONDSLAG =
+  "Elke maat is doorgerekend op het meest recente volledige jaar en op het niveau van het " +
+  "gemiddelde over alle volledige jaren gebracht. De tarieven van nu gelden over de hele " +
+  "looptijd: de overgang naar het nettarief in 2029, die het antwoord bovenaan wel meeneemt, " +
+  "zit niet in de kaart.";
+
+/**
+ * Factoren die een rastercel van het rasterjaar naar het gemiddelde over de
+ * volledige jaren brengen: gemiddelde gedeeld door rasterjaar, voor de
+ * besparing en voor de cycli, gemeten op de gekozen batterij.
+ */
+export interface RasterNiveau {
+  besparing: number;
+  cycli: number;
+}
+
+/** Geen correctie: de cel zoals het rasterjaar hem gaf. */
+export const GEEN_NIVEAU: RasterNiveau = { besparing: 1, cycli: 1 };
+
+/**
+ * Het niveau uit een hoofdresultaat: gemiddelde over de volledige jaren
+ * gedeeld door het jaar waarop raster en huishoudens rekenen
+ * (`referentieIndexVan`, hetzelfde jaar als `rasterJaar`). Voor een cel met de
+ * maat van de gekozen batterij is de besparing daarna exact het gemiddelde.
+ */
+export function rasterNiveau(r: {
+  averageSavingEur: number;
+  stats: { cyclesPerYear: number };
+  perYear: readonly { isFullYear: boolean; realisticSavingEur: number; cyclesPerYear: number }[];
+}): RasterNiveau {
+  if (r.perYear.length === 0) return GEEN_NIVEAU;
+  const jaar = r.perYear[referentieIndexVan(r.perYear)]!;
+  return {
+    besparing: jaar.realisticSavingEur > 0 ? r.averageSavingEur / jaar.realisticSavingEur : 1,
+    cycli: jaar.cyclesPerYear > 0 ? r.stats.cyclesPerYear / jaar.cyclesPerYear : 1,
+  };
+}
 
 export interface CelFinance {
   investeringEur: number;
@@ -33,7 +88,7 @@ export interface CelFinance {
   npvEur: number;
   paybackYears: number | null;
   irr: number | null;
-  /** Besparing in het rasterjaar, euro. */
+  /** Besparing per jaar, euro: het rasterjaar op het niveau van het gemiddelde. */
   besparingEur: number;
   cyclesPerYear: number;
 }
@@ -78,10 +133,13 @@ export function celFinance(
   kw: number,
   config: Configuration,
   curve: readonly SavingCurvePoint[],
+  niveau: RasterNiveau = GEEN_NIVEAU,
 ): CelFinance {
   const investeringEur = kostenVan(ankerVan(config), kostenregelVan(config), cap, kw);
+  const besparing = punt.savingEur * niveau.besparing;
+  const cycli = punt.cyclesPerYear * niveau.cycli;
   const fin = computeFinance({
-    curve: celCurve(curve, punt.savingEur, punt.cyclesPerYear),
+    curve: celCurve(curve, besparing, cycli),
     investmentEur: investeringEur,
     years: config.analysisYears,
     priceEscalation: config.priceEscalation,
@@ -95,8 +153,8 @@ export function celFinance(
     npvEur: fin.npvEur,
     paybackYears: fin.paybackYears,
     irr: fin.irr,
-    besparingEur: punt.savingEur,
-    cyclesPerYear: punt.cyclesPerYear,
+    besparingEur: besparing,
+    cyclesPerYear: cycli,
   };
 }
 
@@ -105,9 +163,12 @@ export function rasterFinance(
   grid: RasterMaten,
   config: Configuration,
   curve: readonly SavingCurvePoint[],
+  niveau: RasterNiveau = GEEN_NIVEAU,
 ): (CelFinance[] | null)[] {
   return grid.rows.map((rij, r) =>
-    rij ? rij.map((p, k) => celFinance(p, grid.capacities[r]!, grid.powers[k]!, config, curve)) : null,
+    rij
+      ? rij.map((p, k) => celFinance(p, grid.capacities[r]!, grid.powers[k]!, config, curve, niveau))
+      : null,
   );
 }
 
@@ -140,6 +201,7 @@ export function uitbreidingsstappen(
   kolom: number,
   config: Configuration,
   curve: readonly SavingCurvePoint[],
+  niveau: RasterNiveau = GEEN_NIVEAU,
 ): { stappen: Uitbreidingsstap[]; omslag: number | null } {
   const stappen: Uitbreidingsstap[] = [];
   for (let r = 0; r < grid.rows.length; r++) {
@@ -147,7 +209,7 @@ export function uitbreidingsstappen(
     const punt = rij?.[kolom];
     if (!punt) continue;
     const cap = grid.capacities[r]!;
-    const fin = celFinance(punt, cap, grid.powers[kolom]!, config, curve);
+    const fin = celFinance(punt, cap, grid.powers[kolom]!, config, curve, niveau);
     const vorige = stappen[stappen.length - 1];
     stappen.push({
       capacityKwh: cap,
@@ -181,6 +243,7 @@ export function advies(
   grid: RasterMaten,
   config: Configuration,
   curve: readonly SavingCurvePoint[],
+  niveau: RasterNiveau = GEEN_NIVEAU,
 ): Advies | null {
   if (grid.rows.length === 0 || grid.rows.some((r) => r === null)) return null;
   const keuzes: Keuze[] = [];
@@ -189,7 +252,7 @@ export function advies(
       keuzes.push({
         capacityKwh: grid.capacities[r]!,
         powerKw: grid.powers[k]!,
-        fin: celFinance(p, grid.capacities[r]!, grid.powers[k]!, config, curve),
+        fin: celFinance(p, grid.capacities[r]!, grid.powers[k]!, config, curve, niveau),
       }),
     ),
   );

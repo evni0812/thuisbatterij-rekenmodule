@@ -17,7 +17,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import type { HuishoudensState } from "../lib/useAnalysis";
 import type { Configuration } from "../lib/worker/protocol";
 import { referentieJaar, type AnalysisResult } from "../lib/model/analysis";
-import { celFinance, type CelFinance } from "../lib/model/dimensionering";
+import { celFinance, rasterNiveau, type CelFinance } from "../lib/model/dimensionering";
 import { euro, euroAs, getal, jaren, kwh, procent } from "../lib/format";
 import { Figure, Grafiek, Legenda, Raster, Trefvlak, kiesTicks, useTip } from "./chart-parts";
 
@@ -61,14 +61,17 @@ export function VoorWie({
   const cap = config.battery.capacityKwh;
   const kw = config.battery.maxDischargeKw;
 
+  // Elk huishouden rekent op het rasterjaar; op het niveau van het gemiddelde
+  // gebracht, net als de kaart van maten en het antwoord bovenaan.
+  const niveau = useMemo(() => rasterNiveau(result), [result]);
   const punten = useMemo<Punt[]>(() => {
     if (!huishoudens) return [];
     return huishoudens.punten.flatMap((p) =>
       p
-        ? [{ terugleveringKwh: p.terugleveringKwh, zonnepanelen: p.zonnepanelen, fin: celFinance(p, cap, kw, config, result.curve) }]
+        ? [{ terugleveringKwh: p.terugleveringKwh, zonnepanelen: p.zonnepanelen, fin: celFinance(p, cap, kw, config, result.curve, niveau) }]
         : [],
     );
-  }, [huishoudens, cap, kw, config, result.curve]);
+  }, [huishoudens, cap, kw, config, result.curve, niveau]);
 
   const jaar = referentieJaar(result);
   const eigen = useMemo<Punt>(() => {
@@ -76,9 +79,9 @@ export function VoorWie({
     return {
       terugleveringKwh: zon ? config.household.annualGridExportKwh : 0,
       zonnepanelen: zon,
-      fin: celFinance({ savingEur: jaar.realisticSavingEur, cyclesPerYear: jaar.cyclesPerYear }, cap, kw, config, result.curve),
+      fin: celFinance({ savingEur: jaar.realisticSavingEur, cyclesPerYear: jaar.cyclesPerYear }, cap, kw, config, result.curve, niveau),
     };
-  }, [config, jaar, cap, kw, result.curve]);
+  }, [config, jaar, cap, kw, result.curve, niveau]);
 
   if (!huishoudens || (!huishoudens.klaar && punten.length < 2)) {
     return (

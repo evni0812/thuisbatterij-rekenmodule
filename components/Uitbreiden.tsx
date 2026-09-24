@@ -20,6 +20,7 @@ import {
   advies,
   dichtsteKolom,
   uitbreidingsstappen,
+  type RasterNiveau,
   type Uitbreidingsstap,
 } from "../lib/model/dimensionering";
 import { euro, euroAs, getal, jaren, procent } from "../lib/format";
@@ -35,26 +36,37 @@ export function Uitbreiden({
   grid,
   config,
   curve,
+  niveau,
   actie,
 }: {
   grid: GridState | null;
   config: Configuration;
   curve: SavingCurvePoint[];
+  /** Van het rasterjaar naar het gemiddelde over de volledige jaren (`rasterNiveau`). */
+  niveau?: RasterNiveau;
   actie?: ReactNode;
 }) {
   const { kader, tip, toon, wis } = useTip();
   const [aangewezen, setAangewezen] = useState<number | null>(null);
 
   const kHuidig = grid ? dichtsteKolom(grid.powers, config.battery.maxDischargeKw) : 0;
-  const raad = useMemo(() => (grid && grid.klaar ? advies(grid, config, curve) : null), [grid, config, curve]);
+  const nb = niveau?.besparing ?? 1;
+  const nc = niveau?.cycli ?? 1;
+  const raad = useMemo(
+    () => (grid && grid.klaar ? advies(grid, config, curve, { besparing: nb, cycli: nc }) : null),
+    [grid, config, curve, nb, nc],
+  );
   const kBeste = grid && raad ? grid.powers.indexOf(raad.beste.powerKw) : kHuidig;
   const huidig = useMemo(
-    () => (grid ? uitbreidingsstappen(grid, kHuidig, config, curve) : null),
-    [grid, kHuidig, config, curve],
+    () => (grid ? uitbreidingsstappen(grid, kHuidig, config, curve, { besparing: nb, cycli: nc }) : null),
+    [grid, kHuidig, config, curve, nb, nc],
   );
   const beste = useMemo(
-    () => (grid && kBeste !== kHuidig ? uitbreidingsstappen(grid, kBeste, config, curve) : null),
-    [grid, kBeste, kHuidig, config, curve],
+    () =>
+      grid && kBeste !== kHuidig
+        ? uitbreidingsstappen(grid, kBeste, config, curve, { besparing: nb, cycli: nc })
+        : null,
+    [grid, kBeste, kHuidig, config, curve, nb, nc],
   );
 
   if (!grid || !grid.klaar || !huidig || huidig.stappen.length < 2) {

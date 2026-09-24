@@ -43,6 +43,7 @@ import { STANDAARD, kiesPreset, maakConfiguratie } from "../lib/configuratie";
 import { referentieJaar } from "../lib/model/analysis";
 import { STANDAARD_CO2_DREMPEL_G } from "../lib/model/co2";
 import { ankerVan, kostenVan, kostenregelVan } from "../lib/model/kosten";
+import { rasterNiveau } from "../lib/model/dimensionering";
 import { wearCostPerKwh } from "../lib/model/battery";
 import { UITLEG, type UitlegContext } from "../lib/uitleg";
 import { overgangsFinance } from "../lib/overgang";
@@ -479,6 +480,7 @@ export default function Page() {
                     huidigVermogen={toonVermogen}
                     config={toon}
                     curve={result.curve}
+                    niveau={rasterNiveau(result)}
                     jaar={referentieJaar(result).year}
                     onKies={(cap, kw) => {
                       // Een klik op een vakje is een expliciete opdracht: meteen
@@ -494,7 +496,7 @@ export default function Page() {
                     }}
                     actie={uitleg("batterijmaat")}
                   />
-                  <Uitbreiden grid={grid} config={toon} curve={result.curve} actie={uitleg("uitbreiden")} />
+                  <Uitbreiden grid={grid} config={toon} curve={result.curve} niveau={rasterNiveau(result)} actie={uitleg("uitbreiden")} />
                   <VoorWie huishoudens={huishoudens} result={result} config={toon} actie={uitleg("voorwie")} />
                 </>
               ) : null}

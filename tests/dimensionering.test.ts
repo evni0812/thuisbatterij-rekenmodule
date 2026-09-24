@@ -11,6 +11,7 @@ import {
   celFinance,
   dichtsteKolom,
   rasterFinance,
+  rasterNiveau,
   uitbreidingsstappen,
   type RasterMaten,
 } from "../lib/model/dimensionering";
@@ -69,6 +70,34 @@ describe("de financiën van een cel", () => {
     const cel = celFinance({ savingEur: 200, cyclesPerYear: 200 }, 5, 2.5, cfg, CURVE);
     expect(cel.investeringEur).toBe(kostenVan(ankerVan(cfg), kostenregelVan(cfg), 5, 2.5));
     expect(cel.besparingEur).toBe(200);
+  });
+
+  it("brengt een cel op het niveau van het gemiddelde over de volledige jaren", () => {
+    // Het raster rekent op het laatste volledige jaar (hier 2025, € 124); het
+    // antwoord bovenaan op het gemiddelde (€ 119). Een cel met de maat van de
+    // eigen batterij hoort op dat gemiddelde uit te komen, niet op het beste jaar.
+    const niveau = rasterNiveau({
+      averageSavingEur: 119,
+      stats: { cyclesPerYear: 250 },
+      perYear: [
+        { isFullYear: false, realisticSavingEur: 80, cyclesPerYear: 180 },
+        { isFullYear: true, realisticSavingEur: 114, cyclesPerYear: 240 },
+        { isFullYear: true, realisticSavingEur: 124, cyclesPerYear: 260 },
+        { isFullYear: false, realisticSavingEur: 90, cyclesPerYear: 200 },
+      ],
+    });
+    expect(niveau.besparing).toBeCloseTo(119 / 124, 12);
+    expect(niveau.cycli).toBeCloseTo(250 / 260, 12);
+    const cel = celFinance(
+      { savingEur: 124, cyclesPerYear: 260 },
+      cfg.battery.capacityKwh,
+      cfg.battery.maxDischargeKw,
+      cfg,
+      CURVE,
+      niveau,
+    );
+    expect(cel.besparingEur).toBeCloseTo(119, 9);
+    expect(cel.cyclesPerYear).toBeCloseTo(250, 9);
   });
 
   it("reageert op de looptijd zonder dat het raster verandert", () => {
