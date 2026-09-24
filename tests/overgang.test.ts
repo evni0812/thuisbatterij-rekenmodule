@@ -9,8 +9,7 @@
  */
 import { describe, expect, it } from "vitest";
 import { computeFinance, type SavingCurvePoint } from "../lib/model/finance";
-import { overgangsFinance } from "../lib/overgang";
-import { NETTARIEF_JAAR } from "../lib/nettarief";
+import { BEREKENING_START, jarenTotNettarief, overgangsFinance } from "../lib/overgang";
 import type { AnalysisResult } from "../lib/model/analysis";
 import type { Configuration } from "../lib/worker/protocol";
 
@@ -59,39 +58,35 @@ describe("de tariefwissel van 2029", () => {
       resultaat(HUIDIG),
       resultaat(SCENARIO),
       config,
-      new Date("2026-09-17T12:00:00Z"),
     );
     expect(o.finance.paybackYears).not.toBeNull();
     expect(o.finance.paybackYears!).toBeGreaterThan(snel);
     expect(o.finance.paybackYears!).toBeLessThan(traag);
   });
 
-  it("telt de jaren tot de ingangsdatum, niet tot een vast getal", () => {
-    const in2026 = overgangsFinance(
-      resultaat(HUIDIG),
-      resultaat(SCENARIO),
-      config,
-      new Date("2026-06-01T00:00:00Z"),
-    );
-    const in2028 = overgangsFinance(
-      resultaat(HUIDIG),
-      resultaat(SCENARIO),
-      config,
-      new Date("2028-06-01T00:00:00Z"),
-    );
-    expect(in2026.jarenOpHuidigTarief).toBe(NETTARIEF_JAAR - 2026);
-    expect(in2028.jarenOpHuidigTarief).toBe(NETTARIEF_JAAR - 2028);
-    // Hoe dichter bij 2029, hoe eerder het hogere bedrag begint te tellen.
-    expect(in2028.finance.paybackYears!).toBeLessThan(in2026.finance.paybackYears!);
+  it("begint op 1 januari 2027, niet op de datum van vandaag", () => {
+    // Twee volle jaren op het huidige tarief (2027 en 2028), daarna het
+    // nettarief; wanneer je kijkt doet er niet toe.
+    expect(BEREKENING_START).toBe("2027-01-01");
+    expect(jarenTotNettarief()).toBe(2);
+    const o = overgangsFinance(resultaat(HUIDIG), resultaat(SCENARIO), config);
+    expect(o.jarenOpHuidigTarief).toBe(2);
+    expect(o.finance.cashflows[1]!.savingNominalEur).toBeLessThan(o.finance.cashflows[2]!.savingNominalEur);
   });
 
-  it("valt samen met het scenario zodra de ingangsdatum voorbij is", () => {
-    const o = overgangsFinance(
-      resultaat(HUIDIG),
-      resultaat(SCENARIO),
-      config,
-      new Date("2031-01-01T00:00:00Z"),
-    );
+  it("rekent een start midden in het jaar met een breuk", () => {
+    expect(jarenTotNettarief("2027-07-02")).toBeCloseTo(1.5, 2);
+    const heel = overgangsFinance(resultaat(HUIDIG), resultaat(SCENARIO), config, "2027-01-01");
+    const half = overgangsFinance(resultaat(HUIDIG), resultaat(SCENARIO), config, "2027-07-02");
+    const later = overgangsFinance(resultaat(HUIDIG), resultaat(SCENARIO), config, "2028-01-01");
+    expect(later.jarenOpHuidigTarief).toBe(1);
+    // Hoe korter op het huidige tarief, hoe sneller terugverdiend.
+    expect(half.finance.paybackYears!).toBeLessThan(heel.finance.paybackYears!);
+    expect(half.finance.paybackYears!).toBeGreaterThan(later.finance.paybackYears!);
+  });
+
+  it("valt samen met het scenario als de start na de ingangsdatum ligt", () => {
+    const o = overgangsFinance(resultaat(HUIDIG), resultaat(SCENARIO), config, "2031-01-01");
     expect(o.jarenOpHuidigTarief).toBe(0);
     expect(o.finance.paybackYears).toBeCloseTo(losseTerugverdientijd(SCENARIO), 6);
   });
@@ -106,7 +101,6 @@ describe("de tariefwissel van 2029", () => {
       resultaat(HUIDIG),
       resultaat(SCENARIO),
       config,
-      new Date("2026-09-17T12:00:00Z"),
     );
     const fracties = o.finance.cashflows.map((c) => c.capacityFraction);
     for (let i = 1; i < fracties.length; i++) {

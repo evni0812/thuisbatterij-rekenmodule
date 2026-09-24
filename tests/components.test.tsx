@@ -1019,7 +1019,6 @@ describe("de pagina vertelt het verhaal in vier delen, in die volgorde", () => {
       result,
       result,
       maakConfiguratie(LEGE_INSTELLINGEN),
-      new Date("2026-09-17"),
     );
     render(
       <Antwoord
@@ -1034,7 +1033,7 @@ describe("de pagina vertelt het verhaal in vier delen, in die volgorde", () => {
     expect(tekst).toMatch(/Vanaf 2029 gaat het tijdsafhankelijke nettarief in/);
     // En het getal dat voor een koper van vandaag geldt: het nieuwe tarief gaat
     // pas in 2029 in, dus de eerste jaren draait de batterij op dat van nu.
-    expect(tekst).toMatch(/Koop je nu, dan draait de batterij eerst nog 3 jaar/);
+    expect(tekst).toMatch(/Koop je nu, dan draait de batterij eerst nog 2 jaar/);
     expect(tekst).toMatch(/terugverdiend na/);
 
     // Zolang het scenario nog loopt staat er een plaatshouder, geen lege regel.
@@ -1320,7 +1319,7 @@ describe("het nettarief toont de verandering", () => {
         peakHourImportBatteryKwh: result.stats.peakHourImportBatteryKwh * 0.8,
       },
     };
-    const overgang = overgangsFinance(result, scenario, maakConfiguratie(LEGE_INSTELLINGEN), new Date("2026-09-17"));
+    const overgang = overgangsFinance(result, scenario, maakConfiguratie(LEGE_INSTELLINGEN));
     const { container } = render(
       <Nettarief huidig={result} scenario={scenario} overgang={overgang} />,
     );

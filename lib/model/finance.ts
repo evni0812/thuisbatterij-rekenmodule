@@ -43,7 +43,11 @@ export interface FinanceInput {
    * ertussen, en dat is precies wat deze twee velden uitrekenen.
    */
   curveLater?: SavingCurvePoint[];
-  /** Vanaf welk analysejaar `curveLater` geldt, 1-gebaseerd. */
+  /**
+   * Vanaf welk analysejaar `curveLater` geldt, 1-gebaseerd. Mag een breuk
+   * zijn: 3,5 betekent halverwege het derde jaar, en dan telt dat jaar voor
+   * de helft op elke curve. Een heel getal geeft exact het oude gedrag.
+   */
   curveLaterVanafJaar?: number;
   investmentEur: number;
   /** Aantal jaren dat de analyse beslaat. */
@@ -146,12 +150,21 @@ export function computeFinance(input: FinanceInput): FinanceResult {
     );
     // Welke tariefwereld geldt er in dit jaar? De degradatie loopt door over
     // de grens heen: het is dezelfde batterij, alleen de prijzen veranderen.
-    const curveNu =
-      input.curveLater && input.curveLaterVanafJaar !== undefined &&
-      y + 1 >= input.curveLaterVanafJaar
-        ? input.curveLater
-        : input.curve;
-    const { savingEur, cyclesPerYear } = interpolateCurve(curveNu, fraction);
+    // Het deel van dit jaar (dat loopt van y tot y + 1 jaar na de start) dat
+    // na de omslag valt, 0–1.
+    const later =
+      input.curveLater && input.curveLaterVanafJaar !== undefined
+        ? Math.max(0, Math.min(1, y + 1 - (input.curveLaterVanafJaar - 1)))
+        : 0;
+    let { savingEur, cyclesPerYear } = interpolateCurve(
+      later === 1 ? input.curveLater! : input.curve,
+      fraction,
+    );
+    if (later > 0 && later < 1) {
+      const na = interpolateCurve(input.curveLater!, fraction);
+      savingEur = savingEur * (1 - later) + na.savingEur * later;
+      cyclesPerYear = cyclesPerYear * (1 - later) + na.cyclesPerYear * later;
+    }
 
     // Alle energieprijzen stijgen mee, dus de besparing schaalt evenredig. Het
     // oude model liet opslag en terugleverkosten nominaal staan en escaleerde
