@@ -217,26 +217,35 @@ export class Invoerbron {
   }
 
   /**
-   * Schaalfactoren voor het netten, per netgebied en per stel jaarvolumes.
+   * Schaalfactoren voor het netten, per netgebied, jaar en stel jaarvolumes.
+   *
+   * Elk vol kalenderjaar krijgt zijn eigen factoren, zodat dat jaar precies op
+   * de ingevulde meterstanden uitkomt: "geschaald naar jouw jaartotalen" moet
+   * voor elk getoond jaar kloppen, niet alleen voor het laatste. Met één schaal
+   * voor alle jaren (die van het meest recente jaar) kwam 2024 in het
+   * standaardgeval uit op 2.528 in plaats van 2.500 kWh afname.
+   *
+   * Een deeljaar leent de factoren van het meest recente volle jaar; zelf
+   * oplossen zou de jaartotalen in een deel van het jaar proppen.
    *
    * Gebufferd, want de oplossing kost een tiental passes over een jaar en het
-   * antwoord verandert alleen als het netgebied of de meterstanden veranderen.
+   * antwoord verandert alleen als netgebied, jaar of meterstanden veranderen.
    */
-  private schaling(config: Configuration): Promise<NettingScale> {
+  private schaling(config: Configuration, year: number): Promise<NettingScale> {
     const m = this.gegevens;
     const hh = config.household;
     const type = config.afnametype ?? "AMI";
-    const key = `${config.domain}:${type}:${hh.annualGridImportKwh}:${hh.annualGridExportKwh}`;
+    const volleJaren = Object.entries(profielenVan(m, type)[config.domain] ?? {})
+      .filter(([, info]) => info.volledig_jaar)
+      .map(([y]) => Number(y))
+      .sort((a, b) => b - a);
+    // Zonder vol jaar valt er niets betrouwbaars op te lossen; dan blijft de
+    // reeks ongeschaald en komen de volumes onder de meterstanden uit.
+    if (volleJaren.length === 0) return Promise.resolve(GEEN_SCHALING);
+    const bron = volleJaren.includes(year) ? year : volleJaren[0]!;
+    const key = `${config.domain}:${type}:${bron}:${hh.annualGridImportKwh}:${hh.annualGridExportKwh}`;
     return Invoerbron.eenmalig(this.schalingen, key, async () => {
-      const jaren = Object.entries(profielenVan(m, type)[config.domain] ?? {})
-        .filter(([, info]) => info.volledig_jaar)
-        .map(([y]) => Number(y))
-        .sort((a, b) => b - a);
-      // Zonder vol jaar valt er niets betrouwbaars op te lossen; dan blijft de
-      // reeks ongeschaald en komen de volumes onder de meterstanden uit.
-      if (jaren.length === 0) return GEEN_SCHALING;
-
-      const prof = await this.profiel(config.domain, jaren[0]!, type);
+      const prof = await this.profiel(config.domain, bron, type);
       return solveNettingScale(prof.importFraction, prof.exportFraction, hh);
     });
   }
@@ -267,17 +276,15 @@ export class Invoerbron {
     }
 
     // De schaalfactoren die de genette reeks op de meterstanden laten uitkomen
-    // worden op één VOL kalenderjaar bepaald en voor alle jaren gebruikt, ook
-    // de deeljaren. Een deeljaar zou anders de jaartotalen in een deel van het
-    // jaar proppen. Het meest recente volle jaar is het representatiefst.
+    // worden per vol kalenderjaar bepaald; deeljaren lenen die van het meest
+    // recente volle jaar (zie `schaling`).
     //
     // Alle bestanden gaan tegelijk de deur uit in plaats van jaar na jaar: over
     // het netwerk scheelt dat een rij wachttijden. De volgorde van de vensters
     // hieronder verandert er niet door.
-    const [schaling] = await Promise.all([
-      this.schaling(config),
-      ...jaren.flatMap((y) => [this.profiel(config.domain, y, type), this.prijs(y), this.co2(y)]),
-    ]);
+    await Promise.all(
+      jaren.flatMap((y) => [this.profiel(config.domain, y, type), this.prijs(y), this.co2(y)]),
+    );
 
     // Zonder historische heffing rekenen we met de heffing van nu: die van het
     // meest recente prijsjaar in de data, tenzij de gebruiker er zelf een opgaf.
@@ -329,7 +336,7 @@ export class Invoerbron {
         prof.exportFraction.slice(start, end),
         config.household,
         startMs,
-        schaling,
+        await this.schaling(config, year),
       );
 
       windows.push({

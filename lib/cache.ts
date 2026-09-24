@@ -63,6 +63,11 @@ export interface Bundel {
  * afgeronde centen, en met de heffing van het scenariojaar in plaats van die
  * van toen; dat verandert de bedragen van het scenario in de bundel.
  *
+ * Versie 17: elk vol jaar krijgt zijn eigen nettingschaling in plaats van die
+ * van het meest recente jaar, zodat ook 2024 precies op de ingevulde
+ * meterstanden uitkomt (was 2.528 in plaats van 2.500 kWh afname in het
+ * standaardgeval). De bedragen over 2024 en het gemiddelde veranderen iets.
+ *
  * Versie 16: de nettingschaling komt bij elke verhouding tussen afname en
  * teruglevering op de meterstanden uit. Bij een scheve verhouding verdween de
  * teruglevering eerder stil; bij de gewone verhoudingen schuiven de bedragen
@@ -99,7 +104,7 @@ export interface Bundel {
  * heffing per uur in plaats van een jaarconstante, en de uitvoerder die bewuste
  * verkoop aan het net doorlaat. Alle drie veranderen de bedragen.
  */
-export const MODEL_VERSIE = 16;
+export const MODEL_VERSIE = 17;
 
 /**
  * Alles van de cache staat onder zijn eigen voorvoegsel, `tbat:cache:`.
