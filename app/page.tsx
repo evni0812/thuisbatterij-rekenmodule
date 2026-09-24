@@ -706,6 +706,14 @@ export default function Page() {
                 <span className="badge let-op">richting onzeker</span>
               </li>
               <li>
+                <b>Afname en teruglevering binnen een kwartier.</b> We strepen ze
+                per kwartier tegen elkaar weg, want één aansluiting gaat binnen een
+                kwartier meestal maar één kant op. Wisselt jouw huis vaker binnen
+                een kwartier (een wolk, een waterkoker), dan valt de besparing iets
+                hoger uit; bij een kleine stekkerbatterij het meest.
+                <span className="badge goed">eerder voorzichtig</span>
+              </li>
+              <li>
                 <b>De batterij kent de toekomst niet.</b> De strategie plant op de
                 day-ahead-prijzen, die rond 13.00 uur voor de volgende dag bekend
                 worden, en op een eenvoudige verwachting van je verbruik en opwek
@@ -744,9 +752,10 @@ export default function Page() {
                 <b>De belasting van nu.</b> De uurprijzen zijn van toen, de
                 energiebelasting en opslag van nu. Zo past de uitkomst bij een
                 batterij die je vandaag koopt. In 2024 en 2025 lag de heffing een
-                kwart tot een derde hoger, en de besparing schaalt daar bijna
-                één-op-één mee. Bij de geavanceerde instellingen kies je "van
-                toen"; het nettariefscenario rekent met de belasting van 2029.
+                kwart tot een derde hoger; met die heffing valt de besparing van
+                de standaardbatterij ongeveer 13% hoger uit. Bij de geavanceerde
+                instellingen kies je "van toen"; het nettariefscenario rekent met
+                de belasting van 2029.
                 <span className="badge let-op">kan veranderen</span>
               </li>
               <li>
