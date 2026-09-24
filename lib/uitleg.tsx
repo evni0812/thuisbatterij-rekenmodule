@@ -19,6 +19,7 @@ import { RASTER_CAPACITEITEN, RASTER_VERMOGENS } from "./model/raster";
 import { overgangZin, overgangsFinance } from "./overgang";
 import {
   BASISTARIEF,
+  HEFFING_NU,
   NETTARIEF_BRON,
   NETTARIEF_JAAR,
   scenarioHeffing,
@@ -1002,7 +1003,7 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP, STANDBY_LETOP, GEMIDDELD_LETOP, EEN_LE
       stappen: [
         <>Het voorstel geeft per uur en per seizoen een wegingsfactor: 0, 0,3, 0,5, 0,7 of 1,0. Die staan vast. Het basistarief niet; dat is de prognose van CE Delft, in opdracht van NVDE, Holland Solar, Energie-Nederland en Energy Storage NL: {centPerKwh(BASISTARIEF[2030])} in 2030, en {centPerKwh(BASISTARIEF[2029])} in 2029 (ongeveer 7% lager: één jaar tariefstijging van 7,5% eraf).</>,
         <>Per kwartier komt factor × basistarief bovenop de afnameprijs. Alleen op afname: het voorstel beprijst geen invoeding.</>,
-        <>De heffing wordt in dit scenario die van het scenariojaar: {centPerKwh(scenarioHeffing(jaar))} in plaats van de 13 tot 17 cent van toen, anders stapelt het een nettarief van straks op een belasting van toen.</>,
+        <>De heffing wordt in dit scenario die van het scenariojaar: {centPerKwh(scenarioHeffing(jaar))} inclusief opslag, in plaats van {config.useHistoricalLevy ? "die van toen, per uur zoals hij in de prijsdata zat" : `die van nu (${centPerKwh(HEFFING_NU)})`}. Het nettarief van straks hoort bij de belasting van straks.</>,
         <>De batterij plant opnieuw op de nieuwe prijzen: de winteravond wordt duurder, dus levert hij dan liever; de zomermiddag wordt gratis, dus laadt hij dan liever.</>,
         <>De bedragen hieronder zijn de doorrekening alsof dit tarief er de hele periode al was — zo zijn de twee werelden zuiver te vergelijken. Voor de terugverdientijd telt dat niet: die staat elders op de pagina mét de ingangsdatum erin, dus de eerste jaren op het huidige nettarief.</>,
       ],

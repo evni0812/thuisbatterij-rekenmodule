@@ -48,11 +48,16 @@
  * Het nettarief komt bovenop de energiebelasting en de inkoopopslag. De
  * gewone doorrekening rekent standaard met de heffing van nu (12,9 cent in
  * 2026) over alle historische jaren; wie "toen" kiest krijgt de heffing zoals
- * die per uur gold, 13 tot 17 cent. In 2029 en 2030 ligt de energiebelasting volgens CE Delft (Tabel 2) op
- * EUR 0,075 respectievelijk 0,076 per kWh exclusief btw. Het scenario rekent
- * daarom met de heffing van dat jaar in plaats van die van toen; anders stapelt
- * het een nettarief van 2030 op een belasting van 2024, en de besparing
- * schaalt bijna één-op-één met de heffing.
+ * die per uur gold, 17 à 18 cent in 2023 tot en met 2025 (`heffingToen`). In
+ * 2029 en 2030 ligt de energiebelasting volgens CE Delft (Tabel 2) op EUR
+ * 0,075 respectievelijk 0,076 per kWh exclusief btw. Het scenario rekent
+ * daarom met de heffing van dat jaar, ongeacht de keuze tussen nu en toen: het
+ * nettarief van straks hoort bij de belasting van straks.
+ *
+ * De besparing groeit veel minder hard mee dan de heffing. Met de heffing van
+ * toen (ruim een derde hoger) spaart de standaardbatterij met zonnepanelen
+ * ongeveer 13% meer uit (`BESPARING_MET_HEFFING_TOEN`); zonder panelen zelfs
+ * iets minder, want dan betaalt ook het laden uit het net de hogere heffing.
  *
  * ── Waarom dit de businesscase omgooit ──────────────────────────────────────
  * Het winterpiektarief van ruim 19 cent komt bovenop de energieprijs, terwijl het
@@ -66,6 +71,8 @@
  */
 
 import type { LocalTimeIndex } from "./data/timeaxis";
+import type { PriceYearInfo } from "./data/manifest";
+import { getal, jarenReeks } from "./format";
 import type { Configuration } from "./worker/protocol";
 
 /** Bron van de bedragen, voor in de interface. */
@@ -237,6 +244,99 @@ const BTW = 1.21;
  * configuratie niet van het manifest afhangt.
  */
 export const OPSLAG_2026_INCL_BTW = 0.128848 - ENERGIEBELASTING_EXCL_BTW[2026] * BTW;
+
+/**
+ * Hoeveel meer de standaardbatterij (met zonnepanelen, de standaardinvoer)
+ * bespaart met de heffing van toen in plaats van die van nu: gemeten op de
+ * volle jaren 2024 en 2025, 104,81 tegen 118,78 euro per jaar (+13,3%).
+ * tests/voorbeeld.test.ts rekent het na; wijkt het af, dan klopt de tekst
+ * op de pagina niet meer.
+ */
+export const BESPARING_MET_HEFFING_TOEN = 0.13;
+
+/** De heffing van toen per jaar, uit de prijsdata: laagste en hoogste. */
+export interface HeffingToen {
+  jaren: number[];
+  laagste: number;
+  hoogste: number;
+  /** Het gemiddelde over de jaren, EUR/kWh. */
+  gemiddeld: number;
+}
+
+/**
+ * De heffing (energiebelasting plus opslag, incl. btw) zoals die in de
+ * gegeven jaren in de prijsdata zat. Jaren zonder prijsdata vallen weg; geen
+ * enkel jaar over geeft null.
+ */
+export function heffingToen(
+  prijzen: Record<string, Pick<PriceYearInfo, "jaarconstante_eur_per_kwh">>,
+  jaren: readonly number[],
+): HeffingToen | null {
+  const bekend = [...new Set(jaren)]
+    .sort((a, b) => a - b)
+    .filter((j) => prijzen[String(j)] !== undefined);
+  if (bekend.length === 0) return null;
+  const waarden = bekend.map((j) => prijzen[String(j)]!.jaarconstante_eur_per_kwh);
+  return {
+    jaren: bekend,
+    laagste: Math.min(...waarden),
+    hoogste: Math.max(...waarden),
+    gemiddeld: waarden.reduce((a, b) => a + b, 0) / waarden.length,
+  };
+}
+
+/**
+ * Een verhouding in woorden: 0,36 wordt "ruim een derde hoger", 0,24 "bijna
+ * een kwart hoger". Eerder stond er vast "een kwart tot een derde hoger",
+ * terwijl de data 33 tot 40% zei. Buiten het bereik van de breuken hieronder
+ * een percentage.
+ */
+export function hoeveelHoger(relatief: number): string {
+  const BREUKEN: [number, string][] = [
+    [1 / 10, "een tiende"],
+    [1 / 5, "een vijfde"],
+    [1 / 4, "een kwart"],
+    [1 / 3, "een derde"],
+    [1 / 2, "de helft"],
+    [2 / 3, "twee derde"],
+  ];
+  if (relatief < 0.05 || relatief > 0.8) {
+    const p = Math.round(Math.abs(relatief) * 100);
+    return relatief < 0 ? `${p}% lager` : `${p}% hoger`;
+  }
+  const [breuk, woord] = BREUKEN.reduce((b, x) =>
+    Math.abs(x[0] - relatief) < Math.abs(b[0] - relatief) ? x : b,
+  );
+  const verschil = relatief - breuk;
+  if (Math.abs(verschil) < 0.015) return `${woord} hoger`;
+  return `${verschil > 0 ? "ruim" : "bijna"} ${woord} hoger`;
+}
+
+/** "17,1 à 18 cent" of "17,4 cent": centen met hoogstens één decimaal. */
+function centen(h: HeffingToen): string {
+  const c = (v: number) => getal(v * 100, 1);
+  return Math.abs(h.hoogste - h.laagste) < 0.0005 ? `${c(h.laagste)} cent` : `${c(h.laagste)} à ${c(h.hoogste)} cent`;
+}
+
+/**
+ * De zin over de heffing van toen, uit de data: "In 2024 en 2025 lag de
+ * heffing ruim een derde hoger (17,1 à 18 cent tegen 12,9 cent nu)".
+ */
+export function heffingToenZin(h: HeffingToen, jarenTekst: string, nu: number = HEFFING_NU): string {
+  return `In ${jarenTekst} lag de heffing ${hoeveelHoger(h.gemiddeld / nu - 1)} (${centen(h)} tegen ${getal(nu * 100, 1)} cent nu)`;
+}
+
+/**
+ * De zin over de heffing van toen voor deze jaren, met de jaartallen erin; of
+ * null als er voor geen van de jaren prijsdata is.
+ */
+export function heffingToenTekst(
+  prijzen: Record<string, Pick<PriceYearInfo, "jaarconstante_eur_per_kwh">>,
+  jaren: readonly number[],
+): string | null {
+  const h = heffingToen(prijzen, jaren);
+  return h ? heffingToenZin(h, jarenReeks(h.jaren)) : null;
+}
 
 /** De heffing van nu (2026), energiebelasting plus opslag incl. btw: EUR 0,128848. */
 export const HEFFING_NU = ENERGIEBELASTING_EXCL_BTW[2026] * BTW + OPSLAG_2026_INCL_BTW;

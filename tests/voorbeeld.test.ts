@@ -17,12 +17,14 @@ import { readFileSync } from "node:fs";
 import { describe, expect, it } from "vitest";
 import { GET } from "../app/voorbeeld.json/route";
 import { MODEL_VERSIE, dispatchSleutel } from "../lib/cache";
-import { STANDAARD, standaardConfiguratie } from "../lib/configuratie";
+import { STANDAARD, maakConfiguratie, standaardConfiguratie } from "../lib/configuratie";
 import { RASTER_CAPACITEITEN, RASTER_VERMOGENS } from "../lib/model/raster";
 import { huishoudensVarianten, type HuishoudenPunt } from "../lib/model/huishoudens";
-import { referentieJaar, type AnalysisResult } from "../lib/model/analysis";
+import { referentieJaar, runAnalysis, type AnalysisResult } from "../lib/model/analysis";
 import { doelConfiguratie, type VergelijkingDeel } from "../lib/model/vergelijking";
-import { scenarioConfiguratie } from "../lib/nettarief";
+import { BESPARING_MET_HEFFING_TOEN, scenarioConfiguratie } from "../lib/nettarief";
+import { Invoerbron } from "../lib/data/invoer";
+import type { Ophaler } from "../lib/data/loader";
 
 interface Payload {
   versie: number;
@@ -162,4 +164,21 @@ describe("het vooruitgerekende antwoord", () => {
     const bytes = JSON.stringify(payload).length;
     expect(bytes).toBeLessThan(1_000_000);
   });
+});
+
+describe("de heffing van toen", () => {
+  it("levert de standaardbatterij de meerwaarde op die de pagina noemt", async () => {
+    /**
+     * Methode en de geavanceerde instellingen zeggen dat de besparing met de
+     * heffing van toen "ongeveer 13%" hoger uitvalt. Dat is een gemeten getal
+     * (BESPARING_MET_HEFFING_TOEN); verandert het model of de data, dan hoort
+     * deze test dat te zien.
+     */
+    const vanSchijf: Ophaler = async (url) => new Response(new Uint8Array(readFileSync(`public${url}`)));
+    const bron = new Invoerbron("/data", vanSchijf);
+    await bron.init();
+    const toen = runAnalysis(await bron.bouwInvoer(maakConfiguratie({ ...STANDAARD, heffing: "toen" })));
+    const meer = toen.averageSavingEur / payload.result.averageSavingEur - 1;
+    expect(Math.abs(meer - BESPARING_MET_HEFFING_TOEN)).toBeLessThan(0.01);
+  }, 180000);
 });

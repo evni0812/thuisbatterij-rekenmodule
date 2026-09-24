@@ -231,6 +231,12 @@ describe("de teksten beweren niets wat niet klopt", () => {
     ["stopcontactverbod", /aan een gewoon stopcontact mag maar 800 W/],
     ["alle omvormers regelen af", /Moderne omvormers stoppen met terugleveren/],
     ["nettarief als feit", /gooit de businesscase om/],
+    // Eindtoets september 2026: de heffing van toen lag 33 tot 40% hoger, niet
+    // "een kwart tot een derde", en de besparing groeit maar 13% mee.
+    ["heffing als vaste zin", /kwart tot\s+een derde hoger/],
+    ["besparing één-op-één met de heffing", /één-op-één/],
+    ["heffing van toen als 13 tot 17 cent", /13 tot 17 cent/],
+    ["bedrag tegen een getal geplakt", /tegen\s*\n\s*\{centPerKwh/],
   ])("niet: %s", (_naam, patroon) => {
     expect(tekst).not.toMatch(patroon);
   });

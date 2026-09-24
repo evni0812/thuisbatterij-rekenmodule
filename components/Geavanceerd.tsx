@@ -19,6 +19,7 @@ import { PRIJSPEILDATUM, type BatteryPreset } from "../lib/presets";
 import { wearCostPerKwh } from "../lib/model/battery";
 import { STANDAARD } from "../lib/configuratie";
 import { STRATEGIEEN, strategieVoor } from "../lib/strategie";
+import { BESPARING_MET_HEFFING_TOEN, heffingToenTekst } from "../lib/nettarief";
 import type { Instellingen } from "../lib/url-state";
 import { GRENZEN, MAG_LEEG, klem, type GetalVeld } from "../lib/normaliseer";
 import { GetalInvoer } from "./GetalInvoer";
@@ -40,6 +41,18 @@ function actueleHeffingUit(manifest: Manifest | null): number | null {
   if (!manifest) return null;
   const laatste = Object.keys(manifest.prijzen).sort().at(-1);
   return laatste ? manifest.prijzen[laatste]!.jaarconstante_eur_per_kwh : null;
+}
+
+/**
+ * De zin over de heffing van toen, uit de prijsdata van de volle profieljaren
+ * van dit netgebied: de jaren waarop het antwoord rust.
+ */
+function heffingToenUit(manifest: Manifest | null, domein: string): string | null {
+  if (!manifest) return null;
+  const jaren = Object.entries(manifest.profielen[domein] ?? {})
+    .filter(([, p]) => p.volledig_jaar)
+    .map(([j]) => Number(j));
+  return heffingToenTekst(manifest.prijzen, jaren);
 }
 
 function id(label: string): string {
@@ -506,9 +519,16 @@ export function Geavanceerd({
                   Standaard rekent de tool de uurprijzen van toen met de
                   energiebelasting en opslag van nu: dat past bij een batterij die
                   je vandaag koopt. Kies "van toen" om per uur de heffing te
-                  gebruiken die toen gold. In 2024 en 2025 lag die een kwart tot
-                  een derde hoger dan nu, en de besparing schaalt daar bijna
-                  één-op-één mee.
+                  gebruiken die toen gold.
+                  {heffingToenUit(manifest, inst.domein) ? (
+                    <>
+                      {" "}
+                      {heffingToenUit(manifest, inst.domein)}. De besparing
+                      groeit veel minder hard mee: voor de standaardbatterij met
+                      zonnepanelen valt hij ongeveer{" "}
+                      {procent(BESPARING_MET_HEFFING_TOEN)} hoger uit.
+                    </>
+                  ) : null}
                 </p>
               </div>
 

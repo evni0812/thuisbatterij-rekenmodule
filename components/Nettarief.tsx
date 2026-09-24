@@ -177,10 +177,10 @@ export function Nettarief({
         <p>
           De tool rekent met {NETTARIEF_JAAR}, de beoogde invoeringsdatum. De
           energiebelasting van dat jaar hoort erbij en gaat mee:{" "}
-          {centPerKwh(scenarioHeffing(NETTARIEF_JAAR))} inclusief opslag, tegen
-          {centPerKwh(HEFFING_NU)} nu. Anders zou een nettarief van straks op een belasting van
-          toen worden gestapeld, en de besparing schaalt daar bijna
-          één-op-één mee.
+          {centPerKwh(scenarioHeffing(NETTARIEF_JAAR))} inclusief opslag, tegen{" "}
+          {centPerKwh(HEFFING_NU)} nu. Zo rekent het scenario met de belasting
+          die geldt als het tarief ingaat, niet met die van nu of van de jaren
+          waar de uurprijzen vandaan komen.
         </p>
         <p>
           Het basistarief staat er niet in. Wat hier staat is {NETTARIEF_BRON}:

@@ -37,7 +37,7 @@ import { Verantwoording } from "../components/Verantwoording";
 import { Verloop } from "../components/Verloop";
 import { Verliezen } from "../components/Verliezen";
 import { Verschuiving } from "../components/Verschuiving";
-import { datum, euro, jarenReeks, periode } from "../lib/format";
+import { datum, euro, jarenReeks, periode, procent } from "../lib/format";
 import { leesLaatste, leesProfielen, type Profiel } from "../lib/opslag";
 import { PRESETS, PRIJSPEILDATUM, geschatteOpwekKwh } from "../lib/presets";
 import { STANDAARD, kiesPreset, maakConfiguratie } from "../lib/configuratie";
@@ -48,6 +48,7 @@ import { rasterNiveau } from "../lib/model/dimensionering";
 import { wearCostPerKwh } from "../lib/model/battery";
 import { UITLEG, type UitlegContext } from "../lib/uitleg";
 import { overgangsFinance } from "../lib/overgang";
+import { BESPARING_MET_HEFFING_TOEN, heffingToenTekst } from "../lib/nettarief";
 import { useAnalysis } from "../lib/useAnalysis";
 import { leesUrl, schrijfUrl, type Instellingen } from "../lib/url-state";
 import { VELDNAAM } from "../lib/normaliseer";
@@ -237,6 +238,18 @@ export default function Page() {
         : `in ${periodeLabel}`;
   // Rekende het getoonde resultaat met het profiel zonder zonnepanelen?
   const toonZonnepanelen = toon ? toon.afnametype !== "AZI" : inst.zonnepanelen;
+  // De heffing van toen, uit de prijsdata van de jaren waarop het antwoord
+  // rust; zonder antwoord de volle profieljaren van het netgebied.
+  const heffingZin = manifest
+    ? heffingToenTekst(
+        manifest.prijzen,
+        volledigeJaren.length > 0
+          ? volledigeJaren.map((j) => j.year)
+          : Object.entries(manifest.profielen[inst.domein] ?? {})
+              .filter(([, p]) => p.volledig_jaar)
+              .map(([j]) => Number(j)),
+      )
+    : null;
   const datadekking = manifest
     ? (() => {
         const jaren = Object.values(manifest.profielen[inst.domein] ?? {});
@@ -773,11 +786,18 @@ export default function Page() {
               <li>
                 <b>De belasting van nu.</b> De uurprijzen zijn van toen, de
                 energiebelasting en opslag van nu. Zo past de uitkomst bij een
-                batterij die je vandaag koopt. In 2024 en 2025 lag de heffing een
-                kwart tot een derde hoger; met die heffing valt de besparing van
-                de standaardbatterij ongeveer 13% hoger uit. Bij de geavanceerde
-                instellingen kies je "van toen"; het nettariefscenario rekent met
-                de belasting van 2029.
+                batterij die je vandaag koopt.
+                {heffingZin ? (
+                  <>
+                    {" "}
+                    {heffingZin}. Met die heffing valt de besparing een stuk
+                    minder hoger uit dan de heffing zelf: voor de
+                    standaardbatterij met zonnepanelen ongeveer{" "}
+                    {procent(BESPARING_MET_HEFFING_TOEN)}.
+                  </>
+                ) : null}{" "}
+                Bij de geavanceerde instellingen kies je "van toen"; het
+                nettariefscenario rekent met de belasting van 2029.
                 <span className="badge let-op">kan veranderen</span>
               </li>
               <li>

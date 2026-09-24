@@ -17,6 +17,8 @@ import {
   nettariefPerStap,
   piekurenVoorMaand,
   profielVoorMaand,
+  heffingToenTekst,
+  hoeveelHoger,
   scenarioConfiguratie,
   scenarioHeffing,
 } from "../lib/nettarief";
@@ -246,5 +248,26 @@ describe("de reeks volgt de lokale klok", () => {
     // 30 september is nog zomer: middag gratis. 1 oktober is winter: factor 0,5.
     expect(middagIn("2025-09-30")).toBe(0);
     expect(middagIn("2025-10-01")).toBeCloseTo(0.5 * BASISTARIEF[2029], 9);
+  });
+});
+
+describe("de heffing van toen, in woorden", () => {
+  it("komt uit de prijsdata, niet uit een vaste zin", () => {
+    /**
+     * Er stond "een kwart tot een derde hoger", terwijl de data 18,0 en 17,1
+     * cent zei tegen 12,9 nu: 40 en 33% hoger. De zin volgt nu de data.
+     */
+    const manifest = JSON.parse(readFileSync("public/data/manifest.json", "utf8")) as Manifest;
+    expect(heffingToenTekst(manifest.prijzen, [2024, 2025])).toMatch(
+      /^In 2024 en 2025 lag de heffing ruim een derde hoger \(17,1 à 18 cent tegen 12,9 cent nu\)$/,
+    );
+    expect(heffingToenTekst(manifest.prijzen, [1999])).toBeNull();
+  });
+
+  it("kiest de dichtstbijzijnde breuk, met ruim of bijna", () => {
+    expect(hoeveelHoger(0.25)).toBe("een kwart hoger");
+    expect(hoeveelHoger(0.36)).toBe("ruim een derde hoger");
+    expect(hoeveelHoger(0.23)).toBe("bijna een kwart hoger");
+    expect(hoeveelHoger(0.02)).toBe("2% hoger");
   });
 });
