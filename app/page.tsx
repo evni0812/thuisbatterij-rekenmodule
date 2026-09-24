@@ -551,6 +551,7 @@ export default function Page() {
                 week={week}
                 weekBezig={weekBezig}
                 onVraagWeek={vraagWeek}
+                zonnepanelen={toonZonnepanelen}
                 actie={uitleg("dagprofiel")}
               />
             </>

@@ -325,6 +325,7 @@ export function Dagprofiel({
   week,
   weekBezig = false,
   onVraagWeek,
+  zonnepanelen = true,
   actie,
 }: {
   voorbeelden: SampleDay[];
@@ -340,6 +341,8 @@ export function Dagprofiel({
   week?: PeriodeReeks | null;
   weekBezig?: boolean;
   onVraagWeek?: (van: string, tot: string) => void;
+  /** Zonder zonnepanelen valt de tegel "zon naar de meter" weg. */
+  zonnepanelen?: boolean;
   /** De knop "Hoe is dit berekend?" in de kop. */
   actie?: ReactNode;
 }) {
@@ -623,7 +626,7 @@ export function Dagprofiel({
         </p>
       ) : null}
 
-      {toontWeek ? <WeekCijfers reeks={week!} /> : <DagCijfers dag={losDag!} />}
+      {toontWeek ? <WeekCijfers reeks={week!} /> : <DagCijfers dag={losDag!} zonnepanelen={zonnepanelen} />}
 
       <Grafiek
         kader={kader}
@@ -1207,7 +1210,7 @@ function WeekCijfers({ reeks }: { reeks: PeriodeReeks }) {
   );
 }
 
-function DagCijfers({ dag }: { dag: SampleDay }) {
+function DagCijfers({ dag, zonnepanelen = true }: { dag: SampleDay; zonnepanelen?: boolean }) {
   const s = dag.stats;
   const minderAfname = s.gridImportBaselineKwh - s.gridImportBatteryKwh;
   const minderTeruglevering = s.gridExportBaselineKwh - s.gridExportBatteryKwh;
@@ -1279,7 +1282,7 @@ function DagCijfers({ dag }: { dag: SampleDay }) {
         </span>
       </div>
 
-      {s.meterExportKwh !== null ? (
+      {zonnepanelen && s.meterExportKwh !== null ? (
         <div className="dagcijfer">
           <span className="dagcijfer-waarde">
             {getal(s.meterExportKwh, 1)} kWh
@@ -1300,12 +1303,20 @@ function DagCijfers({ dag }: { dag: SampleDay }) {
         </span>
       </div>
 
+      {/* Op het teken: een dag waarop de batterij van het net laadt, neemt
+          méér af. Er stond "-0,3 kWh minder van het net". */}
       <div className="dagcijfer">
-        <span className="dagcijfer-waarde">{getal(minderAfname, 1)} kWh</span>
-        <span className="dagcijfer-label">minder van het net</span>
+        <span className="dagcijfer-waarde">{getal(Math.abs(minderAfname), 1)} kWh</span>
+        <span className="dagcijfer-label">
+          {minderAfname < -0.05 ? "meer van het net" : "minder van het net"}
+        </span>
         <span className="dagcijfer-noot">
-          {getal(s.gridImportBaselineKwh, 1)} → {getal(s.gridImportBatteryKwh, 1)} kWh,
-          en {getal(minderTeruglevering, 1)} kWh minder teruggeleverd
+          {getal(s.gridImportBaselineKwh, 1)} → {getal(s.gridImportBatteryKwh, 1)} kWh
+          {Math.abs(minderTeruglevering) < 0.05
+            ? ""
+            : minderTeruglevering > 0
+              ? `, en ${getal(minderTeruglevering, 1)} kWh minder teruggeleverd`
+              : `, en ${getal(-minderTeruglevering, 1)} kWh meer teruggeleverd`}
         </span>
       </div>
 
