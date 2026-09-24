@@ -5,7 +5,7 @@
  * geen scheef getal maar een lege pagina.
  */
 import { describe, expect, it } from "vitest";
-import { euro, euroAs, getal } from "../lib/format";
+import { euro, euroAs, euroPrecies, getal } from "../lib/format";
 
 describe("getal", () => {
   it("houdt een ongeldig aantal decimalen binnen het bereik van Intl", () => {
@@ -35,5 +35,22 @@ describe("euroAs", () => {
     expect(euroAs(0)).not.toMatch(/,\d\d$/);
     expect(euro(0)).toMatch(/,\d\d$/);
     expect(euroAs(-2400)).not.toMatch(/,\d\d$/);
+  });
+});
+
+describe("negatieve bedragen", () => {
+  it("krijgen een echt minteken vóór het euroteken", () => {
+    // Intl geeft voor nl-NL "€ -476"; op de kaart van maten las dat als een
+    // streepje. De gangbare vorm is "−€ 476", met U+2212.
+    expect(euro(-476)).toBe("−€ 476");
+    expect(euroAs(-2400)).toBe("−€ 2.400");
+    expect(euroPrecies(-2.68)).toBe("−€ 2,68");
+    expect(euro(-3.5)).toBe("−€ 3,50");
+    expect(euro(476)).toBe("€ 476");
+  });
+
+  it("zetten geen teken voor een bedrag dat op nul afrondt", () => {
+    expect(euro(-0.001)).toBe("€ 0,00");
+    expect(euroAs(-0.4)).toBe("€ 0");
   });
 });

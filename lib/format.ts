@@ -28,9 +28,21 @@ const getal1 = new Intl.NumberFormat("nl-NL", { maximumFractionDigits: 1 });
  */
 const getalCache = new Map<number, Intl.NumberFormat>();
 
+/**
+ * Een bedrag met het teken vóór het euroteken, en dan een echt minteken:
+ * "−€ 476", niet "€ -476". Intl zet voor nl-NL een koppelteken tussen € en
+ * het getal; dat leest als een streepje, niet als een tekort, en het staat op
+ * een andere plek dan in elke krant. Wat na afronden nul is, krijgt geen teken:
+ * "−€ 0,00" zegt niets.
+ */
+function metMinteken(f: Intl.NumberFormat, value: number): string {
+  const kaal = f.format(Math.abs(value));
+  return value < 0 && kaal !== f.format(0) ? `\u2212${kaal}` : kaal;
+}
+
 /** Bedragen boven een tientje zonder centen; daaronder mét, want dan tellen ze. */
 export function euro(value: number): string {
-  return Math.abs(value) >= 10 ? euro0.format(value) : euro2.format(value);
+  return metMinteken(Math.abs(value) >= 10 ? euro0 : euro2, value);
 }
 
 /**
@@ -42,11 +54,11 @@ export function euro(value: number): string {
  * staan. Een tick is een schaalpunt, geen bedrag dat je overmaakt.
  */
 export function euroAs(value: number): string {
-  return euro0.format(value);
+  return metMinteken(euro0, value);
 }
 
 export function euroPrecies(value: number): string {
-  return euro2.format(value);
+  return metMinteken(euro2, value);
 }
 
 /**
