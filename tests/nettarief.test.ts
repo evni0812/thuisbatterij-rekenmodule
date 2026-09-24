@@ -9,7 +9,9 @@
 import { describe, expect, it } from "vitest";
 import {
   BASISTARIEF,
+  ENERGIEBELASTING_EXCL_BTW,
   NETTARIEF_FACTOREN,
+  OPSLAG_2026_INCL_BTW,
   factorVoorMaand,
   gemiddeldNettarief,
   nettariefPerStap,
@@ -20,6 +22,8 @@ import {
 } from "../lib/nettarief";
 import { standaardConfiguratie } from "../lib/configuratie";
 import { buildQuarterAxis, LocalTimeIndex } from "../lib/data/timeaxis";
+import { readFileSync } from "node:fs";
+import type { Manifest } from "../lib/data/manifest";
 
 /**
  * Figuur 4 letterlijk overgetypt uit het CE Delft-rapport, 00:00 tot 23:00.
@@ -88,6 +92,31 @@ describe("het scenario", () => {
     expect(scenarioHeffing(2029)).toBeGreaterThan(0.075 * 1.21);
     expect(scenarioHeffing(2029)).toBeLessThan(0.128848);
     expect(scenarioHeffing(2030)).toBeGreaterThan(scenarioHeffing(2029));
+  });
+
+  it("rekent met de energiebelasting uit de tarieventabel", () => {
+    // Belastingdienst, ML 040 (aangifte energiebelasting), eerste schijf,
+    // exclusief btw.
+    expect(ENERGIEBELASTING_EXCL_BTW[2023]).toBe(0.12599);
+    expect(ENERGIEBELASTING_EXCL_BTW[2024]).toBe(0.1088);
+    expect(ENERGIEBELASTING_EXCL_BTW[2025]).toBe(0.10154);
+    expect(ENERGIEBELASTING_EXCL_BTW[2026]).toBe(0.09161);
+    // Heffing 2026 in de data (12,885 ct) min 0,09161 × 1,21: 1,80 ct opslag.
+    expect(OPSLAG_2026_INCL_BTW).toBeCloseTo(0.018, 5);
+    expect(scenarioHeffing(2029)).toBeCloseTo(0.075 * 1.21 + 0.018, 5);
+  });
+
+  it("past bij de heffing in de prijsdata van elk volledig jaar", () => {
+    // allInPrijs − marktprijs is belasting maal btw plus de inkoopopslag van
+    // de leverancier; die opslag ligt tussen 0 en 5 cent. Een verkeerd
+    // belastingtarief valt daar buiten.
+    const m = JSON.parse(readFileSync("public/data/manifest.json", "utf8")) as Manifest;
+    for (const jaar of [2023, 2024, 2025] as const) {
+      const heffing = m.prijzen[String(jaar)]!.jaarconstante_eur_per_kwh;
+      const opslag = heffing - ENERGIEBELASTING_EXCL_BTW[jaar] * 1.21;
+      expect(opslag, String(jaar)).toBeGreaterThan(0);
+      expect(opslag, String(jaar)).toBeLessThan(0.05);
+    }
   });
 
   it("leidt overal dezelfde configuratie af", () => {

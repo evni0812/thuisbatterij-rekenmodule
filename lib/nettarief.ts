@@ -205,10 +205,23 @@ export function gemiddeldNettarief(jaar: NettariefJaar = NETTARIEF_JAAR): number
 
 /**
  * Energiebelasting op elektriciteit, eerste schijf, EUR/kWh EXCLUSIEF btw.
- * 2026 uit de tarieventabel; 2029 en 2030 volgens CE Delft (Tabel 2).
+ *
+ * 2023 tot en met 2026 uit de tarieventabel van de Belastingdienst (ML 040,
+ * aangifte energiebelasting); 2027 gelijk aan 2026 zolang er geen nieuw
+ * tarief is gepubliceerd; 2029 en 2030 volgens CE Delft (Tabel 2).
+ *
+ * 2026 stond hier eerst op 0,089: dat is geen tarief uit de tabel, en het
+ * trok de afgeleide inkoopopslag op tot 2,1 cent in plaats van 1,8. Alleen
+ * 2026, 2029 en 2030 worden gebruikt; de oudere jaren staan erbij ter controle
+ * van de heffing in de prijsdata (allInPrijs − marktprijs = belasting maal btw
+ * plus opslag), zie tests/nettarief.test.ts.
  */
-const ENERGIEBELASTING_EXCL_BTW: Record<2026 | NettariefJaar, number> = {
-  2026: 0.089,
+export const ENERGIEBELASTING_EXCL_BTW: Record<2023 | 2024 | 2025 | 2026 | 2027 | NettariefJaar, number> = {
+  2023: 0.12599,
+  2024: 0.1088,
+  2025: 0.10154,
+  2026: 0.09161,
+  2027: 0.09161,
   2029: 0.075,
   2030: 0.076,
 };
@@ -217,15 +230,16 @@ const BTW = 1.21;
 
 /**
  * De inkoopopslag inclusief btw, zoals die in de data van 2026 zit: de
- * jaarconstante van de heffing (allInPrijs minus marktprijs, EUR 0,1288) minus
- * de energiebelasting van 2026 inclusief btw. Ongeveer 2,1 cent; als vaste
- * aanname in het scenario, zodat de configuratie niet van het manifest afhangt.
+ * jaarconstante van de heffing (allInPrijs minus marktprijs, EUR 0,128848)
+ * minus de energiebelasting van 2026 inclusief btw (0,09161 × 1,21 =
+ * 0,110848). Dat is 1,80 cent; als vaste aanname in het scenario, zodat de
+ * configuratie niet van het manifest afhangt.
  */
-const OPSLAG_2026_INCL_BTW = 0.128848 - ENERGIEBELASTING_EXCL_BTW[2026] * BTW;
+export const OPSLAG_2026_INCL_BTW = 0.128848 - ENERGIEBELASTING_EXCL_BTW[2026] * BTW;
 
 /**
  * De heffing (energiebelasting plus inkoopopslag, incl. btw) waarmee het
- * scenario rekent, EUR/kWh. Ongeveer 11,2 cent in 2029 tegen 12,9 in 2026.
+ * scenario rekent, EUR/kWh. Ongeveer 10,9 cent in 2029 tegen 12,9 in 2026.
  */
 export function scenarioHeffing(jaar: NettariefJaar): number {
   return ENERGIEBELASTING_EXCL_BTW[jaar] * BTW + OPSLAG_2026_INCL_BTW;
