@@ -200,8 +200,9 @@ const GEMIDDELD_LETOP = (
 const GEEN_VOORSPELLING_LETOP = (
   <>
     Dit is geen voorspelling. De vraag is wat de batterij had opgeleverd op de
-    prijzen en profielen zoals ze werkelijk waren, zonder saldering. Wat prijzen
-    en belastingen de komende jaren doen, is onzeker.
+    prijzen zoals ze werkelijk waren en het gemeten gemiddelde verbruikspatroon,
+    zonder saldering. Wat prijzen en belastingen de komende jaren doen, is
+    onzeker.
   </>
 );
 const STANDBY_LETOP = (

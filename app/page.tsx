@@ -704,7 +704,8 @@ export default function Page() {
             <span className="eyebrow">Methode · {TABS[5].vraag}</span>
             <h2>Waar de cijfers vandaan komen, en wat we eerlijk moeten zeggen</h2>
             <p>
-              Geen voorspelling maar een doorrekening op wat er echt gebeurd is.
+              Geen voorspelling maar een doorrekening op de prijzen zoals ze
+              werkelijk waren en het gemeten gemiddelde verbruikspatroon.
               Hieronder de data, de grenzen van het model, en de aannames die nog
               kunnen bewegen.
             </p>

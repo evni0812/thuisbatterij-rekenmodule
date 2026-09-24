@@ -247,6 +247,9 @@ describe("de teksten beweren niets wat niet klopt", () => {
     ["één jaar dat zich herhaalt", /\{jaar(\.year)?\}\s+zich herhaalt|\$\{jaar(\.year)?[^}]*\} zich herhaalt/],
     ["de besparing van één jaar herhaald", /de besparing van \{jaar/],
     ["kaart op één jaar als reden", /De kaart rust op één jaar/],
+    // Het profiel is een gemeten gemiddelde, geen werkelijk huishouden.
+    ["profielen zoals ze werkelijk waren", /profielen zoals ze werkelijk waren/],
+    ["wat er echt gebeurd is", /wat er echt gebeurd is/],
   ])("niet: %s", (_naam, patroon) => {
     expect(tekst).not.toMatch(patroon);
   });
