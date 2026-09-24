@@ -80,8 +80,15 @@ export function stuurVenster(window: Window): { venster: Window; alleenEigen: bo
     if (!Number.isNaN(g)) laatste = g;
     // g/kWh → "euro" per kWh: 200 g wordt 0,20, zodat 1 ct ≙ 10 g.
     importPrice[i] = (Number.isNaN(laatste) ? 0 : laatste) / (100 * GRAM_PER_CENT);
-    // Teruglevering levert geen CO2-winst op voor het huishouden; een
-    // negatieve prijs blijft wel negatief, zodat afregelen blijft werken.
+    // Teruglevering levert geen CO2-winst op voor het huishouden, dus nul.
+    // Een negatieve prijs blijft wel negatief, en dan in euro's: die zijn in
+    // dezelfde eenheid als de emissie-"prijs", want de wisselkoers 1 ct ≙ 10 g
+    // geldt voor alles wat de planner weegt, net als voor de slijtagedrempel
+    // (ook in euro's). Twee redenen om hem niet op nul te zetten: de
+    // uitvoerder regelt af op het teken van déze prijs (executePath krijgt het
+    // stuurvenster), en zonder afregelen kost terugleveren bij een negatieve
+    // prijs echt geld, dat de planner met de wisselkoers mag afwegen tegen
+    // uitgespaarde uitstoot.
     const ep = window.prices.exportPrice[i]!;
     exportPrice[i] = ep < 0 ? ep : 0;
   }

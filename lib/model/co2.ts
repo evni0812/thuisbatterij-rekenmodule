@@ -61,7 +61,13 @@ export interface Co2Jaar {
   /** Teruglevering zonder en met batterij, kWh. */
   exportBasisKwh: number;
   exportBatKwh: number;
-  /** Ongewogen gemiddelde emissiefactor over alle kwartieren, g/kWh. */
+  /**
+   * Ongewogen gemiddelde emissiefactor over alle kwartieren, g/kWh: hoe schoon
+   * de mix gemiddeld was, niet hoe schoon jouw afname was. Die tweede, naar
+   * afname gewogen, is `huishoudPerspectief(c).factorZonderG` (en
+   * `factorMetG` met batterij); bij een huishouden met zonnepanelen ligt hij
+   * hoger, want de afname valt vooral op de avond en in de winter.
+   */
   gemiddeldeFactorG: number;
   /** Per klasse emissiefactor: afname en teruglevering in kWh, en de uitstoot die de teruglevering elders zou vermijden in kg. */
   klassen: {
@@ -320,3 +326,22 @@ export function nederlandPerspectief(c: Co2Jaar, drempelG: number): Nederland {
 
 /** Standaarddrempel: onder dit niveau is de mix vrijwel zonder fossiel en verdringt extra zon niets meer. */
 export const STANDAARD_CO2_DREMPEL_G = 100;
+
+/** Hoogste drempel die de schuif toelaat, g/kWh. */
+export const CO2_DREMPEL_MAX_G = 400;
+
+/**
+ * Een drempel zoals `nederlandPerspectief` hem werkelijk gebruikt: een
+ * veelvoud van de klassebreedte (20 g/kWh), tussen 0 en 400. Het perspectief
+ * telt een klasse als nuttig als haar ondergrens op of boven de drempel ligt,
+ * en rondt een drempel binnen een klasse dus in feite naar boven af op de
+ * volgende klassegrens: 110 rekent als 120. Deze functie rondt op dezelfde
+ * manier af, zodat wat er staat ook is wat er gerekend wordt; zonder zou een
+ * URL met `co2d=110` "110" tonen en met 120 rekenen. Onleesbare invoer wordt
+ * de standaard.
+ */
+export function normaliseerCo2Drempel(g: number): number {
+  if (!Number.isFinite(g)) return STANDAARD_CO2_DREMPEL_G;
+  const afgerond = Math.ceil(g / CO2_KLASSE_G - 1e-9) * CO2_KLASSE_G;
+  return Math.max(0, Math.min(CO2_DREMPEL_MAX_G, afgerond));
+}

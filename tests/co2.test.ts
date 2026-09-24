@@ -13,11 +13,13 @@ import type { Ophaler } from "../lib/data/loader";
 import { runAnalysis } from "../lib/model/analysis";
 import {
   CO2_KLASSE_G,
+  STANDAARD_CO2_DREMPEL_G,
   co2Jaar,
   gemiddeldCo2,
   huishoudPerspectief,
   klasseVan,
   nederlandPerspectief,
+  normaliseerCo2Drempel,
 } from "../lib/model/co2";
 import type { DispatchResult, Window } from "../lib/model/types";
 
@@ -107,6 +109,31 @@ describe("de balans van één venster", () => {
     expect(g.perMaand).toEqual(c.perMaand);
     expect(gemiddeldCo2([])).toBeNull();
     expect(CO2_KLASSE_G).toBe(20);
+  });
+});
+
+describe("de drempel", () => {
+  it("is een veelvoud van de klassebreedte tussen 0 en 400", () => {
+    expect(normaliseerCo2Drempel(100)).toBe(100);
+    expect(normaliseerCo2Drempel(110)).toBe(120);
+    expect(normaliseerCo2Drempel(101)).toBe(120);
+    expect(normaliseerCo2Drempel(80.5)).toBe(100);
+    expect(normaliseerCo2Drempel(-30)).toBe(0);
+    expect(normaliseerCo2Drempel(1000)).toBe(400);
+    expect(normaliseerCo2Drempel(Number.NaN)).toBe(STANDAARD_CO2_DREMPEL_G);
+    for (let g = 0; g <= 400; g += 7) expect(normaliseerCo2Drempel(g) % CO2_KLASSE_G).toBe(0);
+  });
+
+  it("geeft na normaliseren hetzelfde perspectief als de ruwe drempel", () => {
+    // Het perspectief rondt binnen een klasse toch al af; de normalisatie maakt
+    // alleen zichtbaar wat er gerekend wordt.
+    const w = venster([90, 110, 130, 250], [-1, -1, -1, -1]);
+    const c = co2Jaar(w, dispatch([0, 0, 0, 0], [1, 1, 1, 1]), dispatch([0, 0, 0, 0], [0.5, 0.5, 0.5, 0.5]));
+    for (const g of [0, 5, 95, 100, 101, 119, 120, 133, 260, 399, 400]) {
+      expect(nederlandPerspectief(c, normaliseerCo2Drempel(g)).vermedenZonderKg).toBe(
+        nederlandPerspectief(c, g).vermedenZonderKg,
+      );
+    }
   });
 });
 
