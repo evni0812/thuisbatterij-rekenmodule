@@ -259,6 +259,11 @@ export type WorkerRequest =
       config: Configuration;
       uitkomsten: VensterUitkomst[];
       metingen: CurveMeting[];
+      /**
+       * Snijd ook deze dag (JJJJ-MM-DD) uit de dispatch, voor de vergelijking
+       * van de doelen (lib/model/vergelijking.ts). Zonder dit geen dag.
+       */
+      dag?: string;
     }
   | {
       /**
@@ -296,7 +301,13 @@ export type WorkerResponse =
       done: boolean;
     }
   | { type: "day"; id: number; day: SampleDay | null; date: string }
-  | { type: "scenario"; id: number; result: ScenarioResult }
+  | {
+      type: "scenario";
+      id: number;
+      result: ScenarioResult;
+      /** Alleen als erom gevraagd werd: de dag uit deze dispatch, of null als hij er niet in zit. */
+      dag?: SampleDay | null;
+    }
   | { type: "periode"; id: number; kanaal: PeriodeKanaal; periode: PeriodeReeks }
   | { type: "venster-uitkomst"; id: number; groep: number; jaarIndex: number; uitkomst: VensterUitkomst }
   | { type: "quick"; id: number; groep: number; meting: CurveMeting }

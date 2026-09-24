@@ -38,6 +38,14 @@ import {
 import { huishoudenPunt, huishoudensVarianten, type HuishoudenPunt } from "../../lib/model/huishoudens";
 import type { GridPoint } from "../../lib/worker/protocol";
 import { scenarioConfiguratie } from "../../lib/nettarief";
+import {
+  VERGELIJK_DOELEN,
+  doelConfiguratie,
+  rekenDeel,
+  vergelijkDatum,
+  type VergelijkingDeel,
+} from "../../lib/model/vergelijking";
+import { STANDAARD_DOEL } from "../../lib/model/doel";
 
 export const dynamic = "force-static";
 
@@ -106,6 +114,27 @@ export async function GET(): Promise<Response> {
     for (const v of huishoudensVarianten()) huishoudens.push(await huishoudenPunt(bron, config, v));
   }
 
+  // De vergelijking van de doelen (tabblad "Wat als"): de twee doelen die niet
+  // gekozen zijn, op de tarieven van nu (met de voorbeelddag) en met het
+  // nettarief. Het gekozen doel ís het antwoord en het scenario hierboven.
+  // Vier doorrekeningen zonder optimum, ruim tien seconden; zonder dit rekent
+  // elke bezoeker ze zelf zodra hij het tabblad opent.
+  let vergelijking: { sleutel: string; deel: VergelijkingDeel }[] | undefined;
+  if (process.env.VOORBEELD_ZONDER_RASTER !== "1") {
+    vergelijking = [];
+    const datum = vergelijkDatum(result);
+    for (const doel of VERGELIJK_DOELEN) {
+      if (doel === (config.doel ?? STANDAARD_DOEL)) continue;
+      const nu = doelConfiguratie(config, doel);
+      const nettarief = scenarioConfiguratie(nu);
+      vergelijking.push({ sleutel: dispatchSleutel(nu), deel: rekenDeel(await bron.bouwInvoer(nu), datum) });
+      vergelijking.push({
+        sleutel: dispatchSleutel(nettarief),
+        deel: rekenDeel(await bron.bouwInvoer(nettarief), null),
+      });
+    }
+  }
+
   return Response.json({
     versie: MODEL_VERSIE,
     sleutel: dispatchSleutel(config, manifest.gegenereerd),
@@ -114,5 +143,6 @@ export async function GET(): Promise<Response> {
     scenario,
     grid,
     huishoudens,
+    vergelijking,
   });
 }

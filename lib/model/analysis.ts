@@ -1550,7 +1550,7 @@ export function afleidingVanConfiguratie(config: Configuration): Afleiding {
   };
 }
 
-function financeVoor(curve: SavingCurvePoint[], a: Afleiding): FinanceResult {
+export function financeVoor(curve: SavingCurvePoint[], a: Afleiding): FinanceResult {
   return computeFinance({
     curve,
     investmentEur: a.investmentEur,
@@ -1568,7 +1568,7 @@ function financeVoor(curve: SavingCurvePoint[], a: Afleiding): FinanceResult {
  * Wat je direct zelf gebruikt van je eigen opwek, zonder batterij, is alles
  * wat niet is teruggeleverd; daaruit volgt het bruto verbruik.
  */
-function metZelfvoorziening(stats: KeyStats, opwek: number | undefined): KeyStats {
+export function metZelfvoorziening(stats: KeyStats, opwek: number | undefined): KeyStats {
   const impBasis = stats.gridImportBaselineKwh;
   const impBat = stats.gridImportBatteryKwh;
   const expBasis = stats.gridExportBaselineKwh;

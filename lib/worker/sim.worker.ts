@@ -31,6 +31,7 @@ import {
   type VensterUitkomst,
 } from "../model/analysis";
 import { dispatchSleutel } from "../cache";
+import { dagUitVensters } from "../model/vergelijking";
 import type { BatterySpec, DispatchResult } from "../model/types";
 import type {
   Configuration,
@@ -523,7 +524,13 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
     if (msg.type === "voegSamenScenario") {
       await pooltaak(msg.id, async () => {
         const invoer = await buildInput(msg.config);
-        post({ type: "scenario", id: msg.id, result: voegSamenScenario(invoer, msg.uitkomsten, msg.metingen) });
+        const result = voegSamenScenario(invoer, msg.uitkomsten, msg.metingen);
+        post({
+          type: "scenario",
+          id: msg.id,
+          result,
+          ...(msg.dag ? { dag: dagUitVensters(invoer, msg.uitkomsten, msg.dag) } : {}),
+        });
       });
       return;
     }

@@ -82,8 +82,8 @@ export interface Overgang {
  * vaste aanname.
  */
 export function overgangsFinance(
-  huidig: AnalysisResult,
-  scenario: ScenarioResult,
+  huidig: Pick<AnalysisResult, "curve">,
+  scenario: Pick<ScenarioResult, "curve">,
   config: Configuration,
   start: string = BEREKENING_START,
 ): Overgang {

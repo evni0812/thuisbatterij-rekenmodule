@@ -64,7 +64,16 @@ import {
 } from "./model/huishoudens";
 import type { PeriodeReeks, Resolutie } from "./model/periode";
 import { RASTER_CAPACITEITEN, RASTER_VERMOGENS } from "./model/raster";
-import type { DispatchResult } from "./model/types";
+import type { DispatchResult, Doel } from "./model/types";
+import { STANDAARD_DOEL } from "./model/doel";
+import {
+  VERGELIJK_DOELEN,
+  deelVan,
+  doelConfiguratie,
+  vergelijkDatum,
+  type VergelijkingDeel,
+  type VergelijkingDelen,
+} from "./model/vergelijking";
 import {
   NETTARIEF_JAAR,
   scenarioConfiguratie,
@@ -128,6 +137,20 @@ export interface HuishoudensState {
   bezig: boolean;
 }
 
+/**
+ * De drie doelen naast elkaar (tabblad "Wat als", lib/model/vergelijking.ts).
+ *
+ * Per doel twee delen: op de tarieven van nu (met de voorbeelddag) en met het
+ * nettarief van 2029, voor de terugverdientijd met overgang. `undefined` is
+ * nog onderweg; een nettarief-deel dat mislukte is `null`, en dan rekent de
+ * kaart zonder overgang.
+ */
+export interface VergelijkingState extends VergelijkingDelen {
+  /** Waarom een doel niet kon worden doorgerekend. */
+  fouten: Partial<Record<Doel, string>>;
+  klaar: boolean;
+}
+
 export interface AnalysisState {
   manifest: Manifest | null;
   result: AnalysisResult | null;
@@ -165,6 +188,8 @@ export interface AnalysisState {
   grid: GridState | null;
   /** De reeks huishoudens; null zolang hij nog niet is gestart. */
   huishoudens: HuishoudensState | null;
+  /** De drie doelen naast elkaar; null zolang de vergelijking niet is gestart. */
+  vergelijking: VergelijkingState | null;
   /** Een opgevraagde losse dag, of null zolang er geen is opgehaald. */
   dag: SampleDay | null;
   /**
@@ -252,6 +277,12 @@ interface Vooruitgerekend {
   scenario?: ScenarioResult;
   grid?: GridPoint[][];
   huishoudens?: (HuishoudenPunt | null)[];
+  /**
+   * De andere doelen voor de vergelijking, per doorrekening: de sleutel is
+   * `dispatchSleutel` van de werkconfiguratie (zonder dataversie; die bewaakt
+   * `sleutel` hierboven al).
+   */
+  vergelijking?: { sleutel: string; deel: VergelijkingDeel }[];
 }
 
 let voorbeeldBelofte: Promise<Vooruitgerekend | null> | null = null;
@@ -300,7 +331,7 @@ function buffersVan(d: DispatchResult | undefined): ArrayBuffer[] {
  * het naar de hoofdworker om samen te voegen.
  */
 interface Groep {
-  soort: "analyse" | "scenario";
+  soort: "analyse" | "scenario" | "vergelijking";
   nummer: number;
   /** De configuratie van de gebruiker; de sleutel van cache en state. */
   cfg: Configuration;
@@ -320,6 +351,8 @@ interface Groep {
   /** Alleen voor het scenario: met welke schakelaars het is gestart. */
   opTeruglevering?: boolean;
   jaar?: NettariefJaar;
+  /** Alleen voor de vergelijking: de sleutel in de cache, en welke dag erbij moet. */
+  vergelijking?: { sleutel: string; dag?: string };
 }
 
 /** Een scenario dat binnenkwam vóór het antwoord waar het bij hoort. */
@@ -345,6 +378,7 @@ type InterneState = Omit<
 const LEGE_ACHTERGROND = {
   grid: null,
   huishoudens: null,
+  vergelijking: null,
   dag: null,
   dagBezig: false,
   dagOntbreekt: null,
@@ -414,6 +448,17 @@ export function useAnalysis(config: Configuration | null, opties: AnalyseOpties 
   const huishoudensIds = useRef(new Set<number>());
   const huishoudensGroep = useRef<number | null>(null);
   const huishoudensCfg = useRef<Configuration | null>(null);
+  /**
+   * De vergelijking van de doelen: wat er per werkconfiguratie al is
+   * (`dispatchSleutel`), wat er misging en wat er loopt. Blijft staan over
+   * antwoorden heen, zodat terugwisselen van doel niets opnieuw rekent.
+   */
+  const vergelijkingCache = useRef(new Map<string, VergelijkingDeel>());
+  const vergelijkingFout = useRef(new Map<string, string>());
+  const vergelijkingLopend = useRef(new Map<string, number>());
+  /** Voor welke configuratie de vergelijking nu getoond wordt, en de datum van haar voorbeelddag. */
+  const vergelijkingCfg = useRef<Configuration | null>(null);
+  const vergelijkingDag = useRef<string | null>(null);
   const dagId = useRef(0);
   const periodeId = useRef<Record<PeriodeKanaal, number>>({ verloop: 0, week: 0 });
   const opTerugleveringRef = useRef(false);
@@ -468,6 +513,10 @@ export function useAnalysis(config: Configuration | null, opties: AnalyseOpties 
   const staak = useCallback((nummer: number | null) => {
     if (nummer === null) return;
     poolRef.current?.annuleer(nummer);
+    const g = groepen.current.get(nummer);
+    if (g?.vergelijking && vergelijkingLopend.current.get(g.vergelijking.sleutel) === nummer) {
+      vergelijkingLopend.current.delete(g.vergelijking.sleutel);
+    }
     groepen.current.delete(nummer);
     if (analyseGroep.current === nummer) analyseGroep.current = null;
     if (scenarioGroep.current === nummer) scenarioGroep.current = null;
@@ -478,13 +527,22 @@ export function useAnalysis(config: Configuration | null, opties: AnalyseOpties 
    * als eerste: dat is het langste stuk (rolling én optimum) en bepaalt het
    * kritieke pad.
    */
-  const startGroep = useCallback((soort: Groep["soort"], cfg: Configuration, werkCfg: Configuration) => {
+  const startGroep = useCallback((
+    soort: Groep["soort"],
+    cfg: Configuration,
+    werkCfg: Configuration,
+    vergelijking?: Groep["vergelijking"],
+  ) => {
     const pool = poolRef.current;
     const m = manifestRef.current;
     if (!pool || !m) return;
     const grenzen = vensterGrenzen(m, werkCfg);
     if (grenzen.length === 0) {
       const fout = `geen profieldata voor netgebied ${werkCfg.domain} tussen ${werkCfg.from} en ${werkCfg.to}`;
+      if (soort === "vergelijking") {
+        if (vergelijking) vergelijkingFout.current.set(vergelijking.sleutel, fout);
+        return;
+      }
       setState((s) =>
         soort === "analyse" ? { ...s, busy: false, voortgang: null, error: fout } : { ...s, scenarioFout: fout },
       );
@@ -508,9 +566,12 @@ export function useAnalysis(config: Configuration | null, opties: AnalyseOpties 
       samenvoegId: null,
       start: Date.now(),
       ...(soort === "scenario" ? { opTeruglevering: opTerugleveringRef.current, jaar: jaarRef.current } : {}),
+      ...(vergelijking ? { vergelijking } : {}),
     };
     groepen.current.set(nummer, groep);
-    if (soort === "analyse") {
+    if (soort === "vergelijking") {
+      if (vergelijking) vergelijkingLopend.current.set(vergelijking.sleutel, nummer);
+    } else if (soort === "analyse") {
       analyseGroep.current = nummer;
       const v = {
         vensters: { klaar: 0, totaal: grenzen.length },
@@ -529,10 +590,12 @@ export function useAnalysis(config: Configuration | null, opties: AnalyseOpties 
       | { type: "venster"; config: Configuration; jaarIndex: number; metOptimum: boolean }
       | { type: "quick"; config: Configuration; jaarIndex: number; fraction: number }
       | { type: "perfect"; config: Configuration; jaarIndex: number };
+    // De hoofddoorrekening en haar scenario gaan vóór het achtergrondwerk.
+    const voorrang = soort !== "vergelijking";
     const plaats = (stuk: Stuk) => {
       const id = ++nextId.current;
       groep.taakIds.add(id);
-      pool.plaats({ groep: nummer, bericht: { ...stuk, id, groep: nummer } });
+      pool.plaats({ groep: nummer, voorrang, bericht: { ...stuk, id, groep: nummer } });
     };
     const volgorde = [ref, ...grenzen.map((_, i) => i).filter((i) => i !== ref)];
     for (const jaarIndex of volgorde) {
@@ -587,6 +650,7 @@ export function useAnalysis(config: Configuration | null, opties: AnalyseOpties 
         groep: groep.nummer,
         worker: 0,
         transfer,
+        voorrang: true,
         bericht: {
           type: "voegSamen",
           id,
@@ -602,6 +666,7 @@ export function useAnalysis(config: Configuration | null, opties: AnalyseOpties 
         groep: groep.nummer,
         worker: 0,
         transfer,
+        voorrang: groep.soort === "scenario",
         bericht: {
           type: "voegSamenScenario",
           id,
@@ -609,6 +674,7 @@ export function useAnalysis(config: Configuration | null, opties: AnalyseOpties 
           config: groep.werkCfg,
           uitkomsten,
           metingen: groep.metingen,
+          ...(groep.vergelijking?.dag ? { dag: groep.vergelijking.dag } : {}),
         },
       });
     }
@@ -692,6 +758,135 @@ export function useAnalysis(config: Configuration | null, opties: AnalyseOpties 
   }, []);
 
   /**
+   * De werkconfiguraties van de vergelijking: per doel die op de tarieven van
+   * nu en die met het nettarief, met de schakelaars van het scenario zoals ze
+   * nu staan. Voor het gekozen doel zijn dat precies het antwoord en zijn
+   * scenario, dus dezelfde sleutels.
+   */
+  const vergelijkingPlan = useCallback((cfg: Configuration) => {
+    return VERGELIJK_DOELEN.map((doel) => {
+      const nu = doelConfiguratie(cfg, doel);
+      const nettarief = scenarioConfiguratie(nu, {
+        jaar: jaarRef.current,
+        opTeruglevering: opTerugleveringRef.current,
+      });
+      return {
+        doel,
+        gekozen: doel === (cfg.doel ?? STANDAARD_DOEL),
+        nu,
+        nettarief,
+        nuSleutel: dispatchSleutel(nu),
+        nettariefSleutel: dispatchSleutel(nettarief),
+      };
+    });
+  }, []);
+
+  /** Zet de vergelijking in de state, uit wat er in de cache staat. */
+  const publiceerVergelijking = useCallback(() => {
+    const cfg = vergelijkingCfg.current;
+    if (!cfg) return;
+    const plan = vergelijkingPlan(cfg);
+    const cache = vergelijkingCache.current;
+    const fout = vergelijkingFout.current;
+    setState((s) => {
+      const nu = {} as VergelijkingState["nu"];
+      const nettarief = {} as VergelijkingState["nettarief"];
+      const fouten: VergelijkingState["fouten"] = {};
+      for (const p of plan) {
+        nu[p.doel] = cache.get(p.nuSleutel);
+        const f = fout.get(p.nuSleutel);
+        if (f && !nu[p.doel]) fouten[p.doel] = f;
+        // Een mislukt nettarief-deel is null: de kaart rekent dan zonder
+        // overgang in plaats van eeuwig te wachten. Voor het gekozen doel is
+        // dat het scenario van het antwoord.
+        const ntMislukt = fout.has(p.nettariefSleutel) || (p.gekozen && s.scenarioFout !== null);
+        nettarief[p.doel] = cache.get(p.nettariefSleutel) ?? (ntMislukt ? null : undefined);
+      }
+      const klaar = plan.every(
+        (p) => (nu[p.doel] !== undefined || fouten[p.doel] !== undefined) && nettarief[p.doel] !== undefined,
+      );
+      return { ...s, vergelijking: { nu, nettarief, fouten, klaar } };
+    });
+  }, [vergelijkingPlan]);
+
+  /** Bewaar een deel van de vergelijking; de oudste gaan eruit boven de dertig. */
+  const bewaarVergelijking = useCallback((sleutel: string, deel: VergelijkingDeel) => {
+    const cache = vergelijkingCache.current;
+    cache.delete(sleutel);
+    cache.set(sleutel, deel);
+    vergelijkingFout.current.delete(sleutel);
+    while (cache.size > 30) cache.delete(cache.keys().next().value!);
+  }, []);
+
+  /**
+   * Het antwoord en zijn scenario zijn óók een deel van de vergelijking: die
+   * van het gekozen doel. Zo rekent de vergelijking het gekozen doel nooit
+   * zelf, en vindt ze na een wissel van doel het vorige antwoord terug.
+   */
+  const bewaarHoofdInVergelijking = useCallback(
+    (cfg: Configuration, result: AnalysisResult | null, scenario: ScenarioResult | null, scenarioCfg?: Configuration) => {
+      if (result) bewaarVergelijking(dispatchSleutel(cfg), deelVan(result, result.sampleDays[0] ?? null));
+      if (scenario && scenarioCfg) bewaarVergelijking(dispatchSleutel(scenarioCfg), deelVan(scenario));
+    },
+    [bewaarVergelijking],
+  );
+
+  /**
+   * Start wat er aan de vergelijking ontbreekt voor deze configuratie. Wat in
+   * het geheugen staat of in de browsercache (een eerder antwoord met dat
+   * doel), wordt niet opnieuw gerekend. Het gekozen doel wacht op het
+   * antwoord en zijn scenario; die lopen al.
+   */
+  const startVergelijking = useCallback(
+    (cfg: Configuration) => {
+      const pool = poolRef.current;
+      if (!pool || !manifestRef.current) return;
+      vergelijkingCfg.current = cfg;
+      const plan = vergelijkingPlan(cfg);
+      const nodig = new Set(plan.flatMap((p) => [p.nuSleutel, p.nettariefSleutel]));
+      // Loopt er nog iets voor een configuratie die niet meer getoond wordt,
+      // dan gaat dat uit de rij.
+      for (const [sleutel, nummer] of [...vergelijkingLopend.current]) {
+        if (!nodig.has(sleutel)) staak(nummer);
+      }
+      const versie = dataVersie();
+      const cache = vergelijkingCache.current;
+      const datum = vergelijkingDag.current;
+      for (const p of plan) {
+        if (p.gekozen) continue;
+        // Eerst de browsercache: wie eerder met dit doel rekende, heeft het
+        // volledige antwoord en misschien het scenario al bewaard.
+        if ((!cache.has(p.nuSleutel) || !cache.has(p.nettariefSleutel)) && versie) {
+          const bewaard = leesCache(p.nu, versie);
+          if (bewaard && !cache.has(p.nuSleutel)) {
+            const dag = bewaard.result.sampleDays?.[0];
+            bewaarVergelijking(p.nuSleutel, deelVan(bewaard.result, dag && dag.date === datum ? dag : null));
+          }
+          if (
+            bewaard?.scenario &&
+            !cache.has(p.nettariefSleutel) &&
+            (bewaard.scenarioOpTeruglevering ?? false) === opTerugleveringRef.current &&
+            (bewaard.scenarioJaar ?? NETTARIEF_JAAR) === jaarRef.current
+          ) {
+            bewaarVergelijking(p.nettariefSleutel, deelVan(bewaard.scenario));
+          }
+        }
+        const start = (werk: Configuration, sleutel: string, dag?: string) => {
+          if (cache.has(sleutel) || vergelijkingLopend.current.has(sleutel)) return;
+          vergelijkingFout.current.delete(sleutel);
+          startGroep("vergelijking", cfg, werk, { sleutel, ...(dag ? { dag } : {}) });
+        };
+        start(p.nu, p.nuSleutel, datum ?? undefined);
+        start(p.nettarief, p.nettariefSleutel);
+      }
+      publiceerVergelijking();
+    },
+    // `dataVersie` leest alleen refs.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+    [vergelijkingPlan, staak, startGroep, bewaarVergelijking, publiceerVergelijking],
+  );
+
+  /**
    * Ruim de achtergrond van het vorige antwoord op: raster, huishoudens, dag
    * en periodes horen bij een andere dispatch. Alleen aanroepen als er een
    * NIEUW antwoord getoond wordt — invoer wijzigen alleen is geen reden: wie
@@ -708,6 +903,10 @@ export function useAnalysis(config: Configuration | null, opties: AnalyseOpties 
     if (huishoudensGroep.current !== null) pool?.annuleer(huishoudensGroep.current);
     gridGroep.current = null;
     huishoudensGroep.current = null;
+    // De vergelijking van het vorige antwoord verdwijnt van het scherm; wat er
+    // al gerekend is blijft in de cache, en wat nog loopt mag uitlopen tot
+    // `startVergelijking` beslist of het nog nodig is.
+    vergelijkingCfg.current = null;
     setState((s) => ({ ...s, ...LEGE_ACHTERGROND }));
     pool?.postAlle({ type: "cancel" } satisfies WorkerRequest);
   }, []);
@@ -723,10 +922,20 @@ export function useAnalysis(config: Configuration | null, opties: AnalyseOpties 
       cfg: Configuration,
       result: AnalysisResult,
       herkomst: { uitCache: boolean; elapsedMs?: number },
-      al: { scenario?: ScenarioResult; grid?: GridPoint[][]; huishoudens?: (HuishoudenPunt | null)[] },
+      al: {
+        scenario?: ScenarioResult;
+        grid?: GridPoint[][];
+        huishoudens?: (HuishoudenPunt | null)[];
+        vergelijking?: { sleutel: string; deel: VergelijkingDeel }[];
+      },
     ) => {
       const nieuweDispatch = !getoondeCfg.current || dispatchSleutel(getoondeCfg.current) !== dispatchSleutel(cfg);
       if (nieuweDispatch) wisAchtergrond();
+      // De vergelijking: wat er meekwam, en het antwoord zelf als het deel van
+      // het gekozen doel.
+      for (const v of al.vergelijking ?? []) bewaarVergelijking(v.sleutel, v.deel);
+      bewaarHoofdInVergelijking(cfg, result, null);
+      vergelijkingDag.current = vergelijkDatum(result);
       getoondVoor.current = JSON.stringify(cfg);
       getoondeCfg.current = cfg;
       voorlopig.current = false;
@@ -763,6 +972,7 @@ export function useAnalysis(config: Configuration | null, opties: AnalyseOpties 
       if (scenario) {
         scenarioWacht.current = null;
         scenarioVoor.current = dispatch;
+        bewaarHoofdInVergelijking(cfg, null, scenario, scenarioCfg);
         setState((s) => ({
           ...s,
           scenario: pasAfleidingToe(scenario, afleidingVanConfiguratie(scenarioCfg)),
@@ -785,8 +995,11 @@ export function useAnalysis(config: Configuration | null, opties: AnalyseOpties 
         if (!lopend || dispatchSleutel(lopend.cfg) !== dispatch) startScenario(cfg);
       }
 
-      // Raster en huishoudens: alleen bij een nieuwe dispatch opnieuw bekijken.
+      // Raster, huishoudens en de vergelijking: alleen bij een nieuwe dispatch
+      // opnieuw bekijken. De vergelijking eerst: die staat bovenaan het
+      // tabblad, en zo staat hij in de rij vóór het raster.
       if (nieuweDispatch) {
+        if (rasterNodigRef.current) startVergelijking(cfg);
         if (pastBijVarianten(al.huishoudens)) {
           huishoudensCfg.current = cfg;
           setState((s) => ({ ...s, huishoudens: volHuishoudens(al.huishoudens!) }));
@@ -803,7 +1016,7 @@ export function useAnalysis(config: Configuration | null, opties: AnalyseOpties 
     },
     // `bewaar` leest alleen refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [wisAchtergrond, staak, startScenario, startGrid, startHuishoudens],
+    [wisAchtergrond, staak, startScenario, startGrid, startHuishoudens, startVergelijking, bewaarVergelijking, bewaarHoofdInVergelijking],
   );
 
   const onBericht = useCallback(
@@ -844,6 +1057,19 @@ export function useAnalysis(config: Configuration | null, opties: AnalyseOpties 
         return;
       }
       if (msg.type === "scenario") {
+        const vg = [...groepen.current.values()].find(
+          (g) => g.soort === "vergelijking" && g.samenvoegId === msg.id,
+        );
+        if (vg?.vergelijking) {
+          groepen.current.delete(vg.nummer);
+          vergelijkingLopend.current.delete(vg.vergelijking.sleutel);
+          bewaarVergelijking(
+            vg.vergelijking.sleutel,
+            deelVan(msg.result, vg.vergelijking.dag ? (msg.dag ?? null) : undefined),
+          );
+          publiceerVergelijking();
+          return;
+        }
         const nummer = scenarioGroep.current;
         const groep = nummer !== null ? groepen.current.get(nummer) : undefined;
         if (!groep || groep.samenvoegId !== msg.id) return;
@@ -865,6 +1091,8 @@ export function useAnalysis(config: Configuration | null, opties: AnalyseOpties 
           scenario: pasAfleidingToe(msg.result, afleidingVanConfiguratie(scenarioCfg)),
           scenarioFout: null,
         }));
+        bewaarHoofdInVergelijking(getoond, null, msg.result, scenarioCfg);
+        publiceerVergelijking();
         // Alleen aanvullen: schrijfCache laat een bestaand `result` staan en
         // schrijft niets als er nog geen hoofdresultaat is.
         bewaar(groep.cfg, { scenario: msg.result, scenarioOpTeruglevering: opTeruglevering, scenarioJaar: jaar });
@@ -940,7 +1168,16 @@ export function useAnalysis(config: Configuration | null, opties: AnalyseOpties 
           const getoond = getoondeCfg.current;
           if (getoond && dispatchSleutel(getoond) === dispatchSleutel(groep.cfg)) {
             setState((s) => ({ ...s, scenarioFout: msg.message }));
+            publiceerVergelijking();
           }
+          return;
+        }
+        if (groep?.soort === "vergelijking") {
+          // Eén doel dat niet lukt, houdt de andere niet op; de kaart zegt het.
+          const sleutel = groep.vergelijking?.sleutel;
+          staak(groep.nummer);
+          if (sleutel) vergelijkingFout.current.set(sleutel, msg.message);
+          publiceerVergelijking();
           return;
         }
         // Dag en periode: de fout blijft bij de figuur die erom vroeg. Een
@@ -973,7 +1210,16 @@ export function useAnalysis(config: Configuration | null, opties: AnalyseOpties 
     },
     // `bewaar` leest alleen refs.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-    [herhaalPeriode, probeerSamenvoegen, werkVoortgangBij, toonAntwoord, staak],
+    [
+      herhaalPeriode,
+      probeerSamenvoegen,
+      werkVoortgangBij,
+      toonAntwoord,
+      staak,
+      bewaarVergelijking,
+      bewaarHoofdInVergelijking,
+      publiceerVergelijking,
+    ],
   );
 
   useEffect(() => {
@@ -1018,6 +1264,7 @@ export function useAnalysis(config: Configuration | null, opties: AnalyseOpties 
       scenarioGroep.current = null;
       gridGroep.current = null;
       huishoudensGroep.current = null;
+      vergelijkingLopend.current.clear();
     };
   }, [onBericht, poging]);
 
@@ -1101,7 +1348,9 @@ export function useAnalysis(config: Configuration | null, opties: AnalyseOpties 
     setState((s) => ({ ...s, scenario: null, scenarioFout: null }));
     if (!cfg) return;
     startScenario(cfg);
-  }, [staak, startScenario]);
+    // Andere schakelaars zijn andere nettarief-delen in de vergelijking.
+    if (vergelijkingCfg.current && rasterNodigRef.current) startVergelijking(cfg);
+  }, [staak, startScenario, startVergelijking]);
 
   const zetScenarioOpTeruglevering = useCallback(
     (opTeruglevering: boolean) => {
@@ -1126,9 +1375,20 @@ export function useAnalysis(config: Configuration | null, opties: AnalyseOpties 
   useEffect(() => {
     const cfg = getoondeCfg.current;
     if (!rasterNodig || !state.result || !cfg || !poolRef.current || state.fataal) return;
+    if (state.vergelijking === null) startVergelijking(cfg);
     if (state.grid === null) startGrid(cfg);
     if (state.huishoudens === null) startHuishoudens(cfg);
-  }, [rasterNodig, state.result, state.grid, state.huishoudens, state.fataal, startGrid, startHuishoudens]);
+  }, [
+    rasterNodig,
+    state.result,
+    state.grid,
+    state.huishoudens,
+    state.vergelijking,
+    state.fataal,
+    startGrid,
+    startHuishoudens,
+    startVergelijking,
+  ]);
 
   // Gegevens onbereikbaar en nog niets op het scherm: toon dan wat er van deze
   // invoer bewaard is, van welke dataversie ook. Beter een antwoord over iets
@@ -1267,6 +1527,10 @@ export function useAnalysis(config: Configuration | null, opties: AnalyseOpties 
                 opTerugleveringRef.current || jaarRef.current !== NETTARIEF_JAAR ? undefined : vooruit.scenario,
               grid: vooruit.grid,
               huishoudens: vooruit.huishoudens,
+              // De vergelijking hoort bij het nettarief van de standaard-
+              // schakelaars; staan die anders, dan rekent de pagina hem zelf.
+              vergelijking:
+                opTerugleveringRef.current || jaarRef.current !== NETTARIEF_JAAR ? undefined : vooruit.vergelijking,
             },
           );
           warmOp(config);

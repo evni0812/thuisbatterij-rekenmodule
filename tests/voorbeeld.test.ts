@@ -21,6 +21,8 @@ import { STANDAARD, standaardConfiguratie } from "../lib/configuratie";
 import { RASTER_CAPACITEITEN, RASTER_VERMOGENS } from "../lib/model/raster";
 import { huishoudensVarianten, type HuishoudenPunt } from "../lib/model/huishoudens";
 import { referentieJaar, type AnalysisResult } from "../lib/model/analysis";
+import { doelConfiguratie, type VergelijkingDeel } from "../lib/model/vergelijking";
+import { scenarioConfiguratie } from "../lib/nettarief";
 
 interface Payload {
   versie: number;
@@ -123,6 +125,23 @@ describe("het vooruitgerekende antwoord", () => {
     expect(c.importBasisKg).toBeGreaterThan(c.importBatKg);
     expect(c.klassen.kwartieren).toHaveLength(31);
     expect(payload.scenario.co2).not.toBeNull();
+  });
+
+  it("levert de vergelijking van de doelen mee, met de sleutels die de browser zoekt", () => {
+    // De twee niet-gekozen doelen, elk op de tarieven van nu en met het
+    // nettarief; het gekozen doel is het antwoord en het scenario zelf.
+    const v = (payload as { vergelijking?: { sleutel: string; deel: VergelijkingDeel }[] }).vergelijking!;
+    const config = standaardConfiguratie();
+    const verwacht = (["zelfconsumptie", "uitstoot"] as const).flatMap((d) => {
+      const nu = doelConfiguratie(config, d);
+      return [dispatchSleutel(nu), dispatchSleutel(scenarioConfiguratie(nu))];
+    });
+    expect(v.map((e) => e.sleutel)).toEqual(verwacht);
+    // Op de tarieven van nu met de voorbeelddag van het antwoord; met het
+    // nettarief zonder dag.
+    expect(v[0]!.deel.dag!.date).toBe(payload.result.sampleDays[0]!.date);
+    expect(v[1]!.deel.dag).toBeUndefined();
+    expect(v[0]!.deel.averageSavingEur).toBeLessThan(payload.result.averageSavingEur);
   });
 
   it("overleeft de reis door JSON", () => {
