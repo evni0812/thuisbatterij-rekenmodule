@@ -63,7 +63,7 @@ const DOMAIN = "871685900000056162";
  * niet stuk is.
  */
 const LEGE_INSTELLINGEN = {
-  afnameKwh: 2500, terugleveringKwh: 2000, presetId: "marstek-venus-e3", heffing: "toen" as const,
+  afnameKwh: 2500, terugleveringKwh: 2000, presetId: "marstek-venus-e3", heffing: STANDAARD.heffing,
   domein: DOMAIN, van: "", tot: "", spreiding: 1, terugleverkostenCt: 0,
   curtailment: true, analysejaren: 15, discontovoet: 0.03,
   prijsstijging: STANDAARD.prijsstijging, slijtageDeel: STANDAARD.slijtageDeel,
