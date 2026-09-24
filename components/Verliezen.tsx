@@ -66,9 +66,9 @@ export function Verliezen({
         <>
           Stroom opslaan kost stroom: bij het laden en bij het ontladen gaat een
           deel verloren in de omzetting. Gemiddeld per jaar over de volledige
-          jaren in de gekozen periode. Het eigen verbruik van de omvormer staat
-          hier bewust niet bij: dat loopt door of de batterij nu handelt of
-          niet, en hoort bij de aanschaf, niet bij de handel.
+          jaren in de gekozen periode. Het eigen stroomverbruik van de batterij
+          (standby, meestal 7 tot 25 watt: 60 tot 220 kWh per jaar) staat hier
+          niet bij en is ook niet van de besparing afgetrokken.
         </>
       }
     >

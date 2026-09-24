@@ -141,7 +141,7 @@ beforeAll(async () => {
 describe("de pagina toont het antwoord", () => {
   it("noemt een bedrag per jaar en een terugverdientijd", () => {
     render(<Antwoord result={result} scenario={null} overgang={null} investeringEur={1199} bezig={false} />);
-    expect(screen.getByText(/per jaar/)).toBeDefined();
+    expect(screen.getAllByText(/per jaar/).length).toBeGreaterThan(0);
     // Er moet een concreet eurobedrag staan, geen placeholder.
     expect(document.body.textContent).toMatch(/€/);
     expect(document.body.textContent).toMatch(/terugverdiend|niet terug/);
@@ -159,6 +159,11 @@ describe("de pagina toont het antwoord", () => {
     expect(tekst).toMatch(/had deze batterij je/);
     expect(tekst).toMatch(/Blijven de komende jaren hierop lijken|blijven lijken/);
     expect(tekst).toMatch(/aanname, geen voorspelling/);
+    // De grondslag en de voorwaarden staan in het antwoord zelf, niet alleen in
+    // de uitleg: welke jaren, welke heffing, welk contract, en wat er niet in zit.
+    expect(tekst).toMatch(/Doorgerekend op de uurprijzen van \d{4}.* met de belasting en\s+opslag van nu/);
+    expect(tekst).toMatch(/dynamisch energiecontract/);
+    expect(tekst).toMatch(/eigen stroomverbruik van de\s+batterij/);
   });
 
   it("legt de prijskloof uit met beide gewogen prijzen", () => {
@@ -1031,11 +1036,20 @@ describe("de pagina vertelt het verhaal in vier delen, in die volgorde", () => {
       />,
     );
     const tekst = document.body.textContent ?? "";
-    expect(tekst).toMatch(/Vanaf 2029 gaat het tijdsafhankelijke nettarief in/);
-    // En het getal dat voor een koper van vandaag geldt: het nieuwe tarief gaat
-    // pas in 2029 in, dus de eerste jaren draait de batterij op dat van nu.
-    expect(tekst).toMatch(/Koop je nu, dan draait de batterij eerst nog 3 jaar/);
-    expect(tekst).toMatch(/terugverdiend na/);
+    // Het nettarief is een voorstel, geen feit.
+    expect(tekst).toMatch(/Als het voorstel van de ACM doorgaat/);
+    expect(tekst).toMatch(/mogelijk later/);
+    // Eén vetgedrukt hoofdgetal: de terugverdientijd mét de overgang. Die van
+    // een ongewijzigd tarief staat erachter als vergelijking.
+    const vet = [...document.querySelectorAll(".antwoord-zin strong")].map((el) => el.textContent);
+    expect(vet).toEqual([
+      overgang.finance.paybackYears === null
+        ? "niet terugverdiend"
+        : expect.stringMatching(/^terugverdiend na /),
+    ]);
+    expect(tekst).toMatch(/gaat het voorstel voor het\s+nieuwe nettarief door/);
+    expect(tekst).toMatch(/Blijft\s+het nettarief zoals nu/);
+    expect(tekst).toMatch(new RegExp(`eerst\\s+${overgang.jarenOpHuidigTarief} jaar\\s+met het huidige nettarief`));
 
     // Zolang het scenario nog loopt staat er een plaatshouder, geen lege regel.
     cleanup();
@@ -1097,9 +1111,12 @@ describe("het batterijraster is leesbaar", () => {
     for (const c of cellen) expect(c, `"${c}"`).toMatch(/^[+−]\d{1,3}(\.\d{3})*$/);
   });
 
-  it("adviseert een stekkerbatterij als de eigen groep zich niet terugverdient", () => {
+  it("noemt een stekkerbatterij als hoogste uitkomst als de eigen groep zich niet terugverdient", () => {
     toon();
-    expect(document.body.textContent).toMatch(/Advies: een stekkerbatterij van 2 kWh bij 0,8 kW/);
+    // Geen "Advies:": het is de hoogste uitkomst in deze doorrekening, met de
+    // grondslag erbij.
+    expect(document.body.textContent).not.toMatch(/Advies/);
+    expect(document.body.textContent).toMatch(/Hoogste uitkomst in deze doorrekening \(uurprijzen van .*\): een\s+stekkerbatterij van 2 kWh bij 0,8 kW/);
     expect(document.body.textContent).toMatch(/loont hier niet/);
   });
 
@@ -1615,6 +1632,38 @@ describe("het tabblad Uitstoot", () => {
     expect(tekst).toMatch(/75% minder/);
     expect(tekst).toMatch(/Uitstoot van je netafname/);
     expect(tekst).toMatch(/km rijden/);
+  });
+
+  it("zegt het eerlijk als de batterij meer CO2 kost, en praat zonder panelen niet over zonnestroom", () => {
+    /**
+     * Zonder zonnepanelen laadt de batterij van het net, en als dat op vuile
+     * uren gebeurt kost hij per saldo CO2. Dan stond er "scheelt nauwelijks",
+     * een groene tegel "minder van het net" en een zin over "je eigen
+     * zonnestroom". Alle drie klopten niet.
+     */
+    const slechter = co2Jaar(
+      venster([60, 60, 400, 400], [10, 10, 10, 10]),
+      dispatch([10, 10, 10, 10], [0, 0, 0, 0]),
+      dispatch([15, 15, 10, 10], [0, 0, 0, 0]),
+    );
+    render(<Co2Antwoord co2={slechter} periodeLabel="in 2025" zonnepanelen={false} />);
+    const tekst = document.body.textContent ?? "";
+    expect(tekst).toMatch(/Met deze batterij stoot je netafname 0,6 kg méér CO2 uit per jaar/);
+    expect(tekst).not.toMatch(/nauwelijks/);
+    expect(tekst).not.toMatch(/zonnestroom/);
+    expect(tekst).toMatch(/kostte in 2025 9,2 kg CO2/);
+    const tegel = screen.getByText("Van het net gehaald").closest(".stat")!;
+    expect(tegel.textContent).toMatch(/10 kWh meer/);
+    expect(tegel.querySelector(".stat-delta.goed")).toBeNull();
+    // Het is een toerekening, en dat staat er.
+    expect(tekst).toMatch(/toerekening/);
+    expect(tekst).toMatch(/stuurt hier op prijs/);
+
+    cleanup();
+    render(<Co2Nederland co2={slechter} drempel={100} onDrempel={() => {}} zonnepanelen={false} />);
+    const nl = document.body.textContent ?? "";
+    expect(nl).toMatch(/Zonder zonnepanelen lever je niets terug/);
+    expect(nl).toMatch(/méér CO2 uit per jaar/);
   });
 
   it("laat voor Nederland de teruglevering onder de drempel als overschot tellen", () => {

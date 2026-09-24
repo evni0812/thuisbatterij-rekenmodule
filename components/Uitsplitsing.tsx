@@ -106,9 +106,14 @@ export function Uitsplitsing({
     },
   ];
 
-  // Posten die op nul afronden laten we staan: dat de post er ís maar niets
-  // opleverde, is zelf een uitkomst — zeker "negatieve prijzen ontlopen".
-  const zichtbaar = posten;
+  // "Negatieve prijzen ontlopen" is nul zodra de omvormer afregelt (de
+  // standaard): teruglevering kost dan op die momenten niets, dus er valt niets
+  // te ontlopen. Een staaf van € 0 zonder uitleg leest als een fout; de post
+  // valt dan weg en de toelichting zegt waarom. De andere twee posten blijven
+  // altijd staan.
+  const negatiefNul = Math.abs(breakdown.avoidedNegativeExportEur) < 0.5;
+  const zichtbaar = negatiefNul ? posten.slice(0, 2) : posten;
+  const aantal = zichtbaar.length === 2 ? "twee" : "drie";
 
   // De stappen van de waterval: elke post begint waar de vorige eindigde.
   let loopt = 0;
@@ -156,8 +161,11 @@ export function Uitsplitsing({
         <>
           Zonder saldering kost afnemen veel meer dan teruglevering opbrengt.
           Elke kilowattuur die je zelf gebruikt in plaats van teruglevert, is dat
-          verschil waard. De drie posten stapelen op tot de besparing over{" "}
+          verschil waard. De {aantal} posten stapelen op tot de besparing over{" "}
           {periodeLabel}.
+          {negatiefNul
+            ? " Negatieve prijzen ontlopen staat er niet bij: het model neemt aan dat je omvormer bij een negatieve prijs afregelt, en dan kost teruglevering op die momenten al niets."
+            : null}
         </>
       }
     >
@@ -165,7 +173,7 @@ export function Uitsplitsing({
         kader={kader}
         tip={tip}
         onWis={wis}
-        label={`De besparing over ${periodeLabel}, opgebouwd uit drie posten`}
+        label={`De besparing over ${periodeLabel}, opgebouwd uit ${aantal} posten`}
       >
         <svg
           viewBox={`0 0 ${B} ${H}`}

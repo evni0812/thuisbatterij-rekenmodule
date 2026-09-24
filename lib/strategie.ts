@@ -48,7 +48,7 @@ export const STRATEGIEEN: readonly Strategie[] = [
     // verschillende keuzes zijn.
     naam: "Volop",
     deel: 0.2,
-    kort: "Alleen het capaciteitsverlies dat er over de levensduur toch komt (20%) telt. De meeste beurten en de hoogste jaaropbrengst; de batterij sterft aan ouderdom met beurten over.",
+    kort: "Een beurt telt voor een vijfde (20%) van de slijtageprijs. Veel thuisbatterijen gaan eerder door ouderdom dan door hun laadbeurten achteruit, en dan kost een extra beurt weinig levensduur. De meeste beurten en de hoogste jaaropbrengst.",
   },
 ];
 

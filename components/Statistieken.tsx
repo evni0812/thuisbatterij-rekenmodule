@@ -198,7 +198,7 @@ export function Statistieken({
               </>
             ) : null
           }
-          uitleg={`Welk deel van wat je van het net haalt op de piekuren van het nettarief valt: winter 16–22 uur, zomer 19–23 uur. De batterij haalt er ${kwh(piekMinderKwh)} per jaar uit.`}
+          uitleg={`Welk deel van wat je van het net haalt op de piekuren van het voorgestelde nettarief valt: in de winter 16.00–23.00 uur, in de zomer 19.00–24.00 uur. De batterij haalt er ${kwh(piekMinderKwh)} per jaar uit.`}
           accent="var(--ac)"
           knop={knop("piekuren")}
         />
@@ -220,7 +220,7 @@ export function Statistieken({
           naar={kwh(stats.gridExportBatteryKwh)}
           delta={`${procent(exportReductie)} minder`}
           deltaGoed={exportReductie > 0}
-          uitleg="Wat je teruglevert in plaats van zelf gebruikt. Wat eraf gaat, blijft in huis."
+          uitleg="Wat je teruglevert, zonder en met batterij. Wat eraf gaat, gaat de batterij in. Stroom die de omvormer bij een negatieve prijs afregelt, telt hier niet mee en geldt ook niet als eigen verbruik."
           accent="var(--series-2)"
           knop={knop("naarHetNet")}
         />
@@ -228,7 +228,7 @@ export function Statistieken({
         <Tegel
           label="Laadbeurten"
           waarde={`${getal(stats.cyclesPerDay, 2)} per dag`}
-          uitleg={`${Math.round(stats.cyclesPerYear)} volledige beurten per jaar. Meer beurten betekent meer opbrengst, maar ook snellere slijtage.`}
+          uitleg={`${Math.round(stats.cyclesPerYear)} volledige beurten per jaar. Meer beurten kan meer opleveren, maar kost ook slijtage.`}
           accent="var(--series-3)"
           knop={knop("laadbeurten")}
         />

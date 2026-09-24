@@ -77,7 +77,7 @@ export function MaandVerloop({ maanden, actie }: { maanden: MonthTotals[]; actie
         <>
           Besparing per maand, gemiddeld over de volledige jaren in de gekozen
           periode. De gearceerde helft is de zomer, van april tot en met
-          september — dezelfde grens die het nieuwe nettarief vanaf 2029
+          september: dezelfde grens die het voorgestelde nettarief
           hanteert.
         </>
       }

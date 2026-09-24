@@ -86,8 +86,9 @@ export function Cashflow({
           {wisseljaar !== null ? (
             <>
               {" "}
-              Bij de stippellijn gaat het nieuwe nettarief in en wordt de
-              jaaropbrengst hoger; daarna loopt hij steiler.
+              Bij de stippellijn gaat het voorgestelde nettarief in, als het
+              voorstel doorgaat; vanaf daar volgt de lijn de jaaropbrengst onder
+              dat tarief.
             </>
           ) : null}{" "}
           De contante waarde hieronder trekt de rente eraf die je op dat geld
@@ -286,7 +287,7 @@ export function Cashflow({
             {Math.round(finance.totalCycles)}
             {finance.endOfLifeYear !== null ? (
               <span className="dd-noot">
-                na {finance.endOfLifeYear} jaar zijn de beloofde laadbeurten op; daarna
+                na {finance.endOfLifeYear} jaar zijn de opgegeven laadbeurten op; daarna
                 rekenen we door met een batterij die verder slijt
               </span>
             ) : null}

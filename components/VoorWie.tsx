@@ -129,8 +129,8 @@ export function VoorWie({
     grens === null
       ? "Deze batterij komt bij geen van deze huishoudens netto uit de kosten"
       : grens === 0
-        ? "Deze batterij loont ook zonder teruglevering"
-        : `Deze batterij loont vanaf ongeveer ${kwh(Math.round(grens / 100) * 100)} teruglevering per jaar`;
+        ? `Als ${jaar.year} zich herhaalt, loont deze batterij ook zonder teruglevering`
+        : `Als ${jaar.year} zich herhaalt, loont deze batterij vanaf ongeveer ${kwh(Math.round(grens / 100) * 100)} teruglevering per jaar`;
 
   const asLabels: number[] = [];
   for (const p of metPanelen) {
@@ -328,7 +328,7 @@ export function VoorWie({
       </dl>
       <p className="posten-noot">
         Alleen de teruglevering verschuift; afname, batterij, tarieven en prijs blijven die van jou.
-        Het huishouden zonder zonnepanelen rekent met het gemeten profiel van aansluitingen zonder
+        Het huishouden zonder zonnepanelen rekent met het gemeten gemiddelde profiel van alle aansluitingen zonder
         invoeding: een batterij verdient daar alleen aan het prijsverschil over de dag.
       </p>
     </Figure>

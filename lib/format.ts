@@ -129,3 +129,16 @@ export function periode(vanIso: string, totIso: string): string {
   }
   return `${kort(m1)} ${y1} tot ${kort(m2)} ${y2}`;
 }
+
+/**
+ * Een reeks kalenderjaren in lopende tekst: "2025", "2024 en 2025", "2023 tot
+ * en met 2025". Een reeks met gaten wordt opgesomd: "2023, 2024 en 2026".
+ */
+export function jarenReeks(lijst: readonly number[]): string {
+  const j = [...new Set(lijst)].sort((a, b) => a - b);
+  if (j.length === 0) return "";
+  if (j.length === 1) return String(j[0]);
+  const aaneengesloten = j.every((y, i) => i === 0 || y === j[i - 1]! + 1);
+  if (aaneengesloten && j.length > 2) return `${j[0]} tot en met ${j[j.length - 1]}`;
+  return `${j.slice(0, -1).join(", ")} en ${j[j.length - 1]}`;
+}

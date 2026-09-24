@@ -6,6 +6,7 @@
  * voorbeeld.
  */
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { readFileSync, readdirSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { Paneel, TABS, TabStapper, Tabs } from "../components/Tabs";
 import { Uitleg } from "../components/Uitleg";
@@ -201,5 +202,41 @@ describe("hoe is dit berekend", () => {
   it("heeft als icoon een toegankelijke naam met de titel erin", () => {
     render(<Uitleg blok={BLOK} variant="icoon" />);
     expect(screen.getByRole("button", { name: /Hoe is dit berekend: Testcijfer/ })).toBeDefined();
+  });
+});
+
+describe("de teksten beweren niets wat niet klopt", () => {
+  /**
+   * Uit de productiereview: uitspraken die op de pagina stonden en niet te
+   * verdedigen waren. Ze mogen niet terugkomen via een oude tekst of een
+   * kopie. De lijst is bewust concreet: het zijn de zinnen die er stonden.
+   */
+  const bestanden = [
+    "app/page.tsx",
+    "lib/uitleg.tsx",
+    "lib/strategie.ts",
+    ...readdirSync("components").map((f) => `components/${f}`),
+  ];
+  const tekst = bestanden.map((f) => readFileSync(f, "utf8")).join("\n");
+
+  it.each([
+    ["geen commerciële partij", /Geen commerciële partij/],
+    ["advies boven de kaart", /Advies:/],
+    ["werkelijk gemeten profielen van één huishouden", /werkelijk gemeten (kwartier|verbruiks)profielen/],
+    ["echt verbruik, geen model", /echt verbruik, geen model/],
+    ["onbewezen richting van het gemiddelde", /onderschat wat een batterij kan opvangen eerder/],
+    ["marginale uitstoot als gunstiger", /Marginaal zou de winst groter maken/],
+    ["vrijwel alleen groene stroom", /vrijwel alleen uit zon, wind en kern/],
+    ["standby in de verliezen", /elektronica die dag en nacht aan staat/],
+    ["stopcontactverbod", /aan een gewoon stopcontact mag maar 800 W/],
+    ["alle omvormers regelen af", /Moderne omvormers stoppen met terugleveren/],
+    ["nettarief als feit", /gooit de businesscase om/],
+  ])("niet: %s", (_naam, patroon) => {
+    expect(tekst).not.toMatch(patroon);
+  });
+
+  it("noemt de ANWB als afzender en de voorwaarde van een dynamisch contract", () => {
+    expect(tekst).toMatch(/Deze tool is van de\s+ANWB\. De ANWB verkoopt ook energie en thuisbatterijen\./);
+    expect(tekst).toMatch(/Deze doorrekening gaat uit van een dynamisch energiecontract/);
   });
 });

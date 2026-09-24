@@ -75,14 +75,14 @@ export function Tabs({ actief, onKies }: { actief: TabId; onKies: (id: TabId) =>
 }
 
 /**
- * Doorstappen door de vijf onderdelen, onder aan de pagina.
+ * Doorstappen door de zes onderdelen, onder aan de pagina.
  *
  * De tablist bovenin is er om ergens naartóé te springen; dit is er om verder
- * te lezen. Een verhaal in vijf delen hoort onderaan een "en dan?" te hebben,
+ * te lezen. Een verhaal in zes delen hoort onderaan een "en dan?" te hebben,
  * anders moet je na elke sectie terug naar de balk.
  *
  * ── De pil is een venster, en bedient zichzelf ──────────────────────────────
- * Alle vijf de titels staan naast elkaar op één spoor; de pil laat er precies
+ * Alle zes de titels staan naast elkaar op één spoor; de pil laat er precies
  * één van zien en schuift het spoor op. Daardoor ís de beweging de navigatie:
  * je ziet de titel van waar je was naar links verdwijnen en die van waar je
  * heen gaat binnenkomen, en bij een sprong van twee schuift de tussenliggende
@@ -173,7 +173,7 @@ export function TabStapper({
       </div>
 
       {/* De aankondiging staat los van het spoor: een schermlezer hoort de
-          nieuwe titel één keer, niet alle vijf. */}
+          nieuwe titel één keer, niet alle zes. */}
       <span className="visueel-verborgen" role="status">
         {TABS[i]?.label}: {TABS[i]?.vraag}
       </span>

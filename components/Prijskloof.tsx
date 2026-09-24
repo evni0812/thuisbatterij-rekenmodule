@@ -145,7 +145,8 @@ export function Prijskloof({
 
       <p className="kloof-conclusie">
         Elke kilowattuur die je zelf gebruikt in plaats van teruglevert, scheelt je
-        dus <strong>{centPerKwh(verschil)}</strong>. Je levert{" "}
+        dus tot zo'n <strong>{centPerKwh(verschil)}</strong>, vóór het
+        omzettingsverlies van de batterij (ongeveer 12%). Je levert{" "}
         {kwh(terugleveringKwh)} terug en neemt {kwh(afnameKwh)} af, dus daar valt
         wat te halen.
       </p>
@@ -157,7 +158,9 @@ export function Prijskloof({
           opbracht. Daar viel {kwh(gap.exportAtNegativePriceKwh)} van jouw
           jaarlijkse teruglevering in. Veel meer dan dat tijdsaandeel doet vermoeden,
           want je levert nu eenmaal terug op precies de zonnige uren
-          waarop iedereen dat doet en de prijs onderuit gaat.
+          waarop iedereen dat doet en de prijs onderuit gaat. Het model neemt
+          aan dat je omvormer op die momenten afregelt, zodat terugleveren dan
+          niets kost; dat is instelbaar bij de geavanceerde instellingen.
         </p>
       ) : null}
     </Figure>
