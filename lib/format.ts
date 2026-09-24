@@ -71,14 +71,26 @@ export function procent(fraction: number, decimalen = 0): string {
 }
 
 export function getal(value: number, decimalen = 0): string {
-  if (decimalen === 0) return getal0.format(value);
-  if (decimalen === 1) return getal1.format(value);
+  /*
+   * Intl.NumberFormat accepteert alleen 0 tot en met 100 decimalen en gooit
+   * daarbuiten een RangeError. Dat gebeurde: ergens stond `getal(x, -1)`, in
+   * de veronderstelling dat dat op tientallen afrondt. Het gevolg was geen
+   * scheve opmaak maar een lege pagina, want de fout viel middenin het
+   * renderen van een tabblad.
+   *
+   * Wie op tientallen wil afronden doet dat met `Math.round(x / 10) * 10`.
+   * Hier klemmen we alleen nog het bereik: een verkeerd getal mag hooguit een
+   * verkeerd opgemaakt cijfer opleveren, nooit een witte pagina.
+   */
+  const d = Number.isFinite(decimalen) ? Math.min(20, Math.max(0, Math.trunc(decimalen))) : 0;
+  if (d === 0) return getal0.format(value);
+  if (d === 1) return getal1.format(value);
   // Eerder viel alles boven één decimaal stil terug op één. Dagtotalen van
   // 0,84 kWh werden dan "0,8" en alles onder 0,05 kWh werd "0".
-  let f = getalCache.get(decimalen);
+  let f = getalCache.get(d);
   if (!f) {
-    f = new Intl.NumberFormat("nl-NL", { maximumFractionDigits: decimalen });
-    getalCache.set(decimalen, f);
+    f = new Intl.NumberFormat("nl-NL", { maximumFractionDigits: d });
+    getalCache.set(d, f);
   }
   return f.format(value);
 }

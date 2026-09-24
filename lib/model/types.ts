@@ -74,6 +74,21 @@ export interface PriceSeries {
   exportPrice: Float64Array;
 }
 
+/**
+ * Waar de planner op stuurt.
+ *
+ *   rendement       zo weinig mogelijk euro's kwijt: opslaan, bijkopen en
+ *                   verkopen aan het net wanneer dat loont (standaard)
+ *   zelfconsumptie  alleen eigen overschot opslaan en alleen eigen tekort
+ *                   dekken; nooit uit het net laden, nooit uit de batterij
+ *                   terugleveren. Wat de meeste batterijen standaard doen.
+ *   uitstoot        zo weinig mogelijk CO2 door de netafname: de planner
+ *                   rekent met de emissiefactor per uur in plaats van de prijs
+ *
+ * Zie lib/model/doel.ts.
+ */
+export type Doel = "rendement" | "zelfconsumptie" | "uitstoot";
+
 /** Het simulatievenster: tijdas plus alle per-kwartier reeksen. */
 export interface Window {
   /** UTC-milliseconden van het begin van elk kwartier. */
@@ -84,6 +99,18 @@ export interface Window {
    */
   residualKwh: Float64Array;
   prices: PriceSeries;
+  /**
+   * Emissiefactor van de Nederlandse stroommix per kwartier, gram CO2 per kWh
+   * (NED.nl, uurwaarden uitgerold). Optioneel: de dispatch rekent er niet mee,
+   * alleen de CO2-balans (lib/model/co2.ts). NaN waar de reeks nog geen uur had.
+   */
+  co2GPerKwh?: Float64Array;
+  /**
+   * Waar de planner op stuurt; afwezig is "rendement". Het zit in het venster
+   * en niet in een optie, zodat elke doorrekening (analyse, raster, dagkiezer,
+   * huishoudens) vanzelf hetzelfde doel volgt.
+   */
+  doel?: Doel;
   /**
    * De twee reeksen waaruit `residualKwh` is samengesteld, kWh per kwartier.
    *

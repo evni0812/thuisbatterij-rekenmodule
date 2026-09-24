@@ -110,6 +110,15 @@ describe("het vooruitgerekende antwoord", () => {
     expect(zonder.savingEur).toBeLessThan(eigen.savingEur);
   });
 
+  it("draagt de CO2-balans, met een winst voor het huishouden", () => {
+    // Versie 14: zonder dit veld loopt het tabblad Uitstoot leeg.
+    const c = payload.result.co2!;
+    expect(c).not.toBeNull();
+    expect(c.importBasisKg).toBeGreaterThan(c.importBatKg);
+    expect(c.klassen.kwartieren).toHaveLength(31);
+    expect(payload.scenario.co2).not.toBeNull();
+  });
+
   it("overleeft de reis door JSON", () => {
     // Het bestand gaat als tekst over de lijn. Typed arrays zouden onderweg in
     // een object met genummerde sleutels veranderen; de voorbeelddagen moeten

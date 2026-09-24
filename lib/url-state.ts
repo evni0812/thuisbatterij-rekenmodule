@@ -6,6 +6,8 @@
  * zodat een gewone berekening een schone adresbalk houdt.
  */
 
+import type { Doel } from "./model/types";
+
 export interface Instellingen {
   afnameKwh: number;
   terugleveringKwh: number;
@@ -45,6 +47,10 @@ export interface Instellingen {
   kostenPerKwh: number;
   kostenPerKw: number;
   installatieEur: number;
+  /** Drempel voor het Nederlandse CO2-perspectief, g/kWh. Zie lib/model/co2.ts. */
+  co2Drempel: number;
+  /** Waar de planner op stuurt: rendement, zelfconsumptie of uitstoot. */
+  doel: Doel;
   /** Null betekent: neem de waarde van de gekozen batterij over. */
   prijsEur: number | null;
   capaciteitKwh: number | null;
@@ -74,6 +80,8 @@ const SLEUTELS: Record<keyof Instellingen, string> = {
   kostenPerKwh: "pkwh",
   kostenPerKw: "pkw",
   installatieEur: "inst",
+  co2Drempel: "co2d",
+  doel: "doel",
   prijsEur: "prijs",
   capaciteitKwh: "cap",
   vermogenKw: "kw",
@@ -108,6 +116,7 @@ export function leesUrl(): Partial<Instellingen> {
   zetGetal("kostenPerKwh", getal(SLEUTELS.kostenPerKwh));
   zetGetal("kostenPerKw", getal(SLEUTELS.kostenPerKw));
   zetGetal("installatieEur", getal(SLEUTELS.installatieEur));
+  zetGetal("co2Drempel", getal(SLEUTELS.co2Drempel));
   zetGetal("prijsEur", getal(SLEUTELS.prijsEur));
   zetGetal("capaciteitKwh", getal(SLEUTELS.capaciteitKwh));
   zetGetal("vermogenKw", getal(SLEUTELS.vermogenKw));
@@ -127,6 +136,8 @@ export function leesUrl(): Partial<Instellingen> {
   if (zon !== null) uit.zonnepanelen = zon === "1";
   const hef = p.get(SLEUTELS.heffing);
   if (hef === "toen" || hef === "nu") uit.heffing = hef;
+  const doel = p.get(SLEUTELS.doel);
+  if (doel === "rendement" || doel === "zelfconsumptie" || doel === "uitstoot") uit.doel = doel;
 
   return uit;
 }

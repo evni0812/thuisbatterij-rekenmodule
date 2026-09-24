@@ -12,7 +12,7 @@ import type { PeriodeReeks, Resolutie } from "../model/periode";
 
 import type { Afnametype } from "../data/manifest";
 import type { NettariefJaar } from "../nettarief";
-import type { BatterySpec, HouseholdSpec, TariffSpec } from "../model/types";
+import type { BatterySpec, Doel, HouseholdSpec, TariffSpec } from "../model/types";
 
 /**
  * Wie de periode opvroeg.
@@ -97,6 +97,19 @@ export interface Configuration {
   kostenPerKwhEur?: number;
   kostenPerKwEur?: number;
   installatieEur?: number;
+  /**
+   * Drempel voor het Nederlandse CO2-perspectief, g/kWh: onder deze
+   * emissiefactor telt teruglevering als overschot (lib/model/co2.ts).
+   * Afleiding: de balans bewaart afname en teruglevering per klasse, dus de
+   * drempel is achteraf toe te passen.
+   */
+  co2DrempelG?: number;
+  /**
+   * Waar de planner op stuurt (lib/model/doel.ts). Afwezig is "rendement",
+   * zodat de hash van een gewone doorrekening niet verandert. Dispatch: een
+   * ander doel is een andere batterij.
+   */
+  doel?: Doel;
 }
 
 /** Eén doorgerekende combinatie van capaciteit en vermogen. */

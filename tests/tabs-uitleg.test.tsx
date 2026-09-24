@@ -14,7 +14,7 @@ import type { UitlegBlok } from "../lib/uitleg";
 afterEach(cleanup);
 
 describe("de tabs", () => {
-  it("zijn een tablist met vijf tabbladen en één geselecteerd", () => {
+  it("zijn een tablist met zes tabbladen en één geselecteerd", () => {
     render(<Tabs actief="start" onKies={() => {}} />);
     const tabs = screen.getAllByRole("tab");
     expect(tabs.length).toBe(TABS.length);
@@ -75,6 +75,25 @@ describe("de stapper onderaan", () => {
     render(<TabStapper actief="wanneer" onKies={() => {}} />);
     expect(screen.getByRole("button", { name: "Vorige: Waarom" })).toBeDefined();
     expect(screen.getByRole("button", { name: "Volgende: Wat als" })).toBeDefined();
+  });
+
+  it("houdt elk tablabel kort genoeg voor het venster van de pil", () => {
+    /**
+     * De pil is een venster van vaste breedte — 8,5rem, en 7,5rem onder 600px.
+     * Vast moet het zijn, anders springt de pil per titel van maat en schuift
+     * het spoor niet meer. Maar een titel die er niet in past wordt gewoon
+     * afgeknipt: geen foutmelding, geen kapotte test, alleen een half woord op
+     * een telefoon.
+     *
+     * Het smalste venster is 120px bij een basis van 16px, en de titel staat
+     * in 1rem vet. Elf tekens is daar een veilige bovengrens voor, ook met
+     * brede letters als W en M. Loopt een nieuw tabblad hiertegenaan, kies dan
+     * een korter woord of verruim beide breedtes in theme.css — en kijk dan
+     * zelf op 360px of het klopt, want deze test meet tekens en geen pixels.
+     */
+    for (const t of TABS) {
+      expect(t.label.length, `"${t.label}" past niet in de pil`).toBeLessThanOrEqual(11);
+    }
   });
 
   it("zet de chevrons in de pil, aan weerszijden van het venster", () => {

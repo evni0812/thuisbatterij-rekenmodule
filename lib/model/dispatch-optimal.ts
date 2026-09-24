@@ -23,6 +23,7 @@ import {
   passThrough,
   planSocPath,
 } from "./solver";
+import { stuurVenster } from "./doel";
 import type { BatterySpec, DispatchResult, TariffSpec, Window } from "./types";
 
 export interface OptimalOptions {
@@ -61,14 +62,15 @@ export function dispatchOptimal(
   );
   const levels = chooseSocLevels(usable, maxTransfer, options.socLevels);
   const blockSteps = options.blockSteps ?? n;
+  const { venster: stuur, alleenEigen } = stuurVenster(window);
 
   let soc = 0;
   for (let from = 0; from < n; from += blockSteps) {
     const to = Math.min(n, from + blockSteps);
     const path = planSocPath(
       window.residualKwh,
-      window.prices.importPrice,
-      window.prices.exportPrice,
+      stuur.prices.importPrice,
+      stuur.prices.exportPrice,
       from,
       to,
       spec,
@@ -78,9 +80,10 @@ export function dispatchOptimal(
       // Alleen tussenblokken krijgen een eindwaarde; het laatste blok niet,
       // want restlading levert aan het einde van het venster niets meer op.
       to < n,
+      alleenEigen,
     );
     // Geen correcties: het plan is al optimaal op de werkelijke residual.
-    soc = executePath(window, path, from, to, spec, tariff, soc, out, false);
+    soc = executePath(stuur, path, from, to, spec, tariff, soc, out, false, null, alleenEigen);
   }
   return finalize(window, spec, tariff, out);
 }

@@ -36,6 +36,9 @@ from datetime import date, datetime, timedelta, timezone
 from zoneinfo import ZoneInfo
 
 RAW_PRICES = "data/raw/anwb_stroom_uur.csv"
+# Emissiefactor van de Nederlandse elektriciteitsmix per uur (NED.nl, type 27),
+# opgehaald door scripts/fetch_co2.py. Kolom emissionfactor_kg_per_kwh.
+RAW_CO2 = "data/raw/ned_co2_uur.csv"
 RAW_DYNAMIC = "data/raw/dynamic"
 OUTDIR = "public/data"
 NL = ZoneInfo("Europe/Amsterdam")
@@ -71,6 +74,84 @@ def hours_in_year(year: int) -> int:
     start = local_midnight_utc(date(year, 1, 1))
     end = local_midnight_utc(date(year + 1, 1, 1))
     return int((end - start).total_seconds() // 3600)
+
+
+# ── CO2 ──────────────────────────────────────────────────────────────────────
+def load_co2() -> dict[int, dict[datetime, float]]:
+    """Emissiefactor per uur in gram per kWh, gesleuteld op UTC-instant."""
+    per_year: dict[int, dict[datetime, float]] = defaultdict(dict)
+    if not os.path.exists(RAW_CO2):
+        return per_year
+    with open(RAW_CO2, newline="") as fh:
+        for row in csv.DictReader(fh):
+            f = row.get("emissionfactor_kg_per_kwh")
+            if not f:
+                continue
+            ts = datetime.fromisoformat(row["validfrom_utc"]).astimezone(timezone.utc)
+            per_year[ts.astimezone(NL).year][ts] = float(f) * 1000.0
+    return per_year
+
+
+def write_co2(year: int, data: dict[datetime, float]) -> dict:
+    """Schrijf de uurreeks emissiefactoren weg (één float32-reeks, g/kWh).
+
+    Zelfde tijdas als de prijzen: het eerste uur is lokale middernacht op
+    1 januari, per uur één waarde, tot het laatste uur waarvoor er data is. Een
+    los ontbrekend uur krijgt de vorige waarde; dat wordt gemeld.
+    """
+    start = local_midnight_utc(date(year, 1, 1))
+    vol = hours_in_year(year)
+    laatste = max(data)
+    n = min(vol, int((laatste - start).total_seconds() // 3600) + 1)
+    reeks = array.array("f", [0.0]) * n
+    ontbrekend = []
+    vorige = None
+    for i in range(n):
+        ts = start + timedelta(hours=i)
+        if ts in data:
+            reeks[i] = data[ts]
+            vorige = data[ts]
+        elif vorige is not None:
+            reeks[i] = vorige
+            ontbrekend.append(ts.isoformat())
+        else:
+            ontbrekend.append(ts.isoformat())
+    path = os.path.join(OUTDIR, f"co2-{year}.bin")
+    with open(path, "wb") as fh:
+        fh.write(MAGIC)
+        fh.write(struct.pack(HEADER, VERSION, 0, 1, n))
+        fh.write(reeks.tobytes())
+    eind = start + timedelta(hours=n)
+    return {
+        "uren": n,
+        "volledig": n == vol,
+        "eerste_uur_utc": start.isoformat(),
+        "laatste_uur_utc": (eind - timedelta(hours=1)).isoformat(),
+        "ontbrekend": len(ontbrekend),
+        "gemiddelde_g_per_kwh": round(sum(reeks) / n, 1) if n else 0.0,
+        "bytes": os.path.getsize(path),
+    }
+
+
+def schrijf_co2(manifest: dict) -> None:
+    print("co2…", file=sys.stderr)
+    co2 = load_co2()
+    manifest["co2"] = {}
+    manifest.setdefault("toelichting", {})["co2"] = (
+        "emissiefactor van de Nederlandse elektriciteitsmix (NED.nl, type 27 "
+        "ElectricityMix, opwek exclusief import), gram CO2 per kWh, uurwaarden, UTC-instants"
+    )
+    for jaar in sorted(co2):
+        info = write_co2(jaar, co2[jaar])
+        if info["ontbrekend"] > info["uren"] * 0.01:
+            print(f"  {jaar}: {info['ontbrekend']} gaten op {info['uren']} uren — overgeslagen",
+                  file=sys.stderr)
+            os.remove(os.path.join(OUTDIR, f"co2-{jaar}.bin"))
+            continue
+        manifest["co2"][str(jaar)] = info
+        vlag = "" if info["volledig"] else "  (loopt nog)"
+        print(f"  {jaar}: {info['uren']} uren, gemiddeld {info['gemiddelde_g_per_kwh']} g/kWh{vlag}",
+              file=sys.stderr)
 
 
 # ── prijzen ──────────────────────────────────────────────────────────────────
@@ -309,6 +390,15 @@ def schrijf_jaren(
 
 def main() -> None:
     os.makedirs(OUTDIR, exist_ok=True)
+    # Alleen de CO2-reeks bijwerken, in het bestaande manifest: de profielen
+    # opnieuw bouwen kost minuten en verandert niets aan de CO2-data.
+    if "--alleen-co2" in sys.argv:
+        with open(os.path.join(OUTDIR, "manifest.json")) as fh:
+            manifest = json.load(fh)
+        schrijf_co2(manifest)
+        with open(os.path.join(OUTDIR, "manifest.json"), "w") as fh:
+            json.dump(manifest, fh, indent=2)
+        return
     manifest: dict = {
         "gegenereerd": datetime.now(timezone.utc).isoformat(),
         "categorie": CATEGORY,
@@ -345,6 +435,8 @@ def main() -> None:
         print(f"  {jaar}: {info['uren']} uren, {info['ontbrekend']} aangevuld, "
               f"jaarconstante {info['jaarconstante_eur_per_kwh']:.4f} EUR/kWh{vlag}",
               file=sys.stderr)
+
+    schrijf_co2(manifest)
 
     print("profielen…", file=sys.stderr)
     bestanden = sorted(f for f in os.listdir(RAW_DYNAMIC) if f.endswith(".csv"))

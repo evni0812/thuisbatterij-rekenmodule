@@ -42,6 +42,7 @@ import {
   passThrough,
   planSocPath,
 } from "./solver";
+import { stuurVenster } from "./doel";
 import type { BatterySpec, DispatchResult, TariffSpec, Window } from "./types";
 
 /** Uur waarop de day-ahead prijzen voor morgen bekend worden (lokale tijd). */
@@ -217,6 +218,9 @@ export function dispatchRolling(
   );
   const levels = chooseSocLevels(usable, maxTransfer, options.socLevels);
   const replanSteps = options.replanSteps;
+  // Het venster zoals de planner het ziet (lib/model/doel.ts); de afrekening
+  // onderaan gebruikt het echte venster.
+  const { venster: stuur, alleenEigen } = stuurVenster(window);
 
   const index = new LocalTimeIndex(
     window.startMs[0]!,
@@ -263,14 +267,16 @@ export function dispatchRolling(
 
     const path = planSocPath(
       planResidual,
-      window.prices.importPrice,
-      window.prices.exportPrice,
+      stuur.prices.importPrice,
+      stuur.prices.exportPrice,
       t,
       horizonTo,
       spec,
       tariff,
       levels,
       soc,
+      true,
+      alleenEigen,
     );
 
     // Alleen het eerste stuk van het plan wordt uitgevoerd; daarna herplannen we
@@ -279,7 +285,7 @@ export function dispatchRolling(
     if (volgendeHerplan <= t) volgendeHerplan = naVolgende(t);
     const execTo = Math.min(volgendeHerplan, horizonTo, n);
     soc = executePath(
-      window,
+      stuur,
       path.subarray(0, execTo - t),
       t,
       execTo,
@@ -291,6 +297,7 @@ export function dispatchRolling(
       // De uitvoerder moet weten wat het plan bedoelde: eigen tekort dekken of
       // bewust verkopen. Zie executePath().
       planResidual,
+      alleenEigen,
     );
     if (execTo >= volgendeHerplan) volgendeHerplan = naVolgende(execTo);
     t = execTo;

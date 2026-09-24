@@ -21,6 +21,8 @@ import {
   STANDAARD_TERUGLEVERING_KWH,
   type BatteryPreset,
 } from "./presets";
+import { STANDAARD_CO2_DREMPEL_G } from "./model/co2";
+import { STANDAARD_DOEL } from "./model/doel";
 import { STANDAARD_KOSTENREGEL, kostenVan } from "./model/kosten";
 import { STANDAARD_SLIJTAGEDEEL } from "./strategie";
 import type { Instellingen } from "./url-state";
@@ -56,6 +58,8 @@ export const STANDAARD: Instellingen = {
   kostenPerKwh: STANDAARD_KOSTENREGEL.perKwhEur,
   kostenPerKw: STANDAARD_KOSTENREGEL.perKwEur,
   installatieEur: STANDAARD_KOSTENREGEL.installatieEur,
+  co2Drempel: STANDAARD_CO2_DREMPEL_G,
+  doel: STANDAARD_DOEL,
   prijsEur: null,
   capaciteitKwh: null,
   vermogenKw: null,
@@ -107,6 +111,9 @@ export function maakConfiguratie(inst: Instellingen): Configuration {
       spreadFactor: inst.spreiding,
     },
     ...(zon ? {} : { afnametype: "AZI" as const }),
+    // Alleen een afwijkend doel komt in de configuratie, zodat de hash van een
+    // gewone doorrekening (en daarmee de preload) niet verandert.
+    ...(inst.doel !== STANDAARD_DOEL ? { doel: inst.doel } : {}),
     battery: {
       ...preset.spec,
       capacityKwh: capaciteit,
@@ -137,6 +144,7 @@ export function maakConfiguratie(inst: Instellingen): Configuration {
     kostenPerKwhEur: kosten.perKwhEur,
     kostenPerKwEur: kosten.perKwEur,
     installatieEur: kosten.installatieEur,
+    co2DrempelG: inst.co2Drempel,
   };
 }
 

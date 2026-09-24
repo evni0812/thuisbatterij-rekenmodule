@@ -43,7 +43,10 @@ export const STRATEGIEEN: readonly Strategie[] = [
   },
   {
     id: "maximaal",
-    naam: "Maximaal rendement",
+    // Heette "Maximaal rendement", maar sinds er een apart doel "Rendement"
+    // is (lib/model/doel.ts) zou dat twee keer hetzelfde woord voor twee
+    // verschillende keuzes zijn.
+    naam: "Volop",
     deel: 0.2,
     kort: "Alleen het capaciteitsverlies dat er over de levensduur toch komt (20%) telt. De meeste beurten en de hoogste jaaropbrengst; de batterij sterft aan ouderdom met beurten over.",
   },

@@ -83,6 +83,14 @@ export interface PriceYear {
   levyEurPerKwh: number;
 }
 
+/** Emissiefactor van de stroommix per uur van één kalenderjaar, g/kWh. */
+export interface Co2Year {
+  year: number;
+  /** UTC-milliseconden van het eerste uur. */
+  firstHourMs: number;
+  gPerKwh: Float32Array;
+}
+
 /**
  * Hoe een asset wordt opgehaald.
  *
@@ -164,6 +172,38 @@ export async function loadPriceYear(
     allInPrice: series[1]!,
     levyEurPerKwh: info.jaarconstante_eur_per_kwh,
   };
+}
+
+export async function loadCo2Year(
+  manifest: Manifest,
+  year: number,
+  base = "/data",
+  haal: Ophaler = fetch,
+): Promise<Co2Year> {
+  const info = manifest.co2?.[String(year)];
+  if (!info) throw new Error(`geen emissiefactoren voor ${year}`);
+  const { series } = decodeBinary(await fetchBuffer(`${base}/co2-${year}.bin`, haal));
+  return { year, firstHourMs: localMidnightUtcMs(`${year}-01-01`), gPerKwh: series[0]! };
+}
+
+/**
+ * Rol een uurreeks uit over een kwartier-tijdas, verdraagzaam: een kwartier
+ * waarvoor de reeks (nog) geen uur heeft, krijgt NaN. Voor de emissiefactor
+ * is dat de juiste keuze: de NED-reeks loopt een paar uur achter op de prijzen,
+ * en een ontbrekend uur mag de rest van het jaar niet blokkeren. Wie erop
+ * rekent, slaat die kwartieren over en zegt hoeveel het er waren.
+ */
+export function expandHourlyToQuarters(
+  startMs: Float64Array,
+  firstHourMs: number,
+  src: Float32Array,
+): Float64Array {
+  const out = new Float64Array(startMs.length);
+  for (let i = 0; i < startMs.length; i++) {
+    const idx = Math.floor((startMs[i]! - firstHourMs) / MS_PER_HOUR);
+    out[i] = idx < 0 || idx >= src.length ? NaN : src[idx]!;
+  }
+  return out;
 }
 
 /**

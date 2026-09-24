@@ -19,6 +19,9 @@ import {
   type Ophaler,
   type PriceYear,
   type ProfileYear,
+  type Co2Year,
+  expandHourlyToQuarters,
+  loadCo2Year,
 } from "./loader";
 import { addDays, localMidnightUtcMs } from "./timeaxis";
 import { profielenVan, type Afnametype, type Manifest } from "./manifest";
@@ -147,6 +150,7 @@ export class Invoerbron {
   private manifest: Manifest | null = null;
   private readonly profielen = new Map<string, ProfileYear>();
   private readonly prijzen = new Map<number, PriceYear>();
+  private readonly co2s = new Map<number, Co2Year>();
   private readonly schalingen = new Map<string, NettingScale>();
 
   constructor(
@@ -184,6 +188,16 @@ export class Invoerbron {
       afnametype,
     );
     this.profielen.set(key, geladen);
+    return geladen;
+  }
+
+  /** De emissiefactoren van een jaar, of null als het manifest ze niet heeft. */
+  async co2(year: number): Promise<Co2Year | null> {
+    if (!this.gegevens.co2?.[String(year)]) return null;
+    const hit = this.co2s.get(year);
+    if (hit) return hit;
+    const geladen = await loadCo2Year(this.gegevens, year, this.baseUrl, this.haal);
+    this.co2s.set(year, geladen);
     return geladen;
   }
 
@@ -265,6 +279,7 @@ export class Invoerbron {
     for (const year of jaren) {
       const prof = await this.profiel(config.domain, year, type);
       const price = await this.prijs(year);
+      const co2 = await this.co2(year);
       const { start, end, firstDay, lastDay } = sliceRange(
         prof,
         config.from,
@@ -317,6 +332,8 @@ export class Invoerbron {
         window: {
           startMs,
           residualKwh: delen.residualKwh,
+          ...(co2 ? { co2GPerKwh: expandHourlyToQuarters(startMs, co2.firstHourMs, co2.gPerKwh) } : {}),
+          ...(config.doel && config.doel !== "rendement" ? { doel: config.doel } : {}),
           parts: {
             gridImportKwh: delen.gridImportKwh,
             gridExportKwh: delen.gridExportKwh,

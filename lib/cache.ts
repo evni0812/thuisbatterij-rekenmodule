@@ -63,6 +63,11 @@ export interface Bundel {
  * afgeronde centen, en met de heffing van het scenariojaar in plaats van die
  * van toen; dat verandert de bedragen van het scenario in de bundel.
  *
+ * Versie 14: elk jaar en elk resultaat dragen een CO2-balans (`co2`, uit de
+ * emissiefactor per uur van NED.nl). Een bewaard antwoord van versie 13 mist
+ * dat veld en het tabblad Uitstoot zou erop stuklopen. De bedragen veranderen
+ * niet.
+ *
  * Versie 13: de planner rekent standaard met de volle slijtageprijs als
  * drempel, en het deel dat hij meerekent is een instelling (de strategie). De
  * marginale drempel met 20%-ondergrens en proefrun is weg; de batterij handelt
@@ -81,7 +86,7 @@ export interface Bundel {
  * heffing per uur in plaats van een jaarconstante, en de uitvoerder die bewuste
  * verkoop aan het net doorlaat. Alle drie veranderen de bedragen.
  */
-export const MODEL_VERSIE = 13;
+export const MODEL_VERSIE = 14;
 
 const SLEUTEL_PREFIX = "tbat:v" + MODEL_VERSIE + ":";
 /**
@@ -159,6 +164,8 @@ export const VELDKLASSE: Record<keyof Configuration, "dispatch" | "afleiding"> =
   kostenPerKwhEur: "afleiding",
   kostenPerKwEur: "afleiding",
   installatieEur: "afleiding",
+  co2DrempelG: "afleiding",
+  doel: "dispatch",
 };
 
 /** De configuratie zonder de afleidingsvelden. */

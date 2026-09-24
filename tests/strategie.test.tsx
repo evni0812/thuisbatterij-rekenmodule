@@ -66,7 +66,7 @@ describe("de knoppen in de instellingen", () => {
 
   it("zet de schuif op de waarde van de gekozen stand", () => {
     const onChange = toon(1);
-    fireEvent.click(screen.getByRole("button", { name: "Maximaal rendement" }));
+    fireEvent.click(screen.getByRole("button", { name: "Volop" }));
     expect(onChange).toHaveBeenCalledWith({ slijtageDeel: 0.2 });
   });
 
@@ -122,7 +122,7 @@ describe("de laadbeurten over de levensduur", () => {
   it("toont de drempel als deel van de slijtageprijs", () => {
     toon(300, 0.2);
     // 20% van 10 ct is 2 ct; het bedrag en de noot staan samen in één cel.
-    const noot = screen.getByText(/maximaal rendement: 20% van de slijtageprijs/);
+    const noot = screen.getByText(/volop: 20% van de slijtageprijs/);
     expect(noot.parentElement?.textContent).toMatch(/^2 ct\/kWh/);
   });
 

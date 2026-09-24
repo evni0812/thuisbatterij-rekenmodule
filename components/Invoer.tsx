@@ -11,7 +11,10 @@
 
 import type { ReactNode } from "react";
 import { PRESETS, type BatteryPreset } from "../lib/presets";
-import { euro, getal, kwh } from "../lib/format";
+import { DOELEN, doelInfo } from "../lib/model/doel";
+import type { Doel } from "../lib/model/types";
+import { STRATEGIEEN, strategieVoor } from "../lib/strategie";
+import { centPerKwh, euro, getal, kwh, procent } from "../lib/format";
 
 export interface Waarschuwing {
   ernst: "info" | "let-op";
@@ -88,6 +91,25 @@ export function controleerInvoer(
   return uit;
 }
 
+/**
+ * Wat de gekozen slijtagestrategie in centen betekent, met een rekenvoorbeeld:
+ * bij inkoop tegen 20 ct moet de verkoop- of vermeden prijs minstens het
+ * omzettingsverlies plus de drempel hoger liggen voordat een beurt doorgaat.
+ */
+export function slijtageHint(deel: number, slijtageprijsEur: number, rondgang: number): string {
+  const st = strategieVoor(deel);
+  const drempel = slijtageprijsEur * deel;
+  const inkoop = 0.2;
+  const verlies = rondgang > 0 ? inkoop / rondgang - inkoop : 0;
+  const naam = st ? st.naam : `Eigen stand (${procent(deel)})`;
+  if (slijtageprijsEur <= 0) return `${naam}: de planner rekent ${procent(deel)} van de slijtageprijs als drempel per geleverde kWh.`;
+  return (
+    `${naam}: de planner rekent ${procent(deel)} van de slijtageprijs van ${centPerKwh(slijtageprijsEur)} mee, ` +
+    `dus ${centPerKwh(drempel)} per geleverde kWh. Bij inkoop tegen ${centPerKwh(inkoop)} gaat een beurt door als de stroom ` +
+    `later minstens ${centPerKwh(inkoop + verlies + drempel)} waard is: ${centPerKwh(verlies)} omzettingsverlies plus de drempel.`
+  );
+}
+
 function Veld({
   label,
   hint,
@@ -122,6 +144,12 @@ export function Invoer({
   onTeruglevering,
   onZonnepanelen,
   onPreset,
+  doel = "rendement",
+  onDoel,
+  slijtageDeel,
+  onSlijtageDeel,
+  slijtageprijsEur = 0,
+  rondgang = 0.88,
   onBereken,
   verouderd,
   bezig,
@@ -135,6 +163,16 @@ export function Invoer({
   onTeruglevering: (v: number) => void;
   onZonnepanelen?: (v: boolean) => void;
   onPreset: (id: string) => void;
+  /** Waar de planner op stuurt; zie lib/model/doel.ts. */
+  doel?: Doel;
+  onDoel?: (d: Doel) => void;
+  /** Deel van de slijtageprijs dat de planner meerekent; zie lib/strategie.ts. */
+  slijtageDeel?: number;
+  onSlijtageDeel?: (deel: number) => void;
+  /** Volle slijtageprijs per geleverde kWh van de gekozen batterij, euro; voor de uitleg in centen. */
+  slijtageprijsEur?: number;
+  /** Rondgangsrendement van de batterij, 0–1; voor het minimale prijsverschil in de uitleg. */
+  rondgang?: number;
   /** Reken door met de huidige invoer. */
   onBereken: () => void;
   /** De invoer is gewijzigd sinds de getoonde uitkomst. */
@@ -226,6 +264,54 @@ export function Invoer({
           </select>
         </Veld>
       </div>
+
+      {/* De twee strategiekeuzes, hier bij de batterij in plaats van diep in de
+          geavanceerde instellingen: waar de batterij op stuurt, en hoe zuinig hij
+          met zijn beurten is. Elke knop draagt zijn eigen uitleg als tooltip; de
+          regel eronder zegt wat de gekozen stand in centen betekent. */}
+      {onDoel ? (
+        <div className="invoer-keuze">
+          <span className="veld-label">Waar stuurt de batterij op?</span>
+          <div className="segment" role="group" aria-label="Doel van de batterij">
+            {DOELEN.map((d) => (
+              <button
+                key={d.id}
+                type="button"
+                aria-pressed={doel === d.id}
+                title={d.kort}
+                className={doel === d.id ? "segment-knop actief" : "segment-knop"}
+                onClick={() => onDoel(d.id)}
+              >
+                {d.naam}
+              </button>
+            ))}
+          </div>
+          <p className="invoer-keuze-hint">{doelInfo(doel).kort}</p>
+        </div>
+      ) : null}
+      {onSlijtageDeel !== undefined && slijtageDeel !== undefined ? (
+        <div className="invoer-keuze">
+          <span className="veld-label">Hoe zuinig met de laadbeurten?</span>
+          <div className="segment" role="group" aria-label="Slijtagestrategie">
+            {STRATEGIEEN.map((st) => {
+              const drempel = slijtageprijsEur * st.deel;
+              return (
+                <button
+                  key={st.id}
+                  type="button"
+                  aria-pressed={strategieVoor(slijtageDeel)?.id === st.id}
+                  title={`${st.naam}: ${procent(st.deel)} van de slijtageprijs (${centPerKwh(drempel)} per geleverde kWh) als drempel. ${st.kort}`}
+                  className={strategieVoor(slijtageDeel)?.id === st.id ? "segment-knop actief" : "segment-knop"}
+                  onClick={() => onSlijtageDeel(st.deel)}
+                >
+                  {st.naam}
+                </button>
+              );
+            })}
+          </div>
+          <p className="invoer-keuze-hint">{slijtageHint(slijtageDeel, slijtageprijsEur, rondgang)}</p>
+        </div>
+      ) : null}
 
       {/* De knop staat bij de velden, niet acht secties lager: wie zijn eigen
           getallen intikt moet daar zien dat er nog gerekend moet worden. */}

@@ -6,6 +6,10 @@ import { BatterijMaat } from "../components/BatterijMaat";
 import { BesparingPerJaar } from "../components/BesparingPerJaar";
 import { Bewaren } from "../components/Bewaren";
 import { Cashflow } from "../components/Cashflow";
+import { Co2Antwoord } from "../components/Co2Antwoord";
+import { Co2Maanden } from "../components/Co2Maanden";
+import { Co2Nederland } from "../components/Co2Nederland";
+import { Co2Uren } from "../components/Co2Uren";
 import { Laadbeurten } from "../components/Laadbeurten";
 import { Dagprofiel } from "../components/Dagprofiel";
 import { Geavanceerd } from "../components/Geavanceerd";
@@ -37,7 +41,9 @@ import { leesLaatste, leesProfielen, type Profiel } from "../lib/opslag";
 import { PRIJSPEILDATUM, geschatteOpwekKwh } from "../lib/presets";
 import { STANDAARD, kiesPreset, maakConfiguratie } from "../lib/configuratie";
 import { referentieJaar } from "../lib/model/analysis";
+import { STANDAARD_CO2_DREMPEL_G } from "../lib/model/co2";
 import { ankerVan, kostenVan, kostenregelVan } from "../lib/model/kosten";
+import { wearCostPerKwh } from "../lib/model/battery";
 import { UITLEG, type UitlegContext } from "../lib/uitleg";
 import { overgangsFinance } from "../lib/overgang";
 import { useAnalysis } from "../lib/useAnalysis";
@@ -282,6 +288,18 @@ export default function Page() {
                 prijsEur: null,
               }))
             }
+            doel={inst.doel}
+            onDoel={(d) => setInst((s) => ({ ...s, doel: d }))}
+            slijtageDeel={inst.slijtageDeel}
+            onSlijtageDeel={(deel) => setInst((s) => ({ ...s, slijtageDeel: deel }))}
+            slijtageprijsEur={wearCostPerKwh(prijs, preset.cycleLife, {
+              ...preset.spec,
+              capacityKwh: capaciteit,
+              maxChargeKw: vermogen,
+              maxDischargeKw: vermogen,
+              wearCostEurPerKwh: 0,
+            })}
+            rondgang={preset.spec.efficiency ** 2}
             onBereken={herbereken}
             verouderd={verouderd}
             bezig={busy}
@@ -498,10 +516,54 @@ export default function Page() {
           ) : null}
         </Paneel>
 
+        {/* ── Uitstoot ───────────────────────────────────────────────────── */}
+        <Paneel id="uitstoot" actief={tab}>
+          <div className="sectiekop">
+            <span className="eyebrow">Uitstoot · {TABS[4].vraag}</span>
+            <h2>Wat scheelt de batterij aan CO2?</h2>
+            <p>
+              Elke kWh uit het net is op dat uur met een bepaalde uitstoot
+              opgewekt: veel als gascentrales draaien, weinig als de zon
+              schijnt en het waait. Eerst wat de batterij voor jouw eigen
+              voetafdruk doet, dan wanneer stroom schoon is en waar de winst
+              valt, en tot slot wat het voor Nederland als geheel scheelt, want
+              daar telt je teruglevering ook mee.
+            </p>
+          </div>
+          {wachtOpResultaat}
+          {result && toon ? (
+            result.co2 ? (
+              <>
+                <Co2Antwoord
+                  co2={result.co2}
+                  periodeLabel={gemiddeldLabel}
+                  actie={uitleg("co2antwoord")}
+                />
+                <Co2Uren co2={result.co2} profielen={result.seasonProfiles ?? []} actie={uitleg("co2uren")} />
+                <Co2Maanden co2={result.co2} actie={uitleg("co2maanden")} />
+                <Co2Nederland
+                  co2={result.co2}
+                  drempel={toon.co2DrempelG ?? STANDAARD_CO2_DREMPEL_G}
+                  onDrempel={(g) => setInst((s) => ({ ...s, co2Drempel: g }))}
+                  actie={uitleg("co2nederland")}
+                />
+              </>
+            ) : (
+              <div className="notitie">
+                <p>
+                  Voor deze periode zijn er geen emissiefactoren van de stroommix in
+                  de data, dus de CO2-balans blijft leeg. De reeks van het Nationaal
+                  Energie Dashboard loopt van 2023 tot nu.
+                </p>
+              </div>
+            )
+          ) : null}
+        </Paneel>
+
         {/* ── Methode ────────────────────────────────────────────────────── */}
         <Paneel id="methode" actief={tab}>
           <div className="sectiekop">
-            <span className="eyebrow">Methode · {TABS[4].vraag}</span>
+            <span className="eyebrow">Methode · {TABS[5].vraag}</span>
             <h2>Waar de cijfers vandaan komen, en wat we eerlijk moeten zeggen</h2>
             <p>
               Geen voorspelling maar een doorrekening op wat er echt gebeurd is.

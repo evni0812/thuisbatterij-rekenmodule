@@ -155,6 +155,12 @@ export function planSocPath(
    * doel dat finalize() niet meet en laat hij onderweg kansen liggen.
    */
   valueTerminalSoc = true,
+  /**
+   * Zelfconsumptie: laden alleen uit het eigen overschot, ontladen alleen voor
+   * het eigen tekort. De batterij raakt het net dan nooit rechtstreeks aan.
+   * Standaard uit, zodat het rendementspad bit-voor-bit blijft wat het was.
+   */
+  alleenEigen = false,
 ): Float64Array {
   const n = to - from;
   const path = new Float64Array(Math.max(0, n));
@@ -208,8 +214,13 @@ export function planSocPath(
       const soc = j * stepKwh;
       // Toegestane AC-uitwisseling: begrensd door vermogen én door de ruimte
       // respectievelijk de lading die er is.
-      const hi = Math.min(maxIn, (usable - soc) / eta);
-      const lo = -Math.min(maxOut, soc * eta);
+      let hi = Math.min(maxIn, (usable - soc) / eta);
+      let lo = -Math.min(maxOut, soc * eta);
+      if (alleenEigen) {
+        // Niet meer laden dan er over is, niet meer ontladen dan er nodig is.
+        hi = Math.min(hi, Math.max(0, -r));
+        lo = Math.max(lo, -Math.max(0, r));
+      }
 
       let nc = 0;
       cand[nc++] = 0;
@@ -333,6 +344,8 @@ export function executePath(
   out: DispatchResult,
   adaptToActual = true,
   plannedResidual: Float64Array | null = null,
+  /** Zelfconsumptie: zie planSocPath. Ook de uitvoerder houdt zich eraan. */
+  alleenEigen = false,
 ): number {
   const usable = usableCapacityKwh(spec);
   const maxIn = maxChargeKwhPerStep(spec);
@@ -385,6 +398,11 @@ export function executePath(
         }
         discharge = Math.min(discharge, r + geplandeExport);
       }
+    }
+
+    if (alleenEigen) {
+      charge = Math.min(charge, Math.max(0, -r));
+      discharge = Math.min(discharge, Math.max(0, r));
     }
 
     charge = Math.min(charge, maxIn, (usable - soc) / eta);

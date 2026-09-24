@@ -23,4 +23,12 @@ describe("de kostenregel in de URL", () => {
     // Wat niet afwijkt, staat er niet in en komt dus ook niet terug.
     expect(terug.prijsEur).toBeUndefined();
   });
+
+  it("neemt het doel mee als het afwijkt, en negeert onzin", () => {
+    schrijfUrl({ ...STANDAARD, doel: "uitstoot" }, STANDAARD);
+    expect(window.location.search).toContain("doel=uitstoot");
+    expect(leesUrl().doel).toBe("uitstoot");
+    window.history.replaceState(null, "", "/?doel=maanreis");
+    expect(leesUrl().doel).toBeUndefined();
+  });
 });

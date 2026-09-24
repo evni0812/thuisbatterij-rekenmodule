@@ -24,13 +24,19 @@ import { Verliezen } from "../components/Verliezen";
 import { Verschuiving } from "../components/Verschuiving";
 import { Nettarief } from "../components/Nettarief";
 import { Wachtscherm } from "../components/Wachtscherm";
+import { Co2Antwoord } from "../components/Co2Antwoord";
+import { Co2Maanden } from "../components/Co2Maanden";
+import { Co2Nederland } from "../components/Co2Nederland";
+import { Co2Uren } from "../components/Co2Uren";
+import { co2Jaar } from "../lib/model/co2";
+import type { DispatchResult, Window } from "../lib/model/types";
 import { Uitbreiden } from "../components/Uitbreiden";
 import { VoorWie } from "../components/VoorWie";
 import { huishoudensVarianten } from "../lib/model/huishoudens";
 import { Verloop } from "../components/Verloop";
 import { dagenLater, maandagVan, type PeriodeReeks } from "../lib/model/periode";
 import { Tariefblad } from "../components/Tariefblad";
-import { controleerInvoer } from "../components/Invoer";
+import { Invoer, controleerInvoer, slijtageHint } from "../components/Invoer";
 import { expandPricesToQuarters, loadManifest, loadPriceYear, loadProfileYear } from "../lib/data/loader";
 import type { Manifest } from "../lib/data/manifest";
 import { addDays, localMidnightUtcMs } from "../lib/data/timeaxis";
@@ -62,7 +68,7 @@ const LEGE_INSTELLINGEN = {
   curtailment: true, analysejaren: 15, discontovoet: 0.03,
   prijsstijging: STANDAARD.prijsstijging, slijtageDeel: STANDAARD.slijtageDeel,
   kostenPerKwh: STANDAARD.kostenPerKwh, kostenPerKw: STANDAARD.kostenPerKw,
-  installatieEur: STANDAARD.installatieEur,
+  installatieEur: STANDAARD.installatieEur, co2Drempel: STANDAARD.co2Drempel, doel: STANDAARD.doel,
   degradatie: 0.015, prijsEur: null, capaciteitKwh: null, vermogenKw: null,
   opwekKwh: null, zonnepanelen: true,
 };
@@ -1447,8 +1453,16 @@ describe("de week bij het dagprofiel", () => {
 
     expect(document.body.textContent).toMatch(/in een week precies doet/);
 
-    // Zeven daglabels op de tijdas, niet acht kloktijden.
-    const as = [...container.querySelectorAll("text.as-label")].map((e) => e.textContent ?? "");
+    /*
+     * Alleen de labels van het dagprofiel zelf, niet die van elke figuur op de
+     * pagina. Onder het profiel hangt sinds kort het meterprofiel, met dezelfde
+     * klassen `chart` en `as-label`. Deze test telde die mee en slaagde nog
+     * net, omdat dat figuur zijn uren als "ma 00:00" schrijft en niet als
+     * "ma 7" — één opmaakwijziging daar en deze test valt om, over iets wat hij
+     * helemaal niet onderzoekt.
+     */
+    const profiel = container.querySelector("svg.chart")!;
+    const as = [...profiel.querySelectorAll("text.as-label")].map((e) => e.textContent ?? "");
     expect(as.filter((l) => /^(ma|di|wo|do|vr|za|zo) \d+$/.test(l)).length).toBe(7);
     expect(as.some((l) => /^\d\d:00$/.test(l))).toBe(false);
 
@@ -1557,5 +1571,132 @@ describe("het wachtscherm", () => {
       <Wachtscherm voortgang={null} bezig={false} verouderd={false} eersteKeer={false} onBereken={() => {}} />,
     );
     expect(container.textContent).toBe("");
+  });
+});
+
+describe("het tabblad Uitstoot", () => {
+  /**
+   * Een kunstmatig jaar van vier kwartieren op een zomerdag: één vuil uur met
+   * afname, twee schone kwartieren met teruglevering (overschot), en de
+   * batterij die de teruglevering opslaat en de afname vervangt.
+   */
+  function venster(ef: number[], residual: number[]): Window {
+    const start = Date.UTC(2025, 5, 15, 17, 0); // 19:00 CEST
+    return {
+      startMs: new Float64Array(ef.map((_, i) => start + i * 900_000)),
+      residualKwh: new Float64Array(residual),
+      prices: { importPrice: new Float64Array(ef.length), exportPrice: new Float64Array(ef.length) },
+      co2GPerKwh: new Float64Array(ef),
+    };
+  }
+  function dispatch(imp: number[], exp: number[]): DispatchResult {
+    const n = imp.length;
+    return {
+      gridImportKwh: new Float64Array(imp), gridExportKwh: new Float64Array(exp),
+      chargeKwh: new Float64Array(n), dischargeKwh: new Float64Array(n),
+      socKwh: new Float64Array(n), curtailedKwh: new Float64Array(n), totalCostEur: 0, equivalentCycles: 0,
+    } as unknown as DispatchResult;
+  }
+  const co2 = co2Jaar(
+    venster([400, 400, 60, 60], [2, 2, -1, -1]),
+    dispatch([2, 2, 0, 0], [0, 0, 1, 1]),
+    dispatch([0.5, 0.5, 0, 0], [0, 0, 0, 0]),
+  );
+  const profielen = [
+    { season: "winter" as const, days: 10, importBaseline: Array(24).fill(0.3), importBattery: Array(24).fill(0.3), exportBaseline: Array(24).fill(0), exportBattery: Array(24).fill(0) },
+    { season: "zomer" as const, days: 10, importBaseline: Array(24).fill(0.3).map((v, u) => (u === 19 ? 0.9 : v)), importBattery: Array(24).fill(0.3).map((v, u) => (u === 19 ? 0.2 : u === 13 ? 0.5 : v)), exportBaseline: Array(24).fill(0), exportBattery: Array(24).fill(0) },
+  ];
+
+  it("noemt de winst in kilo's en het aandeel, en zet de tegels neer", () => {
+    // Zonder batterij 4 kWh op 400 g = 1,6 kg; met 1 kWh op 400 g = 0,4 kg.
+    render(<Co2Antwoord co2={co2} periodeLabel="in 2025" />);
+    const tekst = document.body.textContent ?? "";
+    expect(tekst).toMatch(/scheelt 1,2 kg CO2 per jaar/);
+    expect(tekst).toMatch(/75% minder/);
+    expect(tekst).toMatch(/Uitstoot van je netafname/);
+    expect(tekst).toMatch(/km rijden/);
+  });
+
+  it("laat voor Nederland de teruglevering onder de drempel als overschot tellen", () => {
+    const opDrempel = vi.fn();
+    const { rerender } = render(<Co2Nederland co2={co2} drempel={100} onDrempel={opDrempel} />);
+    // Teruglevering op 60 g was overschot: verdringt niets, dus NL-winst = huishoudwinst 1,2 kg.
+    expect(document.body.textContent).toMatch(/Voor Nederland scheelt de batterij 1,2 kg/);
+    expect(document.body.textContent).toMatch(/Overschot onder 100 g\/kWh/);
+    fireEvent.change(screen.getByRole("slider"), { target: { value: "40" } });
+    expect(opDrempel).toHaveBeenCalledWith(40);
+    // Met een lage drempel telde de teruglevering wél: 2 kWh × 60 g = 0,12 kg
+    // ging verloren toen de batterij hem opsloeg; winst 1,08 kg.
+    rerender(<Co2Nederland co2={co2} drempel={40} onDrempel={opDrempel} />);
+    expect(document.body.textContent).toMatch(/scheelt de batterij 1,1 kg/);
+  });
+
+  it("tekent de maanden en de uren zonder om te vallen op een kort jaar", () => {
+    // Eén maand is te weinig voor een maandgrafiek; dan blijft hij weg.
+    const { container } = render(<Co2Maanden co2={co2} />);
+    expect(container.textContent).toBe("");
+    cleanup();
+    render(<Co2Uren co2={co2} profielen={profielen} />);
+    const tekst = document.body.textContent ?? "";
+    expect(tekst).toMatch(/Schoonste uur in de zomer/);
+    expect(tekst).toMatch(/19:00/);
+    expect(screen.getByRole("img", { name: /Emissiefactor per uur/ })).toBeDefined();
+  });
+});
+
+describe("de strategiekeuzes bij de invoer", () => {
+  function toon(over: Partial<React.ComponentProps<typeof Invoer>> = {}) {
+    const onDoel = vi.fn();
+    const onSlijtageDeel = vi.fn();
+    render(
+      <Invoer
+        afnameKwh={2500}
+        terugleveringKwh={2000}
+        presetId="zendure-800pro2"
+        onAfname={() => {}}
+        onTeruglevering={() => {}}
+        onPreset={() => {}}
+        onBereken={() => {}}
+        verouderd={false}
+        bezig={false}
+        doel="rendement"
+        onDoel={onDoel}
+        slijtageDeel={0.2}
+        onSlijtageDeel={onSlijtageDeel}
+        slijtageprijsEur={0.09}
+        rondgang={0.88}
+        {...over}
+      />,
+    );
+    return { onDoel, onSlijtageDeel };
+  }
+
+  it("zet doel en slijtagestrategie als snelle keuzes bij de batterij", () => {
+    const { onDoel, onSlijtageDeel } = toon();
+    const doel = screen.getByRole("group", { name: "Doel van de batterij" });
+    expect(within(doel).getByRole("button", { name: "Rendement" }).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(within(doel).getByRole("button", { name: "Zelfconsumptie" }));
+    expect(onDoel).toHaveBeenCalledWith("zelfconsumptie");
+    const slijtage = screen.getByRole("group", { name: "Slijtagestrategie" });
+    expect(within(slijtage).getByRole("button", { name: "Volop" }).getAttribute("aria-pressed")).toBe("true");
+    fireEvent.click(within(slijtage).getByRole("button", { name: "Zuinig" }));
+    expect(onSlijtageDeel).toHaveBeenCalledWith(1);
+  });
+
+  it("legt de gekozen stand uit in centen, ook in de tooltip", () => {
+    toon();
+    // 20% van 9 ct is 1,8 ct; bij inkoop 20 ct en 88% rondgang is het verlies
+    // 2,7 ct, dus de stroom moet later minstens 24,5 ct waard zijn.
+    const hint = slijtageHint(0.2, 0.09, 0.88);
+    expect(hint).toMatch(/Volop: de planner rekent 20% van de slijtageprijs van 9 ct\/kWh/);
+    expect(hint).toMatch(/1,8 ct\/kWh per geleverde kWh/);
+    expect(hint).toMatch(/minstens 24,5 ct\/kWh/);
+    expect(document.body.textContent).toContain(hint);
+    const knop = screen.getByRole("button", { name: "Zuinig" });
+    expect(knop.getAttribute("title")).toMatch(/100% van de slijtageprijs \(9 ct\/kWh/);
+  });
+
+  it("zegt bij een eigen stand dat het een eigen stand is", () => {
+    expect(slijtageHint(0.35, 0.09, 0.88)).toMatch(/^Eigen stand \(35%\)/);
   });
 });

@@ -14,6 +14,7 @@ export const TABS = [
   { id: "waarom", label: "Waarom", vraag: "waar de besparing vandaan komt" },
   { id: "wanneer", label: "Wanneer", vraag: "van jaar tot dag" },
   { id: "wat-als", label: "Wat als", vraag: "het nettarief, een andere maat, de looptijd" },
+  { id: "uitstoot", label: "Uitstoot", vraag: "wat het scheelt aan CO2" },
   { id: "methode", label: "Methode", vraag: "data, aannames en wat we niet weten" },
 ] as const;
 

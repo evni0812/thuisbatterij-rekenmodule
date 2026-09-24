@@ -36,6 +36,7 @@ import { dagenLater, maandagVan, type PeriodeReeks } from "../lib/model/periode"
 import { addDays } from "../lib/data/timeaxis";
 import { centPerKwh, datum, euroPrecies, getal, procent } from "../lib/format";
 import { Figure, Grafiek, kiesTicks, useTip, type TipInhoud } from "./chart-parts";
+import { Meterprofiel } from "./Meterprofiel";
 
 /**
  * Wat de vier panelen nodig hebben om getekend te worden.
@@ -494,6 +495,7 @@ export function Dagprofiel({
   );
 
   return (
+    <>
     <Figure
       titel={toontWeek ? "Wat de batterij in een week precies doet" : "Wat de batterij op een dag precies doet"}
       toelichting={
@@ -1134,6 +1136,18 @@ export function Dagprofiel({
 
       <Uitlezing dag={dag} i={i} perKw={perKw} perUur={toontWeek} />
     </Figure>
+    {/* Losse figuur eronder, op dezelfde dag of week: wat er door de meter
+        ging, zonder en met batterij. Zie Meterprofiel.tsx. */}
+    {dag ? (
+      <Meterprofiel
+        startMs={dag.startMs}
+        residualKwh={dag.residualKwh}
+        netKwh={dag.netKwh}
+        perKw={perKw}
+        perUur={toontWeek}
+      />
+    ) : null}
+    </>
   );
 }
 

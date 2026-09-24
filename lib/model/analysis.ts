@@ -6,6 +6,7 @@
  * meerjarige businesscase opbouwt.
  */
 
+import { co2Jaar, gemiddeldCo2, type Co2Jaar } from "./co2";
 import { LocalTimeIndex } from "../data/timeaxis";
 import { isPiekuur } from "../nettarief";
 import { equivalentCycles, usableCapacityKwh, wearCostPerKwh } from "./battery";
@@ -203,6 +204,11 @@ export interface YearKern {
    * je ziet wat de handel van de batterij opsoupeert.
    */
   wearCostEur: number;
+  /**
+   * De CO2-balans van dit jaar (lib/model/co2.ts), of null als er voor het
+   * jaar geen emissiefactoren in de data zitten.
+   */
+  co2: Co2Jaar | null;
 }
 
 /** Wat het optimum met perfecte kennis aan een jaar toevoegt. */
@@ -515,6 +521,11 @@ export interface ScenarioResult {
   stats: KeyStats;
   /** Verliezen per jaar, gemiddeld over de volledige profieljaren. */
   losses: EnergyLosses;
+  /**
+   * De CO2-balans, gemiddeld per jaar over de volledige profieljaren; null
+   * als een van die jaren geen emissiefactoren heeft.
+   */
+  co2: Co2Jaar | null;
 }
 
 /** De volledige doorrekening: het scenario-deel plus optimum, voorbeelddagen en gat. */
@@ -955,6 +966,7 @@ export function analyseWindow(
     peakHourImportKwh: piekBasis,
     peakHourImportWithBatteryKwh: piekBat,
     wearCostEur: dischargeTotal * opties.wearEurPerKwh,
+    co2: window.co2GPerKwh ? co2Jaar(window, base, real) : null,
   };
   let optimum: YearOptimum | undefined;
   if (opt) {
@@ -1740,6 +1752,7 @@ export function voegSamenScenario(
     finance,
     curve,
     priceGap: computePriceGap(input.windows, input.tariff),
+    co2: basis.every((y) => y.co2 !== null) ? gemiddeldCo2(basis.map((y) => y.co2!)) : null,
   };
 }
 

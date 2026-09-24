@@ -35,9 +35,9 @@ te maken, is de webpack-compile gesmoord door geheugendruk — kijk naar
 `vm.swapusage`. `npx next build --turbopack` doet hetzelfde werk in een fractie
 van het geheugen en levert dezelfde export op.
 
-## De pagina: vijf tabbladen, één verhaal
+## De pagina: zes tabbladen, één verhaal
 
-De pagina volgt de volgorde van een gesprek, in vijf tabbladen in de balk
+De pagina volgt de volgorde van een gesprek, in zes tabbladen in de balk
 bovenaan. Het open tabblad staat in de URL (`?tab=waarom`), de panelen blijven
 gemount zodat het dagprofiel zijn gekozen dag houdt.
 
@@ -47,6 +47,7 @@ gemount zodat het dagprofiel zijn gekozen dag houdt.
 | **Waarom** | Waar komt de besparing vandaan? | prijskloof, uitsplitsing, verliezen |
 | **Wanneer** | Wanneer gebeurt het? | van jaar tot jaar, door het jaar heen, de gemiddelde dag in winter en zomer, één dag van dichtbij |
 | **Wat als** | En als het anders was? | het nettarief, een andere maat, over de looptijd |
+| **Uitstoot** | Wat scheelt het aan CO2? | de voetafdruk van je netafname, wanneer stroom schoon is, de winst per maand, het perspectief van Nederland |
 | **Methode** | Waar komen de cijfers vandaan? | verantwoording, controlegegevens, "wat we niet weten" |
 
 **Twee manieren om van tabblad te wisselen.** De tablist in de balk is er om
@@ -488,6 +489,90 @@ De adviesregel boven de kaart volgt uit de cel met de hoogste netto contante
 waarde: een stekkerbatterij als de beste maat op of onder 0,8 kW ligt, anders
 een batterij met eigen groep, met erbij wat de beste maat aan de andere kant
 van de streep oplevert.
+
+### Waar de batterij op stuurt: rendement, zelfconsumptie of uitstoot
+
+De planner kent één taal: een prijs per kwartier voor afname en teruglevering,
+plus een slijtagedrempel. De drie doelen (`lib/model/doel.ts`) zijn drie
+manieren om het venster aan de solver te geven. **Rendement** is het venster
+zoals het is. **Zelfconsumptie** houdt dezelfde prijzen maar bindt de planner
+én de uitvoerder de handen: laden alleen uit eigen overschot, ontladen alleen
+voor eigen tekort (`alleenEigen` in `planSocPath` en `executePath`); binnen
+die grenzen kiest hij nog steeds het goedkoopste moment. Dat is wat de meeste
+batterijen standaard doen, en wat veel mensen intuïtief verwachten. **Uitstoot**
+zet de emissiefactor van dat uur op de plek van de afnameprijs (200 g wordt
+0,20, dus één cent staat gelijk aan tien gram; de slijtagedrempel van 1,8 ct
+wordt zo 18 g/kWh) en nul op de plek van de terugleverprijs: teruglevering is
+de voetafdruk van wie hem gebruikt. Een negatieve terugleverprijs blijft
+negatief zodat afregelen blijft werken. De afrekening (`finalize`, de
+CO2-balans) gebruikt altijd het echte venster; alleen het plan verandert.
+
+Het doel zit in het `Window` zelf (`doel`), niet in een optie: zo volgen alle
+doorrekeningen (analyse, raster, dagkiezer, huishoudens, optimum) vanzelf
+hetzelfde doel zonder dat het door tien aanroepen heen moet. Afwezig betekent
+rendement, zodat de hash en de preload van een gewone doorrekening niet
+veranderen. Bij sturen op uitstoot is het "optimum" ook in CO2 gerekend; de
+euro's van de realistische strategie kunnen er dan bovenuit komen.
+
+De keuze staat bij de invoer, samen met de slijtagestrategie (Zuinig,
+Gebalanceerd, Volop; heette "Maximaal rendement", maar dat botste met het doel
+Rendement). Elke knop draagt zijn uitleg als tooltip en de regel eronder zegt
+wat de stand in centen betekent: drempel per geleverde kWh, en het minimale
+prijsverschil bij inkoop tegen 20 ct inclusief omzettingsverlies.
+
+**Wat er door de meter ging** staat sinds september 2026 weer als losse figuur
+onder het dagprofiel (`components/Meterprofiel.tsx`): afname boven, teruglevering
+onder, stippellijn zonder en vlak met batterij, op dezelfde dag of week. Het
+was uit het dagprofiel gehaald omdat het af te leiden was uit het actiepaneel,
+maar afleiden is precies wat een lezer niet doet.
+
+### De CO2-balans
+
+Elke kWh uit het net is op dat uur met een bepaalde uitstoot opgewekt. Het
+Nationaal Energie Dashboard (ned.nl, TenneT en Gasunie) publiceert per uur de
+emissiefactor van de Nederlandse elektriciteitsmix: de totale opwek gedeeld op
+haar uitstoot, gram CO2 per kWh, import niet meegerekend. `scripts/fetch_co2.py`
+haalt die reeks op (type 27 ElectricityMix, 2023 tot nu, zonder gaten; draai
+hem met een Homebrew-Python, de systeem-Python van macOS krijgt een TLS-fout)
+en `scripts/build_assets.py --alleen-co2` bakt er `co2-<jaar>.bin` van, één
+float32-reeks per uur, zelfde tijdas als de prijzen. De loader rolt hem uit over
+de kwartieren met NaN waar de reeks nog geen uur had; die kwartieren tellen
+nergens mee en worden geteld. In 2025 lag de factor gemiddeld op 212 g/kWh,
+tussen 18 en 460, en zat hij in 26% van de uren onder de 100.
+
+**Het huishouden** (`lib/model/co2.ts`, `huishoudPerspectief`): de uitstoot
+van de netafname is per kwartier afname maal factor, zonder en met batterij.
+Alleen afname telt; wat je teruglevert is de voetafdruk van wie het gebruikt.
+De batterij wint door eigen zonnestroom te bewaren voor de avond (gas) en door,
+als hij van het net laadt, dat op een schoner uur te doen dan waarop hij
+levert. Voor het standaardhuishouden met de Zendure in 2025: 652 → 542 kg,
+110 kg minder, 17%. De omzettingsverliezen zitten erin. De factor is de
+gemiddelde van de opwek, niet de marginale (de duurste centrale, vrijwel altijd
+gas); marginaal zou de winst groter maken, maar bestaat niet als meetreeks.
+
+**Nederland** (`nederlandPerspectief`): teruglevering is geen verlies als een
+buur die kWh gebruikt en er minder uit een centrale hoeft te komen; die
+vermeden uitstoot gaat van de afname af. Behalve op uren waarop de mix al onder
+een drempel zit (standaard 100 g/kWh): dan is er meer groene stroom dan afname
+en gaat de kWh de grens over of wordt hij afgeschakeld. Erik koos de
+emissiefactor als maat voor overschot, boven de negatieve prijs of de netto
+export: de vraag is of de stroom op dat moment bij de buren nog iets
+verdringt, en dat zegt de factor direct. Om de drempel zonder herrekenen te
+kunnen verschuiven, bewaart de balans afname en teruglevering per klasse van
+20 g/kWh (31 klassen), met per klasse de uitstoot die de teruglevering elders
+vermeed. De schuif staat bij de figuur zelf, als afleidingsveld
+(`co2DrempelG`), niet in Geavanceerd. Voor het standaardhuishouden 2025: 585 →
+486 kg voor Nederland, 99 kg minder; van de 2.000 kWh teruglevering viel 928
+kWh in overschot-uren, met batterij nog 691.
+
+De balans zit in elk jaar (`YearKern.co2`) en gemiddeld over de volledige
+jaren in het resultaat (`co2`), dus in cache en preload; daarom `MODEL_VERSIE`
+14. De dispatch rekent er niet mee, dus de bedragen en het solver-harnas zijn
+ongewijzigd. Het tabblad Uitstoot toont het antwoord met tegels
+(`Co2Antwoord`), de factor per uur van de dag in winter en zomer met de afname
+die de batterij per uur weghaalt (`Co2Uren`), de winst per maand
+(`Co2Maanden`) en het Nederlandse perspectief met de drempelschuif en de
+teruglevering per klasse (`Co2Nederland`).
 
 ### Conventies die vastliggen
 

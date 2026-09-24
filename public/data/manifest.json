@@ -7,7 +7,8 @@
   "legenda": "* achter een jaar betekent: geen volledig kalenderjaar, genormaliseerd met de factor van een volledig jaar",
   "toelichting": {
     "prijzen": "EUR/kWh inclusief 21% btw, uurwaarden, UTC-instants",
-    "fracties": "genormaliseerd op jaarsom 1 per kalenderjaar; een deelperiode sommeert bewust op minder dan 1"
+    "fracties": "genormaliseerd op jaarsom 1 per kalenderjaar; een deelperiode sommeert bewust op minder dan 1",
+    "co2": "emissiefactor van de Nederlandse elektriciteitsmix (NED.nl, type 27 ElectricityMix, opwek exclusief import), gram CO2 per kWh, uurwaarden, UTC-instants"
   },
   "prijzen": {
     "2021": {
@@ -1799,5 +1800,43 @@
     "871692510000000005",
     "871694600000002173",
     "871694830000000309"
-  ]
+  ],
+  "co2": {
+    "2023": {
+      "uren": 8760,
+      "volledig": true,
+      "eerste_uur_utc": "2022-12-31T23:00:00+00:00",
+      "laatste_uur_utc": "2023-12-31T22:00:00+00:00",
+      "ontbrekend": 1,
+      "gemiddelde_g_per_kwh": 218.8,
+      "bytes": 35056
+    },
+    "2024": {
+      "uren": 8784,
+      "volledig": true,
+      "eerste_uur_utc": "2023-12-31T23:00:00+00:00",
+      "laatste_uur_utc": "2024-12-31T22:00:00+00:00",
+      "ontbrekend": 0,
+      "gemiddelde_g_per_kwh": 200.9,
+      "bytes": 35152
+    },
+    "2025": {
+      "uren": 8760,
+      "volledig": true,
+      "eerste_uur_utc": "2024-12-31T23:00:00+00:00",
+      "laatste_uur_utc": "2025-12-31T22:00:00+00:00",
+      "ontbrekend": 0,
+      "gemiddelde_g_per_kwh": 211.5,
+      "bytes": 35056
+    },
+    "2026": {
+      "uren": 6231,
+      "volledig": false,
+      "eerste_uur_utc": "2025-12-31T23:00:00+00:00",
+      "laatste_uur_utc": "2026-09-17T13:00:00+00:00",
+      "ontbrekend": 0,
+      "gemiddelde_g_per_kwh": 216.4,
+      "bytes": 24940
+    }
+  }
 }

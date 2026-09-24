@@ -16,6 +16,17 @@ export interface PriceYearInfo {
   bytes: number;
 }
 
+/** Eén jaar emissiefactoren van de stroommix, uurwaarden in g/kWh. */
+export interface Co2YearInfo {
+  uren: number;
+  volledig: boolean;
+  eerste_uur_utc: string;
+  laatste_uur_utc: string;
+  ontbrekend: number;
+  gemiddelde_g_per_kwh: number;
+  bytes: number;
+}
+
 export interface ProfileYearInfo {
   kwartieren: number;
   eerste_dag: string;
@@ -39,6 +50,11 @@ export interface Manifest {
   legenda: string;
   toelichting: Record<string, string>;
   prijzen: Record<string, PriceYearInfo>;
+  /**
+   * De emissiefactor van de Nederlandse elektriciteitsmix per uur (NED.nl),
+   * bestanden co2-<jaar>.bin. Optioneel: zonder blijft de CO2-balans leeg.
+   */
+  co2?: Record<string, Co2YearInfo>;
   profielen: Record<string, Record<string, ProfileYearInfo>>;
   /**
    * Dezelfde opbouw voor aansluitingen zónder invoeding (huishoudens zonder

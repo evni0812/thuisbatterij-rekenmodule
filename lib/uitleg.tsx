@@ -31,6 +31,9 @@ import {
 import { STRATEGIEEN, strategieVoor } from "./strategie";
 import { HUISHOUDENS_TERUGLEVERING } from "./model/huishoudens";
 import { STEKKER_GRENS_KW, kostenregelVan } from "./model/kosten";
+import { CO2_KLASSE_G, STANDAARD_CO2_DREMPEL_G, huishoudPerspectief, nederlandPerspectief } from "./model/co2";
+import { AUTO_G_PER_KM } from "../components/Co2Antwoord";
+import { doelInfo } from "./model/doel";
 import type { Configuration } from "./worker/protocol";
 
 export interface UitlegBlok {
@@ -79,6 +82,10 @@ export type UitlegId =
   | "batterijmaat"
   | "uitbreiden"
   | "voorwie"
+  | "co2antwoord"
+  | "co2uren"
+  | "co2maanden"
+  | "co2nederland"
   | "beurten"
   | "cashflow";
 
@@ -141,6 +148,18 @@ const KOSTEN_BRON = (c: Configuration) => {
       </>
     ),
   };
+};
+const NED_BRON = {
+  naam: "Nationaal Energie Dashboard (NED.nl), CO2-emissiefactor per uur",
+  wat: (
+    <>
+      De gemiddelde uitstoot van één kWh die in Nederland werd opgewekt, per
+      uur, in gram CO2 per kWh: de totale elektriciteitsproductie (type
+      ElectricityMix) gedeeld op haar uitstoot, zoals TenneT en Gasunie die op
+      ned.nl publiceren. Import telt daarin niet mee. Van 2023 tot nu, zonder
+      gaten; het lopende jaar loopt een paar uur achter.
+    </>
+  ),
 };
 const CE_BRON = {
   naam: "CE Delft en Netbeheer Nederland",
@@ -278,7 +297,11 @@ export const UITLEG: Record<UitlegId, (ctx: UitlegContext) => UitlegBlok> = {
             </>
           ) : undefined,
       },
-      letop: [GEEN_VOORSPELLING_LETOP, GEMIDDELD_LETOP, EEN_LEVERANCIER_LETOP],
+      letop: [
+        config.doel && config.doel !== "rendement" ? (
+          <>De batterij stuurt hier op <b>{doelInfo(config.doel).naam.toLowerCase()}</b>: {doelInfo(config.doel).kort} De besparing in euro's is daardoor lager dan bij sturen op rendement; dat is de prijs van die keuze, en die staat hier eerlijk.</>
+        ) : null,
+GEEN_VOORSPELLING_LETOP, GEMIDDELD_LETOP, EEN_LEVERANCIER_LETOP],
     };
   },
 
@@ -903,6 +926,108 @@ export const UITLEG: Record<UitlegId, (ctx: UitlegContext) => UitlegBlok> = {
       ],
       letop: [
         <>Alle huishoudens delen jouw afname. Wie meer of minder verbruikt, zit op een andere lijn; verander de afname en reken opnieuw om die te zien.</>,
+        GEMIDDELD_LETOP,
+      ],
+    };
+  },
+
+  co2antwoord: ({ result, config }) => {
+    const c = result.co2;
+    const n = volledigeJaren(result);
+    if (!c) {
+      return {
+        titel: "De CO2-balans",
+        watZieJe: <>Voor deze periode zijn er geen emissiefactoren in de data.</>,
+        bronnen: [NED_BRON],
+        stappen: [<>De reeks van NED loopt van 2023 tot nu; kies een periode daarbinnen.</>],
+      };
+    }
+    const h = huishoudPerspectief(c);
+    return {
+      titel: "Wat de batterij jouw voetafdruk scheelt",
+      watZieJe: <>De uitstoot van de stroom die je van het net haalt, zonder en met batterij, gemiddeld per jaar over de {n > 1 ? `${n} volledige jaren` : "gekozen periode"}.</>,
+      bronnen: [NED_BRON, PROFIEL_BRON(config)],
+      stappen: [
+        <>Per kwartier: wat je van het net afnam (uit de doorrekening, zonder en met batterij) maal de emissiefactor van dat uur. Opgeteld over het jaar is dat de uitstoot van je netafname.</>,
+        <>Alleen afname telt. Wat je teruglevert gebruikt iemand anders; dat is zijn voetafdruk. Het perspectief van Nederland, waar teruglevering wél meetelt, staat onderaan het tabblad.</>,
+        <>De batterij wint op twee manieren: hij bewaart je eigen zonnestroom voor de avond, zodat je dan niets van het net haalt terwijl gascentrales draaien, en als hij van het net laadt doet hij dat op uren waarop de mix schoner is dan wanneer hij levert.</>,
+        <>De gewogen factor is de uitstoot gedeeld door de afname: hoger dan het jaargemiddelde van de mix als je vooral 's avonds afneemt, lager als de batterij je afname naar schone uren schuift.</>,
+      ],
+      voorbeeld: {
+        regels: [
+          { wat: "Netafname zonder batterij", waarde: kwh(c.importBasisKwh) },
+          { wat: "Uitstoot daarvan", waarde: `${getal(h.zonderKg)} kg` },
+          { wat: "Netafname met batterij", waarde: kwh(c.importBatKwh) },
+          { wat: "Uitstoot daarvan", waarde: `${getal(h.metKg)} kg` },
+          { wat: "Winst per jaar", waarde: `${getal(h.winstKg)} kg`, uitkomst: true },
+          { wat: `Zoveel als autorijden (${AUTO_G_PER_KM} g/km)`, waarde: `${getal(Math.round((h.winstKg * 1000) / AUTO_G_PER_KM / 10) * 10)} km` },
+        ],
+      },
+      letop: [
+        <>De factor is de gemiddelde uitstoot van de Nederlandse opwek op dat uur, niet de marginale: wat de duurste centrale had gedaan als jij één kWh minder afnam. Marginaal zou de winst groter maken (bijna altijd gas, zo'n 400 g/kWh), maar bestaat niet als meetreeks.</>,
+        <>De omzettingsverliezen van de batterij zitten erin: wat hij extra van het net haalt om te laden, telt mee met de factor van dat uur.</>,
+        <>De autokilometers zijn een vergelijking, geen berekening: {AUTO_G_PER_KM} g/km is wat een gemiddelde benzineauto in de praktijk uitstoot.</>,
+      ],
+    };
+  },
+
+  co2uren: ({ result }) => ({
+    titel: "Wanneer stroom schoon is",
+    watZieJe: <>De gemiddelde emissiefactor per uur van de dag in winter en zomer, en per uur hoeveel afname de batterij van het net weghaalt.</>,
+    bronnen: [NED_BRON],
+    stappen: [
+      <>De lijn is het gemiddelde van de emissiefactor over alle dagen van het seizoen, per uur van de dag, over de volledige jaren. Zomer is april tot en met september, dezelfde grens als het nettarief.</>,
+      <>De staven eronder komen uit de seizoensprofielen op het tabblad Wanneer: de gemiddelde afname per uur zonder batterij min die met batterij. Boven de lijn haalt de batterij afname weg, eronder laadt hij van het net.</>,
+      <>Vallen de staven boven de lijn samen met de hoge uren van de curve, dan komt de CO2-winst uit de avond; vallen de staven onder de lijn samen met de lage uren, dan laadt de batterij schoon.</>,
+    ],
+    letop: [
+      <>Een gemiddeld dagprofiel vlakt uit: op één dag is de middagfactor lager en de avondpiek hoger dan hier. De optelling per kwartier in de balans gebruikt de echte uren, niet dit gemiddelde.</>,
+      result.co2 && result.co2.ontbrekendeKwartieren > 0
+        ? <>Voor {getal(result.co2.ontbrekendeKwartieren / 4)} uur ontbrak de factor (de NED-reeks loopt achter); die uren tellen nergens mee.</>
+        : <>De reeks van NED heeft geen gaten in de gekozen periode.</>,
+    ],
+  }),
+
+  co2maanden: () => ({
+    titel: "De CO2-winst per maand",
+    watZieJe: <>Hoeveel minder CO2 je netafname per maand kost met batterij, gemiddeld over de volledige jaren.</>,
+    bronnen: [NED_BRON],
+    stappen: [
+      <>Per maand: de uitstoot van de afname zonder batterij min die met batterij, opgeteld uit de kwartieren van die maand en gemiddeld over de jaren waarin de maand voorkomt.</>,
+      <>In de zomer bewaart de batterij zonnestroom die anders 's avonds door gasstroom vervangen werd: veel winst per kWh. In de winter verschuift hij afname van de avondpiek naar de nacht, en die nacht is niet altijd schoner: soms draait er dan meer kolen of minder wind.</>,
+    ],
+    letop: [<>Een maand kan negatief uitvallen: dan laadde de batterij op uren die vuiler waren dan de uren waarop hij leverde. Financieel kan dat nog steeds lonen, want de prijs volgt de mix niet één op één.</>],
+  }),
+
+  co2nederland: ({ result, config }) => {
+    const c = result.co2;
+    const drempel = config.co2DrempelG ?? STANDAARD_CO2_DREMPEL_G;
+    const nl = c ? nederlandPerspectief(c, drempel) : null;
+    return {
+      titel: "Het perspectief van Nederland",
+      watZieJe: <>Wat de batterij Nederland als geheel scheelt, met je teruglevering erbij: vanaf welke emissiefactor jouw zonnestroom elders nog iets verdringt, en hoeveel ervan in overschot-uren viel.</>,
+      bronnen: [NED_BRON, PROFIEL_BRON(config)],
+      stappen: [
+        <>Vanuit Nederland is jouw teruglevering geen verlies: een buur gebruikt die kWh en er hoeft minder uit een centrale te komen. Die vermeden uitstoot is de teruglevering maal de factor van dat uur, en gaat van de uitstoot van je afname af.</>,
+        <>Behalve op uren waarop de mix al onder de drempel zit ({getal(drempel)} g/kWh): dan is er meer groene stroom dan afname in Nederland, en gaat de kWh de grens over of wordt hij afgeschakeld. Die teruglevering verdringt in Nederland niets en telt niet mee.</>,
+        <>De balans bewaart afname en teruglevering per klasse van {CO2_KLASSE_G} g/kWh. Daardoor kun je de drempel verschuiven zonder opnieuw te rekenen; hij rondt af op de klassegrens.</>,
+        <>De batterij helpt Nederland op twee manieren: hij haalt afname weg uit vuile uren (net als voor jou), en wat hij opslaat komt vooral uit de overschot-uren, waar het toch niets verdrong. Wat hij opslaat uit nuttige uren gaat er juist van af: die buur moet dan toch naar de centrale.</>,
+      ],
+      voorbeeld: nl && c
+        ? {
+            regels: [
+              { wat: "Uitstoot afname zonder batterij", waarde: `${getal(c.importBasisKg)} kg` },
+              { wat: "Vermeden door teruglevering (boven de drempel)", waarde: `${getal(nl.vermedenZonderKg)} kg` },
+              { wat: "Voor Nederland, zonder batterij", waarde: `${getal(nl.zonderKg)} kg` },
+              { wat: "Voor Nederland, met batterij", waarde: `${getal(nl.metKg)} kg` },
+              { wat: "Winst voor Nederland", waarde: `${getal(nl.winstKg)} kg`, uitkomst: true },
+              { wat: "Teruglevering in overschot-uren, zonder → met", waarde: `${kwh(nl.overschotZonderKwh)} → ${kwh(nl.overschotMetKwh)}` },
+            ],
+          }
+        : undefined,
+      letop: [
+        <>De drempel is een keuze. Onder de 100 g/kWh bestaat de Nederlandse mix vrijwel alleen uit zon, wind en kernenergie; in 2025 gold dat voor ruim een kwart van de uren. Wie de drempel op nul zet, telt alle teruglevering als nuttig en ziet de twee perspectieven naar elkaar toe kruipen.</>,
+        <>Of een kWh werkelijk geëxporteerd of afgeschakeld werd, weet deze factor niet; NED publiceert de netto import en export wel, maar niet per aansluiting. De emissiefactor als maat voor overschot is een benadering, en een voorzichtige: op uren met veel export is de factor laag, en die uren tellen hier al als overschot.</>,
         GEMIDDELD_LETOP,
       ],
     };
