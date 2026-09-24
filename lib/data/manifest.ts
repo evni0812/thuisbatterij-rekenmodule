@@ -80,25 +80,38 @@ export function profielenVan(
   return afnametype === "AZI" ? (m.profielen_zonder ?? {}) : m.profielen;
 }
 
-/** Netgebieden met een herkenbare naam in plaats van een EAN-code. */
+/**
+ * Netgebieden met een herkenbare naam in plaats van een EAN-code.
+ *
+ * De code is de EAN van het netgebied waarop MFFBAS/EDSN de DYNAMIC-profielen
+ * publiceert. Bron van de koppeling code → netbeheerder: NEDU/CQM, "NEDU
+ * steekproef allocatie" (april 2021), Tabel 1, gecontroleerd tegen
+ * energiedatawijzer.nl. Tussen haakjes de regio of de oude netbeheerder die
+ * in het gebied is opgegaan, zodat twee gebieden van dezelfde beheerder uit
+ * elkaar te houden zijn.
+ *
+ * Een eerdere versie van deze tabel was grotendeels verzonnen: twaalf van de
+ * zeventien namen klopten niet (Coteq, Rendo en Enduris stonden op gebieden van
+ * Enexis en Stedin). tests/manifest.test.ts legt de tabel nu vast.
+ */
 export const NETGEBIED_NAMEN: Record<string, string> = {
-  "871685900000056162": "Liander",
-  "871687120000052782": "Stedin",
-  "871687400000002254": "Enexis",
+  "871685900000056162": "Liander (Noord-West Nederland)",
+  "871687120000052782": "Liander",
+  "871687400000002254": "Stedin (Utrecht)",
   "871687800090000015": "Westland Infra",
-  "871687910000219120": "Coteq",
-  "871688520000076884": "Rendo",
-  "871688600000002202": "Enduris",
-  "871689200000010161": "Liander (Randmeren)",
-  "871690200000000007": "Stedin (Delta)",
-  "871690499910000003": "Enexis (Zuid)",
-  "871690910000025589": "Liander (Noord)",
-  "871691280000000008": "Enexis (Noord)",
-  "871691600019188908": "Stedin (Utrecht)",
-  "871692100000010038": "Liander (Gelderland)",
-  "871692510000000005": "Enexis (Brabant)",
-  "871694600000002173": "Liander (Flevoland)",
-  "871694830000000309": "Stedin (Zuid-Holland)",
+  "871687910000219120": "Enexis (Brabant)",
+  "871688520000076884": "Enexis (Limburg)",
+  "871688600000002202": "Stedin (Delfland)",
+  "871689200000010161": "Stedin",
+  "871690200000000007": "Stedin (Enduris, Zeeland)",
+  "871690499910000003": "Enexis (Maastricht)",
+  "871690910000025589": "Liander (EWR)",
+  "871691280000000008": "Rendo",
+  "871691600019188908": "Coteq",
+  "871692100000010038": "Stedin (Midden-Holland)",
+  "871692510000000005": "Stedin (Schiedam)",
+  "871694600000002173": "Stedin (Zuid-Kennemerland)",
+  "871694830000000309": "Enexis (Noord)",
 };
 
 export function netgebiedNaam(ean: string): string {
