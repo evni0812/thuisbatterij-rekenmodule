@@ -169,8 +169,11 @@ describe("uitbreidingsstappen en advies", () => {
   });
 
   it("vindt de kolom die het dichtst bij het eigen vermogen ligt", () => {
-    expect(dichtsteKolom(RASTER_VERMOGENS, 2.4)).toBe(3);
-    expect(dichtsteKolom(RASTER_VERMOGENS, 3.5)).toBe(4);
-    expect(dichtsteKolom(RASTER_VERMOGENS, 0.8)).toBe(1);
+    // Assen: 0,8 · 1,2 · 2,4 · 3,6 · 5 · 10 kW.
+    expect(dichtsteKolom(RASTER_VERMOGENS, 2.4)).toBe(2);
+    expect(dichtsteKolom(RASTER_VERMOGENS, 2.5)).toBe(2);
+    expect(dichtsteKolom(RASTER_VERMOGENS, 3.5)).toBe(3);
+    expect(dichtsteKolom(RASTER_VERMOGENS, 0.8)).toBe(0);
+    expect(dichtsteKolom(RASTER_VERMOGENS, 1.4)).toBe(1);
   });
 });

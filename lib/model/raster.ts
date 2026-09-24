@@ -14,9 +14,19 @@ import type { AnalysisInput } from "./analysis";
 import type { BatterySpec, DispatchResult, TariffSpec } from "./types";
 import type { GridPoint } from "../worker/protocol";
 
-/** De maten die het raster doorrekent; ook de assen van de kaart. */
-export const RASTER_CAPACITEITEN = [1, 2, 3, 5, 7.5, 10, 15];
-export const RASTER_VERMOGENS = [0.5, 0.8, 1.5, 2.5, 3.6, 5];
+/**
+ * De maten die het raster doorrekent; ook de assen van de kaart.
+ *
+ * Alleen maten die je kunt kopen. Capaciteit van 2 kWh (een stekkerbatterij
+ * met één accu) tot 20 kWh (een grote vaste thuisbatterij). Vermogen: 0,8 kW
+ * is de grens voor een stekkerbatterij; 1,2 kW en 2,4 kW zijn de gangbare
+ * stappen daarboven (een batterij met een eigen groep op één fase), 3,6 kW een
+ * enkelfase-omvormer en 5 en 10 kW driefase-omvormers. De eerdere assen
+ * begonnen bij 1 kWh en 0,5 kW; die maten bestaan als product niet, en de
+ * kaart gaf er toch een advies over.
+ */
+export const RASTER_CAPACITEITEN = [2, 3, 5, 7.5, 10, 15, 20];
+export const RASTER_VERMOGENS = [0.8, 1.2, 2.4, 3.6, 5, 10];
 
 /**
  * Het jaar waarop het raster rekent: het meest recente volledige, anders het

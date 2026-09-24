@@ -299,8 +299,8 @@ describe("batterijmaat-raster", () => {
       allowCurtailment: true,
     };
 
-    const capaciteiten = [1, 2, 3, 5, 7.5, 10];
-    const vermogens = [0.5, 0.8, 1.5, 2.5, 3.6];
+    const capaciteiten = [2, 3, 5, 7.5, 10];
+    const vermogens = [0.8, 1.2, 2.4, 3.6];
 
     const raster: number[][] = [];
     for (const cap of capaciteiten) {

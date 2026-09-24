@@ -16,7 +16,7 @@
  * kaart wél weet wat elke maat kost, is de vraag direct te beantwoorden: wat
  * blijft er over. Terugverdientijd en jaarbesparing blijven als schakelaars.
  *
- * De streep tussen 0,8 en 1,5 kW is de grens tussen een stekkerbatterij en een
+ * De streep tussen 0,8 en 1,2 kW is de grens tussen een stekkerbatterij en een
  * batterij met een eigen groep: daar komt een installateur bij, en die zit in
  * de prijs van elke cel rechts van de streep.
  */

@@ -28,7 +28,7 @@ import { Figure, Grafiek, Legenda, Raster, Trefvlak, kiesTicks, useTip } from ".
 
 const B = 720;
 const H = 240;
-// Rechts genoeg ruimte voor het laatste aslabel: bij 16 px liep "15 kWh"
+// Rechts genoeg ruimte voor het laatste aslabel: bij 16 px liep "20 kWh"
 // half buiten het kader, want dat label staat gecentreerd op de rechterrand.
 const MARGE = { boven: 22, rechts: 38, onder: 34, links: 66 };
 
@@ -120,8 +120,8 @@ export function Uitbreiden({
         : "Bij jouw vermogen komt geen enkele capaciteit netto uit de kosten";
 
   /*
-   * Welke aslabels passen? De capaciteiten liggen niet gelijkmatig (1, 2, 3, 5,
-   * 7,5, 10, 15) en de as is lineair, dus onderaan staan ze dicht op elkaar.
+   * Welke aslabels passen? De capaciteiten liggen niet gelijkmatig (2, 3, 5,
+   * 7,5, 10, 15, 20) en de as is lineair, dus onderaan staan ze dicht op elkaar.
    * Een label dat te kort op zijn voorganger volgt slaan we over; de laatste
    * krijgt voorrang, want het uiteinde van de schaal moet leesbaar zijn.
    */
