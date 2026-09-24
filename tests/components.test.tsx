@@ -1838,7 +1838,7 @@ describe("de drie doelen naast elkaar op Wat als", () => {
     );
     // Elke kaart dezelfde cijfers.
     for (const k of kaarten) {
-      for (const label of ["Besparing per jaar", "CO2-winst per jaar", "Van het net", "Laadbeurten per jaar", "Terugverdiend na"]) {
+      for (const label of ["Besparing per jaar", "CO2-winst per jaar", "Van het net", "Laadbeurten per jaar", "Terugverdientijd"]) {
         expect(k.textContent).toContain(label);
       }
     }

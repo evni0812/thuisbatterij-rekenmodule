@@ -183,7 +183,7 @@ function Kaart({
             <dd>{getal(kaart.laadbeurten)}</dd>
           </div>
           <div>
-            <dt>Terugverdiend na</dt>
+            <dt>Terugverdientijd</dt>
             <dd>
               {kaart.terugverdientijd === null ? "niet binnen de looptijd" : jaren(kaart.terugverdientijd)}
               <span className="dd-noot">
@@ -382,7 +382,10 @@ function DoelDag({
                   x1={B - MARGE.rechts}
                   schaal={yK}
                   labelBreedte={MARGE.links}
-                  formatter={(v) => `${getal(Math.abs(v), 1)} kW`}
+                  // Alleen de bovenste grens krijgt een getal: de onderste
+                  // staat op dezelfde maat, en zijn label botste met de kop
+                  // van de strook eronder.
+                  formatter={(v) => (v < 0 ? "" : `${getal(v, 1)} kW`)}
                 />
                 {Array.from({ length: n }, (_, i) => {
                   const xi = x(i) + 0.5;
