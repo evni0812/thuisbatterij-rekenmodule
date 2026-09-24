@@ -8,7 +8,7 @@ import {
   wearCostPerKwh,
 } from "../lib/model/battery";
 import { dispatchBaseline } from "../lib/model/dispatch-baseline";
-import { DAY_AHEAD_PUBLICATION_HOUR, dispatchRolling, publicationMoments } from "../lib/model/dispatch-rolling";
+import { DAY_AHEAD_PUBLICATION_HOUR, dispatchRolling, forecastResidual, publicationMoments } from "../lib/model/dispatch-rolling";
 import { dispatchOptimal } from "../lib/model/dispatch-optimal";
 import { afleidingVanInvoer, breakdown as breakdownVoorTest, energyLosses, pasAfleidingToe, runAnalysis } from "../lib/model/analysis";
 import { buildPriceSeries } from "../lib/model/tariff";
@@ -178,7 +178,7 @@ describe("monotonie — de test die het oude model faalt", () => {
 
   it("meer vermogen levert nooit minder besparing op", () => {
     const w = makeWindow(14);
-    const kws = [0.5, 0.8, 1.2, 2.4, 3.6, 5, 8];
+    const kws = [0.8, 1.2, 2.4, 3.6, 5, 8];
     const pow = (kw: number) => spec({ maxChargeKw: kw, maxDischargeKw: kw });
     checkMonotoon(
       kws.map((k) => saving(w, pow(k), TARIFF, dispatchOptimal)),
@@ -995,5 +995,67 @@ describe("financiële instellingen raken de natuurkunde niet", () => {
     const lang = runAnalysis(invoer({ investmentEur: 60, cycleLife: 200, calendarLifeYears: 15 }));
     const kort = runAnalysis(invoer({ investmentEur: 60, cycleLife: 200, calendarLifeYears: 5 }));
     expect(kort.averageSavingEur).toBe(lang.averageSavingEur);
+  });
+});
+
+describe("de rand van een plan", () => {
+  it("trekt de slijtage af van wat restlading aan het eind waard is", () => {
+    /**
+     * Eerst tellend blok met vraag tegen 30 ct, dan een blok zonder vraag
+     * tegen 10 ct: gemiddeld 20 ct. Ontladen kost 15 ct slijtage en levert
+     * dus 15 ct netto op. Was restlading aan het eind 20 ct waard (zonder
+     * slijtage), dan hield de planner hem vast; met slijtage is hij 5 ct waard
+     * en gaat hij de vraag dekken.
+     */
+    const n = 16;
+    const residual = new Float64Array(n).map((_, i) => (i < 8 ? 0.1 : 0));
+    const ip = new Float64Array(n).map((_, i) => (i < 8 ? 0.3 : 0.1));
+    const ep = new Float64Array(n);
+    const s = spec({ capacityKwh: 2, wearCostEurPerKwh: 0.15 });
+    const vol = usableCapacityKwh(s);
+    const pad = planSocPath(residual, ip, ep, 0, n, s, TARIFF, 101, vol, true);
+    expect(pad[n - 1]!).toBeLessThan(vol - 0.5);
+  });
+
+  it("laat de rollende planner op het venstereinde niet met lading eindigen", () => {
+    // Het laatste plan van een venster waardeert restlading niet meer, net als
+    // het optimum: lading die na het venster niet meer geleverd wordt is
+    // gekocht maar nooit gebruikt.
+    const w = makeWindow(14);
+    const r = dispatchRolling(w, spec(), TARIFF);
+    const o = dispatchOptimal(w, spec(), TARIFF);
+    expect(r.socKwh[r.socKwh.length - 1]!).toBeLessThanOrEqual(o.socKwh[o.socKwh.length - 1]! + 1e-9);
+  });
+
+  it("gebruikt voor de voorspelling geen metingen van na het planmoment", () => {
+    // Dag 0 heeft vier kwartieren, dag 1 zes (de najaarswissel in het klein):
+    // de laatste twee posities van dag 1 hebben geen voorganger en vallen
+    // terug op het gemiddelde tot nu toe. "Tot nu" is het planmoment 2, niet
+    // het begin van dag 1.
+    const dagStarts = [0, 4];
+    const dagVan = Int32Array.from([0, 0, 0, 0, 1, 1, 1, 1, 1, 1]);
+    const a = Float64Array.from([1, 3, 100, 100, 5, 5, 5, 5, 5, 5]);
+    const b = Float64Array.from([1, 3, -50, -50, 7, 7, 7, 7, 7, 7]);
+    const uitA = new Float64Array(10);
+    const uitB = new Float64Array(10);
+    forecastResidual(a, dagStarts, dagVan, 2, 10, uitA);
+    forecastResidual(b, dagStarts, dagVan, 2, 10, uitB);
+    expect(Array.from(uitA)).toEqual(Array.from(uitB));
+    expect(uitA[9]).toBe(2);
+  });
+
+  it("maakt van een negatief vermogen nooit negatief laden of ontladen", () => {
+    const w = makeWindow(2);
+    const s = spec({ maxChargeKw: -1, maxDischargeKw: -1 });
+    const doel = new Float64Array(w.residualKwh.length).fill(5);
+    const out = emptyResult(w.residualKwh.length);
+    executePath(w, doel, 0, doel.length, s, TARIFF, 0, out, true);
+    for (let i = 0; i < doel.length; i++) {
+      expect(out.chargeKwh[i]!).toBeGreaterThanOrEqual(0);
+      expect(out.dischargeKwh[i]!).toBeGreaterThanOrEqual(0);
+      const links = w.residualKwh[i]! + out.chargeKwh[i]! - out.dischargeKwh[i]!;
+      const rechts = out.gridImportKwh[i]! - out.gridExportKwh[i]! - out.curtailedKwh[i]!;
+      expect(Math.abs(links - rechts)).toBeLessThan(1e-9);
+    }
   });
 });

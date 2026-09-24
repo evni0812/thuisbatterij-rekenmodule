@@ -63,6 +63,14 @@ export interface Bundel {
  * afgeronde centen, en met de heffing van het scenariojaar in plaats van die
  * van toen; dat verandert de bedragen van het scenario in de bundel.
  *
+ * Versie 15: de eindwaarde van de rollende planner trekt de slijtagedrempel af
+ * en het laatste plan van een venster waardeert restlading niet meer; de
+ * voorspelling kent op de zomertijdwissel geen metingen van na het
+ * planmoment; de standaardheffing is die van nu; teruglevering zonder
+ * batterij telt na afregelen, met `curtailedKwh` en `curtailedBaselineKwh`/
+ * `curtailedBatteryKwh` als nieuwe velden; de rasterassen zijn andere maten.
+ * Bedragen, kerncijfers en de vorm van het resultaat veranderen.
+ *
  * Versie 14: elk jaar en elk resultaat dragen een CO2-balans (`co2`, uit de
  * emissiefactor per uur van NED.nl). Een bewaard antwoord van versie 13 mist
  * dat veld en het tabblad Uitstoot zou erop stuklopen. De bedragen veranderen
@@ -86,7 +94,7 @@ export interface Bundel {
  * heffing per uur in plaats van een jaarconstante, en de uitvoerder die bewuste
  * verkoop aan het net doorlaat. Alle drie veranderen de bedragen.
  */
-export const MODEL_VERSIE = 14;
+export const MODEL_VERSIE = 15;
 
 const SLEUTEL_PREFIX = "tbat:v" + MODEL_VERSIE + ":";
 /**

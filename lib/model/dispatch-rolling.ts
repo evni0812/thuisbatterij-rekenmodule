@@ -189,9 +189,13 @@ export function forecastResidual(
     if (count > 0) {
       out[t] = sum / count;
     } else {
-      // Zonder historie (de eerste dag) is het gemiddelde van wat we tot nu toe
-      // zagen de beste schatting; is er niets, dan nul.
-      const upto = dayStarts[day] ?? 0;
+      // Zonder historie (de eerste dag, of het vijfentwintigste uur van de
+      // dag dat de zomertijd eindigt) is het gemiddelde van wat we tot nu toe
+      // zagen de beste schatting; is er niets, dan nul. "Tot nu toe" is tot het
+      // planmoment, niet tot het begin van de voorspelde dag: die ligt bij een
+      // horizon tot en met morgen na `from`, en dan zou de voorspelling de
+      // metingen van de rest van vandaag al kennen.
+      const upto = Math.min(dayStarts[day] ?? 0, from);
       let all = 0;
       for (let i = 0; i < upto; i++) all += actual[i]!;
       out[t] = upto > 0 ? all / upto : 0;
@@ -275,7 +279,11 @@ export function dispatchRolling(
       tariff,
       levels,
       soc,
-      true,
+      // Restlading waarderen, behalve in het laatste plan van het venster:
+      // raakt de horizon het venstereinde, dan telt net als bij het optimum
+      // alleen wat er werkelijk bespaard is. Anders plande de batterij het
+      // jaar vol te eindigen met lading die nooit meer geleverd werd.
+      horizonTo < n,
       alleenEigen,
     );
 

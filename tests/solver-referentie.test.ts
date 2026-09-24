@@ -6,9 +6,9 @@
  * planblokken uit het profieljaar 2025, voor batterijen van klein tot
  * groot-en-traag (S ≈ 400 niveaus). Op jaarniveau: de kosten en een hash over
  * de dispatch-arrays van `dispatchRolling` en `dispatchOptimal`, tegen getallen
- * die op die dag zijn vastgelegd. Die literalen mogen nooit meer bewegen: wordt
- * deze test rood, dan is een optimalisatie fout, en is dat geen reden om
- * MODEL_VERSIE op te hogen.
+ * die op die dag zijn vastgelegd. Die literalen bewegen alleen bij een bewuste
+ * modelwijziging, samen met MODEL_VERSIE en met de reden bij GEVALLEN; wordt
+ * deze test rood door een optimalisatie, dan is de optimalisatie fout.
  *
  * ── Wat er met dit harnas is geprobeerd ─────────────────────────────────────
  * Per-niveau tabellen voor de lading, de grenzen hi/lo en hun tussenwaarden
@@ -63,7 +63,16 @@ function hash(arrs: Float64Array[]): string {
   return (h >>> 0).toString(16);
 }
 
-/** Vastgelegd op 17 september 2026 met de solver van vóór de optimalisaties. */
+/**
+ * Vastgelegd op 17 september 2026 met de solver van vóór de optimalisaties, en
+ * opnieuw op 24 september 2026 (MODEL_VERSIE 15) na drie modelwijzigingen die
+ * de uitkomst bewust veranderen: de eindwaarde van de rollende planner trekt
+ * de slijtagedrempel af, het laatste plan van een venster waardeert restlading
+ * niet meer (zoals het optimum), en de standaardconfiguratie rekent met de
+ * heffing van nu. De maat "15 kWh / 0,5 kW" is "20 kWh / 0,8 kW" geworden: een
+ * batterij van 0,5 kW bestaat niet, en 20 kWh op 0,8 kW houdt het grid op
+ * ruim 390 niveaus, waar dit geval voor bedoeld is.
+ */
 const GEVALLEN: {
   naam: string;
   inst: Partial<Instellingen>;
@@ -72,14 +81,14 @@ const GEVALLEN: {
   optimal: number;
   optimalHash: string;
 }[] = [
-  { naam: "Zendure 1,92 kWh / 0,8 kW", inst: {}, rolling: 526.7709196871565, rollingHash: "5ed3145e", optimal: 517.2812897247147, optimalHash: "d4fcc7d6" },
-  { naam: "Marstek 5,1 kWh, volle slijtage", inst: { presetId: "marstek-venus-e3", slijtageDeel: 1, prijsEur: 1199 }, rolling: 427.43857837733515, rollingHash: "9180953d", optimal: 392.97947005046007, optimalHash: "f9759aaa" },
+  { naam: "Zendure 1,92 kWh / 0,8 kW", inst: {}, rolling: 460.01503597489676, rollingHash: "6a26fb0a", optimal: 451.98777892600737, optimalHash: "4fe2e8" },
+  { naam: "Marstek 5,1 kWh, volle slijtage", inst: { presetId: "marstek-venus-e3", slijtageDeel: 1, prijsEur: 1199 }, rolling: 369.45798588322634, rollingHash: "12dd4fc4", optimal: 342.92522672774214, optimalHash: "ab57905f" },
   // De prijs staat hier vast: sinds de kostenregel krijgt een overschreven maat
   // anders een eigen prijs, en daarmee een andere slijtagedrempel. Dit harnas
   // gaat over de solver, niet over de prijs.
-  { naam: "15 kWh / 0,5 kW", inst: { capaciteitKwh: 15, vermogenKw: 0.5, prijsEur: 699 }, rolling: 451.3598935342849, rollingHash: "a5f96e71", optimal: 419.31590709164783, optimalHash: "a395af2d" },
-  { naam: "15 kWh / 0,5 kW zonder afregelen", inst: { capaciteitKwh: 15, vermogenKw: 0.5, prijsEur: 699, curtailment: false }, rolling: 461.456574668469, rollingHash: "2b788c65", optimal: 429.3838556342103, optimalHash: "a395af2d" },
-  { naam: "zonder zonnepanelen", inst: { zonnepanelen: false }, rolling: 628.0923380665662, rollingHash: "e9a8a753", optimal: 627.6517252839958, optimalHash: "31d222b6" },
+  { naam: "20 kWh / 0,8 kW", inst: { capaciteitKwh: 20, vermogenKw: 0.8, prijsEur: 699 }, rolling: 347.96636603607084, rollingHash: "be77a58d", optimal: 305.5329230933238, optimalHash: "6b8bb14e" },
+  { naam: "20 kWh / 0,8 kW zonder afregelen", inst: { capaciteitKwh: 20, vermogenKw: 0.8, prijsEur: 699, curtailment: false }, rolling: 355.8728992055789, rollingHash: "a0b2bd37", optimal: 313.1948498324358, optimalHash: "6b8bb14e" },
+  { naam: "zonder zonnepanelen", inst: { zonnepanelen: false }, rolling: 537.9500824103864, rollingHash: "7fe491c", optimal: 537.4753299500354, optimalHash: "21b73bb9" },
 ];
 
 let bron: Invoerbron;

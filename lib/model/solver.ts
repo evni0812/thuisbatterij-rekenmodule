@@ -178,10 +178,19 @@ export function planSocPath(
   let cur = new Float64Array(levels);
 
   if (valueTerminalSoc) {
+    // Wat een kWh in de cel aan het eind van het blok nog waard is: hij levert
+    // later η kWh aan de AC-kant en bespaart dan de gemiddelde afnameprijs,
+    // maar die levering kost ook slijtage, precies de drempel die de planner
+    // binnen het blok rekent. Zonder die aftrek was restlading aan de
+    // horizongrens meer waard dan dezelfde lading die binnen het blok werd
+    // ontladen, en hield de batterij lading vast die hij nooit rendabel kwijt
+    // kon. Nooit negatief: lading weggooien kan niet, dus slechter dan nul
+    // wordt hij niet.
     let avgImport = 0;
     for (let t = from; t < to; t++) avgImport += importPrice[t]!;
     avgImport /= n;
-    for (let j = 0; j < levels; j++) next[j] = -j * stepKwh * eta * avgImport;
+    const waardePerKwh = eta * Math.max(0, avgImport - wear);
+    for (let j = 0; j < levels; j++) next[j] = -j * stepKwh * waardePerKwh;
   }
 
   // De gekozen actie per (stap, niveau), als AC-uitwisseling in kWh. Float32
@@ -405,8 +414,11 @@ export function executePath(
       discharge = Math.min(discharge, Math.max(0, r));
     }
 
-    charge = Math.min(charge, maxIn, (usable - soc) / eta);
-    discharge = Math.min(discharge, maxOut, (soc * eta));
+    // Nooit negatief: een negatief vermogen in de invoer, of een afrondingsrest
+    // in `usable − soc`, zou anders van laden ontladen maken en de
+    // energiebalans breken.
+    charge = Math.max(0, Math.min(charge, maxIn, (usable - soc) / eta));
+    discharge = Math.max(0, Math.min(discharge, maxOut, soc * eta));
     if (charge > 0 && discharge > 0) discharge = 0;
 
     soc = Math.max(0, Math.min(usable, soc + charge * eta - discharge / eta));

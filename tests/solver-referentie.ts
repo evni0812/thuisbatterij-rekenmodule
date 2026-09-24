@@ -57,7 +57,11 @@ export function planSocPathReferentie(
     let avgImport = 0;
     for (let t = from; t < to; t++) avgImport += importPrice[t]!;
     avgImport /= n;
-    for (let j = 0; j < levels; j++) next[j] = -j * stepKwh * eta * avgImport;
+    // Bijgewerkt op 24 september 2026 (MODEL_VERSIE 15): de eindwaarde trekt
+    // de slijtagedrempel af, zoals de solver zelf. Een modelwijziging, geen
+    // optimalisatie; de referentie volgt het model, niet andersom.
+    const waardePerKwh = eta * Math.max(0, avgImport - wear);
+    for (let j = 0; j < levels; j++) next[j] = -j * stepKwh * waardePerKwh;
   }
 
   // De gekozen actie per (stap, niveau), als AC-uitwisseling in kWh. Float32
