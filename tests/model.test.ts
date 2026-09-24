@@ -294,6 +294,54 @@ describe("curtailment", () => {
     expect(a.totalCostEur).toBeGreaterThan(0);   // je betaalt om terug te leveren
     expect(b.totalCostEur).toBeCloseTo(0, 9);    // afregelen kost niets
   });
+
+  it("telt teruglevering zonder en met batterij allebei na afregelen", () => {
+    /**
+     * Zonder batterij telde de teruglevering eerst het ruwe overschot uit de
+     * residual, inclusief wat er bij een negatieve prijs werd afgeregeld; met
+     * batterij telde alleen wat door de meter ging. Standaard stond er daardoor
+     * 2.014 tegen 1.105 kWh, waar 1.407 tegen 1.105 klopt. Afgeregelde stroom
+     * staat nu apart en telt niet als eigen verbruik.
+     */
+    const w0 = makeWindow(14, 3);
+    const market = new Float64Array(w0.residualKwh.length);
+    for (let i = 0; i < market.length; i++) {
+      const uur = (i % 96) / 4;
+      market[i] = uur >= 11 && uur < 15 ? -0.04 : 0.12;
+    }
+    const tarief: TariffSpec = { ...TARIFF, allowCurtailment: true };
+    const w: Window = { ...w0, prices: buildPriceSeries(market, tarief) };
+    let ruwOverschot = 0;
+    for (const r of w.residualKwh) if (r < 0) ruwOverschot -= r;
+    const opwek = ruwOverschot * 1.5;
+    const res = runAnalysis({
+      windows: [{ year: 2025, firstDay: "2025-01-01", lastDay: "2025-01-14", isFullYear: true, window: w }],
+      battery: spec({ capacityKwh: 2, maxChargeKw: 0.8, maxDischargeKw: 0.8 }),
+      tariff: tarief,
+      investmentEur: 800,
+      cycleLife: 6000,
+      calendarLifeYears: 15,
+      years: 15,
+      priceEscalation: 0,
+      discountRate: 0.03,
+      calendarFadePerYear: 0.015,
+      residualValueEur: 0,
+      annualProductionKwh: opwek,
+    });
+    const s = res.stats;
+    const basis = dispatchBaseline(w, tarief);
+    const som = (a: Float64Array) => a.reduce((x, y) => x + y, 0);
+    expect(s.gridExportBaselineKwh).toBeCloseTo(som(basis.gridExportKwh), 9);
+    expect(s.curtailedBaselineKwh).toBeGreaterThan(0);
+    expect(s.gridExportBaselineKwh + s.curtailedBaselineKwh).toBeCloseTo(ruwOverschot, 9);
+    // Eigen verbruik: afgeregeld telt aan beide kanten als niet gebruikt.
+    expect(s.selfConsumptionBaseline!).toBeCloseTo(1 - ruwOverschot / opwek, 9);
+    expect(s.selfConsumptionBattery!).toBeCloseTo(
+      1 - (s.gridExportBatteryKwh + s.curtailedBatteryKwh) / opwek,
+      9,
+    );
+    expect(s.curtailedBatteryKwh).toBeLessThanOrEqual(s.curtailedBaselineKwh + 1e-9);
+  });
 });
 
 describe("slijtage telt niet dubbel", () => {

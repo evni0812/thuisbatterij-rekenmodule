@@ -173,9 +173,20 @@ export interface YearKern {
   firstDay: string;
   lastDay: string;
   isFullYear: boolean;
-  /** Netto afname en teruglevering zonder batterij, kWh. */
+  /**
+   * Netto afname en teruglevering zonder batterij, kWh: wat er door de meter
+   * ging, dus NA afregelen. Afgeregeld overschot is niet teruggeleverd en staat
+   * apart in `curtailedKwh`.
+   */
   gridImportKwh: number;
   gridExportKwh: number;
+  /**
+   * Overschot dat is afgeregeld in plaats van teruggeleverd (alleen bij een
+   * negatieve terugleverprijs en afregelen aan), zonder en met batterij, kWh.
+   * Geen teruglevering en ook geen eigen verbruik: die stroom is nooit gebruikt.
+   */
+  curtailedKwh: number;
+  curtailedWithBatteryKwh: number;
   baselineCostEur: number;
   realisticCostEur: number;
   realisticSavingEur: number;
@@ -183,7 +194,7 @@ export interface YearKern {
   cyclesPerYear: number;
   /** Netafname met batterij, kWh — waar de reductie uit volgt. */
   gridImportWithBatteryKwh: number;
-  /** Netinvoeding met batterij, kWh. */
+  /** Netinvoeding met batterij, kWh, na afregelen. */
   gridExportWithBatteryKwh: number;
   /** Energie die door de batterij ging, AC-zijdig geleverd, kWh. */
   throughputKwh: number;
@@ -245,10 +256,25 @@ export interface KeyStats {
   /** Netafname zonder en met batterij, kWh per jaar. */
   gridImportBaselineKwh: number;
   gridImportBatteryKwh: number;
-  /** Netinvoeding zonder en met batterij, kWh per jaar. */
+  /**
+   * Netinvoeding zonder en met batterij, kWh per jaar: wat er door de meter
+   * ging, na afregelen. Beide kanten op dezelfde grondslag; eerder telde
+   * "zonder" het ruwe overschot inclusief het afgeregelde deel en "met" niet,
+   * waardoor de batterij veel meer teruglevering leek weg te nemen dan hij deed.
+   */
   gridExportBaselineKwh: number;
   gridExportBatteryKwh: number;
-  /** Zelfconsumptie: welk deel van je opwek je zelf gebruikt, 0–1. */
+  /**
+   * Afgeregeld overschot zonder en met batterij, kWh per jaar: bij een
+   * negatieve terugleverprijs weggegooid in plaats van teruggeleverd. Telt
+   * niet als teruglevering en niet als eigen verbruik.
+   */
+  curtailedBaselineKwh: number;
+  curtailedBatteryKwh: number;
+  /**
+   * Zelfconsumptie: welk deel van je opwek je zelf gebruikt, 0–1. Afgeregelde
+   * stroom telt niet mee als zelf gebruikt.
+   */
   selfConsumptionBaseline: number | null;
   selfConsumptionBattery: number | null;
   /** Autarkie: welk deel van je verbruik je zelf dekt, 0–1. */
@@ -919,21 +945,27 @@ export function analyseWindow(
   const real = opties.realistischAlBerekend ?? dispatchRolling(window, spec, tariff);
   const opt = opties.metOptimum ? dispatchOptimal(window, spec, tariff) : undefined;
 
+  // Zonder en met batterij op dezelfde grondslag: wat er door de meter ging,
+  // na afregelen. Het ruwe overschot uit de residual telde eerder ook het
+  // afgeregelde deel als teruglevering, alleen aan de kant zonder batterij.
   let imp = 0;
   let exp = 0;
-  for (let i = 0; i < window.residualKwh.length; i++) {
-    const r = window.residualKwh[i]!;
-    if (r > 0) imp += r;
-    else exp -= r;
+  let afgeregeld = 0;
+  for (let i = 0; i < base.gridImportKwh.length; i++) {
+    imp += base.gridImportKwh[i]!;
+    exp += base.gridExportKwh[i]!;
+    afgeregeld += base.curtailedKwh[i]!;
   }
 
   let dischargeTotal = 0;
   let importWithBattery = 0;
   let exportWithBattery = 0;
+  let afgeregeldMet = 0;
   for (let i = 0; i < real.dischargeKwh.length; i++) {
     dischargeTotal += real.dischargeKwh[i]!;
     importWithBattery += real.gridImportKwh[i]!;
     exportWithBattery += real.gridExportKwh[i]!;
+    afgeregeldMet += real.curtailedKwh[i]!;
   }
 
   const realSaving = base.totalCostEur - real.totalCostEur;
@@ -953,6 +985,8 @@ export function analyseWindow(
     isFullYear,
     gridImportKwh: imp,
     gridExportKwh: exp,
+    curtailedKwh: afgeregeld,
+    curtailedWithBatteryKwh: afgeregeldMet,
     baselineCostEur: base.totalCostEur,
     realisticCostEur: real.totalCostEur,
     realisticSavingEur: realSaving,
@@ -1539,14 +1573,19 @@ function metZelfvoorziening(stats: KeyStats, opwek: number | undefined): KeyStat
   const impBat = stats.gridImportBatteryKwh;
   const expBasis = stats.gridExportBaselineKwh;
   const expBat = stats.gridExportBatteryKwh;
-  const directEigen = opwek !== undefined ? Math.max(0, opwek - expBasis) : null;
+  // Wat niet zelf gebruikt is: teruggeleverd plus afgeregeld. Afgeregelde
+  // stroom is weggegooid, niet verbruikt; telde je hem niet mee, dan steeg het
+  // eigen verbruik zonder batterij met elke negatieve middag.
+  const nietGebruiktBasis = expBasis + stats.curtailedBaselineKwh;
+  const nietGebruiktBat = expBat + stats.curtailedBatteryKwh;
+  const directEigen = opwek !== undefined ? Math.max(0, opwek - nietGebruiktBasis) : null;
   const brutoVerbruik = directEigen !== null ? impBasis + directEigen : null;
   return {
     ...stats,
     selfConsumptionBaseline:
-      opwek && opwek > 0 ? Math.min(1, 1 - expBasis / opwek) : null,
+      opwek && opwek > 0 ? Math.max(0, Math.min(1, 1 - nietGebruiktBasis / opwek)) : null,
     selfConsumptionBattery:
-      opwek && opwek > 0 ? Math.min(1, 1 - expBat / opwek) : null,
+      opwek && opwek > 0 ? Math.max(0, Math.min(1, 1 - nietGebruiktBat / opwek)) : null,
     selfSufficiencyBaseline:
       brutoVerbruik && brutoVerbruik > 0
         ? Math.min(1, 1 - impBasis / brutoVerbruik)
@@ -1702,6 +1741,8 @@ export function voegSamenScenario(
       gridImportBatteryKwh: gem((y) => y.gridImportWithBatteryKwh),
       gridExportBaselineKwh: gem((y) => y.gridExportKwh),
       gridExportBatteryKwh: gem((y) => y.gridExportWithBatteryKwh),
+      curtailedBaselineKwh: gem((y) => y.curtailedKwh),
+      curtailedBatteryKwh: gem((y) => y.curtailedWithBatteryKwh),
       selfConsumptionBaseline: null,
       selfConsumptionBattery: null,
       selfSufficiencyBaseline: null,
