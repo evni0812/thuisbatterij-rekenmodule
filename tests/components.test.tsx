@@ -33,6 +33,7 @@ import type { DispatchResult, Window } from "../lib/model/types";
 import { Uitbreiden } from "../components/Uitbreiden";
 import { VoorWie } from "../components/VoorWie";
 import { huishoudensVarianten } from "../lib/model/huishoudens";
+import { RASTER_GRONDSLAG } from "../lib/model/dimensionering";
 import { Verloop } from "../components/Verloop";
 import { dagenLater, maandagVan, type PeriodeReeks } from "../lib/model/periode";
 import { Tariefblad } from "../components/Tariefblad";
@@ -1257,6 +1258,33 @@ describe("de figuren over dimensionering", () => {
       expect(rechts, `"${e.textContent}" valt rechts buiten het kader`).toBeLessThanOrEqual(breedte! + 0.5);
       expect(x).toBeGreaterThanOrEqual(0);
     }
+  });
+
+  it("zegt bij kaart, uitbreiding en voor wie op welke grondslag ze rekenen", () => {
+    // Zonder die zin lijkt een cel op de kaart het antwoord bovenaan tegen te
+    // spreken: de kaart kent de overgang naar het nettarief niet.
+    const { container: u } = render(<Uitbreiden grid={grid} config={config} curve={result.curve} />);
+    expect(u.textContent).toContain(RASTER_GRONDSLAG);
+    cleanup();
+    const { container: m } = render(
+      <BatterijMaat grid={grid} huidigeCapaciteit={2} huidigVermogen={0.8} onKies={() => {}} config={config} curve={result.curve} />,
+    );
+    expect(m.textContent).toContain(RASTER_GRONDSLAG);
+    cleanup();
+    const varianten = huishoudensVarianten();
+    const { container: v } = render(
+      <VoorWie
+        huishoudens={{
+          varianten,
+          punten: varianten.map((x) => ({ ...x, afnameKwh: 2500, savingEur: 50, cyclesPerYear: 300 })),
+          klaar: true,
+          bezig: false,
+        }}
+        result={result}
+        config={config}
+      />,
+    );
+    expect(v.textContent).toContain(RASTER_GRONDSLAG);
   });
 
   it("zet geen centen op een as die in duizendtallen loopt", () => {

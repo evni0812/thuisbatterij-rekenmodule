@@ -17,7 +17,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import type { HuishoudensState } from "../lib/useAnalysis";
 import type { Configuration } from "../lib/worker/protocol";
 import { referentieJaar, type AnalysisResult } from "../lib/model/analysis";
-import { celFinance, rasterNiveau, type CelFinance } from "../lib/model/dimensionering";
+import { RASTER_GRONDSLAG, celFinance, rasterNiveau, type CelFinance } from "../lib/model/dimensionering";
 import { euro, euroAs, getal, jaren, kwh, procent } from "../lib/format";
 import { Figure, Grafiek, Legenda, Raster, Trefvlak, kiesTicks, useTip } from "./chart-parts";
 
@@ -332,7 +332,7 @@ export function VoorWie({
       <p className="posten-noot">
         Alleen de teruglevering verschuift; afname, batterij, tarieven en prijs blijven die van jou.
         Het huishouden zonder zonnepanelen rekent met het gemeten gemiddelde profiel van alle aansluitingen zonder
-        invoeding: een batterij verdient daar alleen aan het prijsverschil over de dag.
+        invoeding: een batterij verdient daar alleen aan het prijsverschil over de dag. {RASTER_GRONDSLAG}
       </p>
     </Figure>
   );

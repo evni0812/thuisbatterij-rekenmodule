@@ -45,10 +45,8 @@ import type { Configuration, GridPoint } from "../worker/protocol";
  * wijken daardoor af van het antwoord bovenaan, en de lezer moet weten waarom.
  */
 export const RASTER_GRONDSLAG =
-  "Elke maat is doorgerekend op het meest recente volledige jaar en op het niveau van het " +
-  "gemiddelde over alle volledige jaren gebracht. De tarieven van nu gelden over de hele " +
-  "looptijd: de overgang naar het nettarief in 2029, die het antwoord bovenaan wel meeneemt, " +
-  "zit niet in de kaart.";
+  "Gerekend met de tarieven van nu over de hele looptijd, op het niveau van het gemiddelde " +
+  "jaar, zonder de overgang naar het nettarief in 2029 die het antwoord bovenaan wel meeneemt.";
 
 /**
  * Factoren die een rastercel van het rasterjaar naar het gemiddelde over de
