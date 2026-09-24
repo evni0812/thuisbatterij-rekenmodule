@@ -137,6 +137,23 @@ describe("de pool met nepworkers", () => {
     expect(gevraagd).toEqual(["/data/prices-2025.bin", "/data/prices-2025.bin"]);
   });
 
+  it("zet de hoofddoorrekening vóór het achtergrondwerk in de rij, in volgorde van plaatsen", () => {
+    const { pool, workers } = maak();
+    // Drie workers bezet, daarna twee achtergrondtaken en twee met voorrang.
+    for (const id of [1, 2, 3]) pool.plaats({ groep: 1, bericht: venster(id) });
+    pool.plaats({ groep: 2, bericht: venster(10, 2) });
+    pool.plaats({ groep: 2, bericht: venster(11, 2) });
+    pool.plaats({ groep: 3, voorrang: true, bericht: venster(20, 3) });
+    pool.plaats({ groep: 3, voorrang: true, bericht: venster(21, 3) });
+    const volgende: number[] = [];
+    for (const w of [0, 1, 2, 0]) {
+      const lopend = workers[w]!.ontvangen.at(-1) as { id: number };
+      workers[w]!.stuur({ type: "klaar", id: lopend.id });
+      volgende.push((workers[w]!.ontvangen.at(-1) as { id: number }).id);
+    }
+    expect(volgende).toEqual([20, 21, 10, 11]);
+  });
+
   it("verdeelt taken over vrije workers en wacht met de rest tot er een klaar is", () => {
     const { pool, workers } = maak();
     for (let i = 1; i <= 5; i++) pool.plaats({ groep: 1, bericht: venster(i) });

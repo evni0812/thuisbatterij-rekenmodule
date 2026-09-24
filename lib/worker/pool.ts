@@ -33,6 +33,13 @@ export interface PoolTaak {
   worker?: number;
   /** ArrayBuffers die zonder kopie mee mogen. */
   transfer?: Transferable[];
+  /**
+   * Vóór het achtergrondwerk in de rij: de hoofddoorrekening en haar scenario.
+   * Wie op "Reken door" drukt terwijl de vergelijking of het raster nog loopt,
+   * hoort niet achter tientallen jaarsimulaties te wachten die hij niet ziet.
+   * Onderling blijft de volgorde van plaatsen gelden.
+   */
+  voorrang?: boolean;
 }
 
 /**
@@ -117,7 +124,13 @@ export class WorkerPool {
   /** Zet een taak in de wachtrij en start hem zodra er een worker vrij is. */
   plaats(taak: PoolTaak): void {
     if (this.gestopt) return;
-    this.wachtrij.push(taak);
+    if (taak.voorrang) {
+      const plek = this.wachtrij.findIndex((t) => !t.voorrang);
+      if (plek < 0) this.wachtrij.push(taak);
+      else this.wachtrij.splice(plek, 0, taak);
+    } else {
+      this.wachtrij.push(taak);
+    }
     this.verdeel();
   }
 
