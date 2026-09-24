@@ -52,6 +52,12 @@ import { leesUrl, schrijfUrl, type Instellingen } from "../lib/url-state";
 import { VELDNAAM } from "../lib/normaliseer";
 import type { Configuration } from "../lib/worker/protocol";
 
+/** "a", "a en b", "a, b en c": een opsomming in lopende tekst. */
+function opsomming(delen: readonly string[]): string {
+  if (delen.length <= 1) return delen[0] ?? "";
+  return `${delen.slice(0, -1).join(", ")} en ${delen[delen.length - 1]}`;
+}
+
 /**
  * De pagina is een verhaal in zes tabbladen, in de volgorde van een gesprek:
  * wat is het antwoord (Start), waarom, wanneer gebeurt het, wat als het anders
@@ -242,9 +248,16 @@ export default function Page() {
     <div className="notitie">
       <p>
         {fataal ? (
-          <>De gegevens konden niet worden geladen. Probeer het opnieuw op het tabblad Start.</>
+          <>
+            De gegevens voor de berekening konden niet worden geladen, dus dit
+            tabblad blijft leeg. Op het tabblad Start kun je het opnieuw
+            proberen.
+          </>
         ) : error ? (
-          <>Er ging iets mis bij het rekenen: {error}</>
+          <>
+            De berekening is mislukt, dus dit tabblad blijft leeg. Op het
+            tabblad Start kun je het opnieuw proberen.
+          </>
         ) : (
           <>De doorrekening loopt nog. Dit tabblad vult zich zodra het antwoord er is.</>
         )}
@@ -320,8 +333,13 @@ export default function Page() {
           {aangepast.length > 0 ? (
             <div className="notitie" role="status">
               <p>
-                <b>Niet alles uit de link was bruikbaar.</b> Aangepast naar een
-                geldige waarde: {aangepast.map((k) => VELDNAAM[k]).join(", ")}.
+                <b>Niet alles uit de link was bruikbaar.</b>{" "}
+                {aangepast.length === 1 ? "Deze instelling stond" : "Deze instellingen stonden"}{" "}
+                er niet goed in en {aangepast.length === 1 ? "is" : "zijn"} vervangen door
+                een geldige waarde: {opsomming(aangepast.map((k) => VELDNAAM[k]))}. De
+                uitkomst hieronder rekent daarmee. Kijk{" "}
+                {aangepast.length === 1 ? "hem" : "ze"} na bij de instellingen als je
+                iets anders bedoelde.
               </p>
               <button type="button" className="knop licht klein" onClick={() => setAangepast([])}>
                 Begrepen
@@ -365,18 +383,21 @@ export default function Page() {
 
           {error ? (
             <p className="fout" role="alert">
-              Er ging iets mis bij het rekenen: {error}
+              De berekening is mislukt. Probeer het opnieuw met de knop Reken
+              door; lukt dat niet, laad dan de pagina opnieuw.{" "}
+              <span className="fout-detail">(Technische melding: {error})</span>
             </p>
           ) : null}
 
           {fataal ? (
             <div className="notitie" role="alert">
               <p>
-                <b>De gegevens konden niet worden geladen.</b>{" "}
+                <b>De gegevens voor de berekening konden niet worden geladen.</b>{" "}
                 {result && uitCache
-                  ? "Hieronder staat je vorige doorrekening, uit deze browser. "
-                  : ""}
-                Controleer je verbinding en probeer het opnieuw. ({fataal})
+                  ? "Hieronder staat je vorige berekening, bewaard in deze browser; die kan op iets oudere gegevens rusten. "
+                  : "Zonder die gegevens kan de tool niets uitrekenen. "}
+                Controleer je internetverbinding en probeer het opnieuw.{" "}
+                <span className="fout-detail">(Technische melding: {fataal})</span>
               </p>
               <button type="button" className="knop licht klein" onClick={probeerOpnieuw}>
                 Opnieuw proberen
@@ -547,7 +568,10 @@ export default function Page() {
               />
               {scenarioFout && !scenario ? (
                 <p className="fout" role="alert">
-                  Het nettariefscenario kon niet worden doorgerekend: {scenarioFout}
+                  De berekening met het nettarief van 2029 is mislukt. De cijfers
+                  met het huidige tarief kloppen wel. Laad de pagina opnieuw om
+                  het nog eens te proberen.{" "}
+                  <span className="fout-detail">(Technische melding: {scenarioFout})</span>
                 </p>
               ) : null}
               {toon ? (

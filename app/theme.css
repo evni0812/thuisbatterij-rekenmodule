@@ -1681,6 +1681,14 @@ details.voetnoot-uitklap .schakel {
   border-left: 3px solid var(--critical);
 }
 
+/* De technische melding achter een foutzin: voor wie hem moet doorgeven, niet
+   om te lezen. Kleiner en zachter dan de zin die zegt wat je kunt doen. */
+.fout-detail {
+  font-size: 0.85em;
+  color: var(--text-muted);
+  overflow-wrap: anywhere;
+}
+
 @media (max-width: 560px) {
   .kloof-rij {
     grid-template-columns: 1fr;
