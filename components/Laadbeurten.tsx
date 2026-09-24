@@ -17,6 +17,7 @@
 import { useState, type ReactNode } from "react";
 import type { KeyStats } from "../lib/model/analysis";
 import type { FinanceResult } from "../lib/model/finance";
+import type { Overgang } from "../lib/overgang";
 import type { Configuration } from "../lib/worker/protocol";
 import { centPerKwh, getal, jaren, procent } from "../lib/format";
 import { strategieVoor } from "../lib/strategie";
@@ -48,11 +49,19 @@ export function Laadbeurten({
   finance,
   stats,
   config,
+  overgang = null,
   actie,
 }: {
   finance: FinanceResult;
   stats: KeyStats;
   config: Configuration;
+  /**
+   * De looptijd met het nettarief vanaf 2029. Deze figuur rekent op het
+   * huidige tarief; met het nettarief handelt de batterij vaker, en de
+   * cashflow verderop telt dié beurten. Zonder deze vergelijking zei de ene
+   * figuur "de beurten raken niet op" en de andere "na 15 jaar zijn ze op".
+   */
+  overgang?: Overgang | null;
   /** De knop "Hoe is dit berekend?" in de kop. */
   actie?: ReactNode;
 }) {
@@ -82,6 +91,18 @@ export function Laadbeurten({
   const punten = waarden.map((v, i) => `${i === 0 ? "M" : "L"}${x(i)} ${y(v)}`).join(" ");
   const kleur = sterftAanBeurten ? "var(--series-2)" : "var(--series-3)";
 
+  // Met het nettarief handelt de batterij vaker; zegt de cashflow daardoor dat
+  // de beurten op raken, dan staat dat hier ook, met de grondslag erbij.
+  const ov = overgang?.finance ?? null;
+  const nettariefZin =
+    ov && ov.totalCycles > finance.totalCycles + 0.5
+      ? `Met het voorgestelde nettarief vanaf ${overgang!.ingangsjaar} handelt de batterij vaker: over ${ov.cashflows.length} jaar lopen de beurten dan op tot ${getal(ov.totalCycles)}${
+          ov.endOfLifeYear !== null && finance.endOfLifeYear === null
+            ? `, en in jaar ${ov.endOfLifeYear} zijn de ${getal(config.cycleLife)} beurten van de cellen op`
+            : ""
+        }. Dat telt de looptijd hieronder.`
+      : null;
+
   const titel = sterftAanBeurten
     ? `Met ${getal(stats.cyclesPerYear, 0)} beurten per jaar zijn de cellen na ${jaren(jarenTotOp)} op, eerder dan de kalender`
     : `Met ${getal(stats.cyclesPerYear, 0)} beurten per jaar sterft de batterij aan zijn leeftijd, niet aan zijn beurten`;
@@ -92,7 +113,8 @@ export function Laadbeurten({
       titel={titel}
       toelichting={
         <>
-          De lijn telt de laadbeurten op over de looptijd. De streep bij{" "}
+          De lijn telt de laadbeurten op over de looptijd, met het huidige
+          nettarief. De streep bij{" "}
           {getal(config.cycleLife)} is wat de cellen aankunnen; de streep bij{" "}
           {kalender} jaar is de kalenderlevensduur. Waar de lijn het eerst
           tegenaan loopt, daaraan gaat de batterij kapot. De strategie-instelling
@@ -306,6 +328,7 @@ export function Laadbeurten({
             door ouderdom dan door zijn laadbeurten achteruit.
           </>
         )}
+        {nettariefZin ? <> {nettariefZin}</> : null}
       </p>
     </Figure>
   );

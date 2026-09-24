@@ -14,7 +14,7 @@
 
 import type { Manifest } from "../lib/data/manifest";
 import { netgebiedNaam } from "../lib/data/manifest";
-import { centPerKwh, procent } from "../lib/format";
+import { centPerKwh, getal, procent } from "../lib/format";
 import { PRIJSPEILDATUM, type BatteryPreset } from "../lib/presets";
 import { wearCostPerKwh } from "../lib/model/battery";
 import { STANDAARD } from "../lib/configuratie";
@@ -455,7 +455,7 @@ export function Geavanceerd({
             <p className="instelling-noot">
               Vast overgenomen van {preset.naam}: rendement{" "}
               {procent(preset.spec.efficiency ** 2)} heen en terug, bruikbaar deel{" "}
-              {procent(preset.spec.depthOfCharge)}, levensduur {preset.cycleLife} laadbeurten en{" "}
+              {procent(preset.spec.depthOfCharge)}, levensduur {getal(preset.cycleLife)} laadbeurten en{" "}
               {preset.kalenderLevensduurJaren} jaar. Prijs: {preset.prijsNoot},
               richtprijs {PRIJSPEILDATUM}.
             </p>

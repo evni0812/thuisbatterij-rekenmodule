@@ -253,7 +253,7 @@ export function Statistieken({
         <Tegel
           label="Laadbeurten"
           waarde={`${getal(stats.cyclesPerDay, 2)} per dag`}
-          uitleg={`${Math.round(stats.cyclesPerYear)} volledige beurten per jaar. Meer beurten kan meer opleveren, maar kost ook slijtage.`}
+          uitleg={`${getal(stats.cyclesPerYear)} volledige beurten per jaar. Meer beurten kan meer opleveren, maar kost ook slijtage.`}
           accent="var(--series-3)"
           knop={knop("laadbeurten")}
         />

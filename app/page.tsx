@@ -627,6 +627,7 @@ export default function Page() {
                   finance={result.finance}
                   stats={result.stats}
                   config={toon}
+                  overgang={overgang}
                   actie={uitleg("beurten")}
                 />
               ) : null}
@@ -634,6 +635,7 @@ export default function Page() {
                 finance={result.finance}
                 overgang={overgang}
                 investeringEur={toonPrijs}
+                cycleLife={toon?.cycleLife}
                 actie={uitleg("cashflow")}
               />
             </>

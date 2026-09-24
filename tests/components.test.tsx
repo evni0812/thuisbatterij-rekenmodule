@@ -46,7 +46,8 @@ import { expandPricesToQuarters, loadManifest, loadPriceYear, loadProfileYear } 
 import type { Manifest } from "../lib/data/manifest";
 import { addDays, localMidnightUtcMs } from "../lib/data/timeaxis";
 import { metZelfvoorziening, runAnalysis, type AnalysisResult, type SampleDay } from "../lib/model/analysis";
-import { meerMinder } from "../lib/format";
+import { euro, jaren, meerMinder } from "../lib/format";
+import { UITLEG } from "../lib/uitleg";
 import { buildResidual } from "../lib/model/residual";
 import { buildPriceSeries } from "../lib/model/tariff";
 import { PRESETS } from "../lib/presets";
@@ -323,6 +324,44 @@ describe("de pagina toont het antwoord", () => {
     expect(tekst).toMatch(/Terugverdientijd/);
     expect(tekst).toMatch(/Contante waarde/);
     expect(tekst).toMatch(/Rendement/);
+  });
+
+  it("rekent de uitleg van de cashflow op dezelfde grondslag als de kaart, met de overgang", () => {
+    /**
+     * De kaart tekende de looptijd mét de overgang naar het nettarief (5 jaar,
+     * 18,5%), de dialoog erachter rekende zonder (6 jaar en 11 maanden,
+     * 11,3%). Nu rekenen beide met de overgang, en staat het andere getal er
+     * als vergelijking bij, met een label dat zegt wat het is.
+     */
+    const config = maakConfiguratie(LEGE_INSTELLINGEN);
+    const scenario = {
+      ...result,
+      curve: result.curve.map((p) => ({ ...p, savingEur: p.savingEur * 2, cyclesPerYear: p.cyclesPerYear * 1.2 })),
+    };
+    const overgang = overgangsFinance(result, scenario, config);
+    expect(overgang.finance.paybackYears).not.toBe(result.finance.paybackYears);
+    const blok = UITLEG.cashflow({ result, scenario, config, preset: PRESETS[1]! });
+    const regels = blok.voorbeeld!.regels;
+    const tvt = regels.find((r) => /^Terugverdiend na, als het nettarief-voorstel doorgaat/.test(String(r.wat)));
+    expect(tvt?.waarde).toBe(jaren(overgang.finance.paybackYears));
+    expect(regels.find((r) => r.wat === "Netto contante waarde")?.waarde).toBe(euro(overgang.finance.npvEur));
+    expect(
+      regels.some(
+        (r) =>
+          /^Ter vergelijking, als het nettarief blijft zoals nu: terugverdiend na/.test(String(r.wat)) &&
+          r.waarde === jaren(result.finance.paybackYears),
+      ),
+    ).toBe(true);
+    // Het opgetelde bedrag is al na aftrek van de aanschaf, en dat staat erbij.
+    expect(regels.some((r) => /netto na aftrek van de aanschaf/.test(String(r.wat)))).toBe(true);
+    render(
+      <Cashflow finance={result.finance} overgang={overgang} investeringEur={config.investmentEur} cycleLife={config.cycleLife} />,
+    );
+    const tekst = document.body.textContent ?? "";
+    expect(tekst).toContain(jaren(overgang.finance.paybackYears));
+    // Grote getallen met een duizendtalpunt, en de grondslag van het totaal.
+    expect(tekst).toMatch(/Laadbeurten in totaal\d{1,3}(\.\d{3})*/);
+    expect(tekst).toMatch(/met het nettarief vanaf 2029 handelt de batterij vaker/);
   });
 
   it("verantwoordt de bron en de beperkingen", () => {

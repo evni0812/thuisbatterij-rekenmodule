@@ -107,7 +107,7 @@ function tipVoor(
       { label: "Netto resultaat", waarde: euro(fin.npvEur), uitkomst: true },
       { label: "Terugverdientijd", waarde: jaren(fin.paybackYears) },
       { label: "Besparing per jaar", waarde: euro(fin.besparingEur) },
-      { label: "Laadbeurten per jaar", waarde: String(Math.round(fin.cyclesPerYear)) },
+      { label: "Laadbeurten per jaar", waarde: getal(fin.cyclesPerYear) },
     ],
     noot: isHuidig
       ? "Dit is de batterij die je nu hebt ingesteld."
@@ -434,7 +434,7 @@ export function BatterijMaat({
             kost {euro(actief.investeringEur)} en levert {euro(actief.besparingEur)} per jaar op:{" "}
             {euro(actief.npvEur)} netto over {config.analysisYears} jaar,{" "}
             {actief.paybackYears === null ? "verdient zich niet terug" : `terugverdiend na ${jaren(actief.paybackYears)}`}
-            , bij {Math.round(actief.cyclesPerYear)} laadbeurten per jaar.
+            , bij {getal(actief.cyclesPerYear)} laadbeurten per jaar.
           </p>
         ) : beste && grid.klaar ? (
           <p>

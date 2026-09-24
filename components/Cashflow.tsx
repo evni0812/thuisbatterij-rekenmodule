@@ -11,7 +11,7 @@
 import { useState, type ReactNode } from "react";
 import type { FinanceResult } from "../lib/model/finance";
 import type { Overgang } from "../lib/overgang";
-import { euro, euroAs, jaren, procent } from "../lib/format";
+import { euro, euroAs, getal, jaren, procent } from "../lib/format";
 import { Figure, Grafiek, Raster, Trefvlak, kiesTicks, useTip } from "./chart-parts";
 
 const B = 720;
@@ -22,6 +22,7 @@ export function Cashflow({
   finance: huidigeFinance,
   overgang,
   investeringEur,
+  cycleLife,
   actie,
 }: {
   finance: FinanceResult;
@@ -33,6 +34,8 @@ export function Cashflow({
    */
   overgang: Overgang | null;
   investeringEur: number;
+  /** Hoeveel volledige beurten de cellen aankunnen, voor de noot bij het totaal. */
+  cycleLife?: number;
   /** De knop "Hoe is dit berekend?" in de kop. */
   actie?: ReactNode;
 }) {
@@ -62,6 +65,28 @@ export function Cashflow({
     .map((v, i) => `${i === 0 ? "M" : "L"}${x(i)} ${y(v)}`)
     .join(" ");
 
+  // Het totaal aan beurten hoort bij de lijn, en die rekent met de overgang:
+  // dan handelt de batterij vanaf 2029 vaker dan de figuur Laadbeurten (die op
+  // het huidige tarief rekent) laat zien. Dat staat er daarom bij, en "daarna"
+  // alleen als er na het eindjaar nog looptijd over is.
+  const beurtenNoot = ((): string | null => {
+    const cellen = cycleLife ? `de ${getal(cycleLife)} beurten van de cellen` : "de opgegeven laadbeurten";
+    const grondslag = overgang
+      ? `met het nettarief vanaf ${overgang.ingangsjaar} handelt de batterij vaker dan nu`
+      : null;
+    const eind = finance.endOfLifeYear;
+    const op =
+      eind === null
+        ? cycleLife
+          ? `binnen ${cellen}`
+          : null
+        : eind >= cf.length
+          ? `in jaar ${eind} zijn ${cellen} op`
+          : `na ${eind} jaar zijn ${cellen} op; daarna rekenen we door met een batterij die verder slijt`;
+    const delen = [grondslag, op].filter((d): d is string => d !== null);
+    return delen.length > 0 ? delen.join("; ") : null;
+  })();
+
   const breakEven = finance.paybackYears;
   const positief = finance.npvEur >= 0;
   // Drie gevallen, niet twee. De lijn tekent nominale euro's en kan door nul
@@ -80,7 +105,7 @@ export function Cashflow({
       titel={titel}
       toelichting={
         <>
-          Eén doorgerekend jaar, herhaald over de levensduur: wat je tot dat
+          Het gemiddelde doorgerekende jaar, herhaald over de looptijd: wat je tot dat
           moment in totaal hebt terugverdiend, met de aanschafprijs als
           startpunt. De lijn telt de euro's zoals je ze krijgt.
           {wisseljaar !== null ? (
@@ -237,7 +262,7 @@ export function Cashflow({
                           },
                           {
                             label: "Laadbeurten tot nu",
-                            waarde: String(Math.round(post.cumulativeCycles)),
+                            waarde: getal(post.cumulativeCycles),
                           },
                         ]
                       : [{ label: "Aanschafprijs", waarde: euro(investeringEur) }]),
@@ -284,13 +309,8 @@ export function Cashflow({
         <div>
           <dt>Laadbeurten in totaal</dt>
           <dd>
-            {Math.round(finance.totalCycles)}
-            {finance.endOfLifeYear !== null ? (
-              <span className="dd-noot">
-                na {finance.endOfLifeYear} jaar zijn de opgegeven laadbeurten op; daarna
-                rekenen we door met een batterij die verder slijt
-              </span>
-            ) : null}
+            {getal(finance.totalCycles)}
+            {beurtenNoot ? <span className="dd-noot">{beurtenNoot}</span> : null}
           </dd>
         </div>
       </dl>

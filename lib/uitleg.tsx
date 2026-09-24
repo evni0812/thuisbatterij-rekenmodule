@@ -684,7 +684,7 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP, STANDBY_LETOP, GEMIDDELD_LETOP, EEN_LE
           { wat: "Geleverd aan het huis per jaar", waarde: kwh(s.throughputPerYearKwh) },
           { wat: `Bruikbare capaciteit: ${getal(config.battery.capacityKwh, 2)} kWh × ${procent(config.battery.depthOfCharge)}`, waarde: `${getal(bruikbaar, 2)} kWh` },
           { wat: `Beurten: geleverd ÷ ${procent(config.battery.efficiency, 1)} ÷ bruikbaar`, waarde: `${getal(s.cyclesPerYear, 0)} per jaar`, uitkomst: true },
-          { wat: `Levensduur uit de catalogus`, waarde: `${config.cycleLife} beurten, ${config.calendarLifeYears} jaar` },
+          { wat: `Levensduur uit de catalogus`, waarde: `${getal(config.cycleLife)} beurten, ${config.calendarLifeYears} jaar` },
         ],
         toelichting: <>{getal(s.cyclesPerYear, 0)} beurten per jaar is {getal(s.cyclesPerYear * config.calendarLifeYears, 0)} in {config.calendarLifeYears} jaar: {s.cyclesPerYear * config.calendarLifeYears < config.cycleLife ? "de kalender gaat eerder op dan de cellen." : "de cellen slijten eerder dan de kalender, en dat weegt mee in de terugverdientijd."}</>,
       },
@@ -722,7 +722,7 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP, STANDBY_LETOP, GEMIDDELD_LETOP, EEN_LE
       ),
       bronnen: [BATTERIJ_BRON(preset)],
       stappen: [
-        <>Over zijn levensduur levert de batterij {config.cycleLife} beurten × {getal(bruikbaar, 2)} kWh bruikbaar × {procent(config.battery.efficiency, 1)} rendement = {kwh(config.cycleLife * bruikbaar * config.battery.efficiency)} aan de stekkerkant.</>,
+        <>Over zijn levensduur levert de batterij {getal(config.cycleLife)} beurten × {getal(bruikbaar, 2)} kWh bruikbaar × {procent(config.battery.efficiency, 1)} rendement = {kwh(config.cycleLife * bruikbaar * config.battery.efficiency)} aan de stekkerkant.</>,
         <>De aanschafprijs gedeeld door dat totaal is de slijtageprijs per geleverde kWh: {centPerKwh(s.wearCostEurPerKwh)}.</>,
         <>Maal wat de batterij per jaar levert geeft de slijtage per jaar. Dit bedrag zit al in de aanschafprijs die de terugverdientijd rekent; het hier óók van de besparing aftrekken zou het dubbel tellen.</>,
         <>De planner rekent {procent(config.wearFraction ?? 1)} van deze prijs als drempel, {centPerKwh(s.wearCostEurPerKwh * (config.wearFraction ?? 1))}: een laadbeurt gaat alleen door als de marge na het omzettingsverlies daar bovenuit komt. Dat deel is de strategie-instelling; op 100% handelt de batterij alleen als elke beurt zijn eigen slijtage terugverdient. Op 20% rekent de planner een beurt maar een vijfde van die prijs: de batterij gaat bij veel gebruik eerder door ouderdom dan door zijn beurten achteruit, en een extra beurt kost dan weinig levensduur.</>,
@@ -1392,15 +1392,25 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP, STANDBY_LETOP, GEMIDDELD_LETOP, EEN_LE
     };
   },
 
-  cashflow: ({ result, config }) => {
-    const f = result.finance;
+  cashflow: ({ result, scenario, config }) => {
+    // Dezelfde grondslag als de kaart erboven: met de overgang naar het
+    // nettarief zodra dat scenario er is. De dialoog rekende eerder met het
+    // huidige tarief over de hele looptijd, en gaf zo 6 jaar en 11 maanden
+    // naast een kaart met 5 jaar.
+    const overgang = scenario ? overgangsFinance(result, scenario, config) : null;
+    const f = overgang?.finance ?? result.finance;
     const laatste = f.cashflows[f.cashflows.length - 1];
     return {
       titel: "Over de looptijd: terugverdientijd en contante waarde",
       watZieJe: <>De opgetelde besparing jaar na jaar tegenover de aanschafprijs, en wat dat vandaag waard is.</>,
-      bronnen: [{ naam: "Jouw aannames", wat: <>Looptijd {config.analysisYears} jaar, prijsstijging {procent(config.priceEscalation, 1)} per jaar, rente die je misloopt {procent(config.discountRate, 1)}, capaciteitsverlies {procent(config.calendarFadePerYear, 2)} per jaar, levensduur {config.cycleLife} laadbeurten.</> }],
+      bronnen: [{ naam: "Jouw aannames", wat: <>Looptijd {config.analysisYears} jaar, prijsstijging {procent(config.priceEscalation, 1)} per jaar, rente die je misloopt {procent(config.discountRate, 1)}, capaciteitsverlies {procent(config.calendarFadePerYear, 2)} per jaar, levensduur {getal(config.cycleLife)} laadbeurten.</> }],
       stappen: [
         <>Elk jaar verliest de batterij capaciteit: door ouderdom, en door laadbeurten zodra de levensduur in zicht komt. De besparing bij minder capaciteit wordt afgelezen van een curve die op 70%, 85% en 100% capaciteit is doorgerekend.</>,
+        overgang ? (
+          <>Het voorgestelde nettarief gaat naar verwachting op 1 januari {overgang.ingangsjaar} in. De lijn rekent daarom {overgangZin(overgang)} met de besparing onder het huidige nettarief, en daarna met die onder het nieuwe: dezelfde batterij, die gewoon doorslijt.</>
+        ) : (
+          <>Het nettariefscenario is nog niet doorgerekend; tot dan rekent de lijn met het huidige nettarief over de hele looptijd.</>
+        ),
         <>Die besparing stijgt mee met de prijsstijging die je hebt ingesteld.</>,
         <>De terugverdientijd is het moment waarop de opgetelde nominale besparing de aanschafprijs inhaalt, lineair binnen het jaar.</>,
         <>De contante waarde rekent elk jaar terug met de rente die je misloopt en trekt de aanschaf ervan af. Positief betekent: beter dan het geld laten staan.</>,
@@ -1410,12 +1420,30 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP, STANDBY_LETOP, GEMIDDELD_LETOP, EEN_LE
           { wat: "Aanschafprijs", waarde: euro(config.investmentEur) },
           { wat: "Besparing in het eerste jaar", waarde: euro(f.cashflows[0]?.savingNominalEur ?? 0) },
           ...(laatste
-            ? [{ wat: `Opgeteld na ${config.analysisYears} jaar, nominaal`, waarde: euro(laatste.cumulativeNominalEur) }, { wat: `Resterende capaciteit na ${config.analysisYears} jaar`, waarde: procent(laatste.capacityFraction) }]
+            ? [
+                { wat: `Opgeteld na ${config.analysisYears} jaar, netto na aftrek van de aanschaf (nominaal)`, waarde: euro(laatste.cumulativeNominalEur) },
+                { wat: `Resterende capaciteit na ${config.analysisYears} jaar`, waarde: procent(laatste.capacityFraction) },
+              ]
             : []),
-          { wat: "Terugverdiend na", waarde: jaren(f.paybackYears), uitkomst: true },
+          { wat: overgang ? "Terugverdiend na, als het nettarief-voorstel doorgaat" : "Terugverdiend na", waarde: jaren(f.paybackYears), uitkomst: true },
           { wat: "Netto contante waarde", waarde: euro(f.npvEur), uitkomst: true },
           ...(f.irr !== null ? [{ wat: "Intern rendement", waarde: procent(f.irr, 1) }] : []),
-          ...(f.endOfLifeYear !== null ? [{ wat: "Cycluslevensduur op in jaar", waarde: String(f.endOfLifeYear) }] : []),
+          ...(f.endOfLifeYear !== null ? [{ wat: "Laadbeurten van de cellen op in jaar", waarde: String(f.endOfLifeYear) }] : []),
+          ...(overgang
+            ? [
+                {
+                  wat: "Ter vergelijking, als het nettarief blijft zoals nu: terugverdiend na",
+                  waarde: jaren(result.finance.paybackYears),
+                },
+                {
+                  wat: "Ter vergelijking, als het nettarief blijft zoals nu: netto contante waarde",
+                  waarde: euro(result.finance.npvEur),
+                },
+                ...(result.finance.irr !== null
+                  ? [{ wat: "Ter vergelijking, als het nettarief blijft zoals nu: intern rendement", waarde: procent(result.finance.irr, 1) }]
+                  : []),
+              ]
+            : []),
         ],
       },
       letop: [

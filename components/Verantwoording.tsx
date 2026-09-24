@@ -10,7 +10,7 @@
 import type { Manifest } from "../lib/data/manifest";
 import { netgebiedNaam } from "../lib/data/manifest";
 import type { AnalysisResult } from "../lib/model/analysis";
-import { centPerKwh, datum, euroPrecies, procent } from "../lib/format";
+import { centPerKwh, datum, euroPrecies, getal, procent } from "../lib/format";
 
 export function Verantwoording({
   manifest,
@@ -132,7 +132,7 @@ export function Verantwoording({
                 <td>{euroPrecies(j.realisticCostEur)}</td>
                 <td>{euroPrecies(j.realisticSavingEur)}</td>
                 <td>{euroPrecies(j.optimalSavingEur)}</td>
-                <td>{Math.round(j.cyclesPerYear)}</td>
+                <td>{getal(j.cyclesPerYear)}</td>
               </tr>
             ))}
           </tbody>
