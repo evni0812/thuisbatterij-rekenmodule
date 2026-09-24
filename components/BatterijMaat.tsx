@@ -25,7 +25,7 @@ import { useMemo, useState, type ReactNode } from "react";
 import type { GridState } from "../lib/useAnalysis";
 import type { Configuration, GridPoint } from "../lib/worker/protocol";
 import type { SavingCurvePoint } from "../lib/model/finance";
-import { RASTER_GRONDSLAG, advies, rasterFinance, type CelFinance, type RasterNiveau } from "../lib/model/dimensionering";
+import { rasterGrondslag, advies, rasterFinance, type CelFinance, type RasterNiveau } from "../lib/model/dimensionering";
 import { STEKKER_GRENS_KW, isVasteAansluiting, kostenregelVan } from "../lib/model/kosten";
 import { euro, getal, jaren, procent } from "../lib/format";
 import { Figure, TipLaag, useTip, type TipInhoud } from "./chart-parts";
@@ -462,7 +462,7 @@ export function BatterijMaat({
           zoals bij jouw batterij. De prijs per cel volgt uit jouw batterij ({euro(config.investmentEur)}):{" "}
           {euro(regel.perKwhEur)} per kWh en {euro(regel.perKwEur)} per kW erbij, en boven{" "}
           {getal(STEKKER_GRENS_KW, 1)} kW eenmalig {euro(regel.installatieEur)} voor een eigen groep door een
-          installateur. Instelbaar bij de geavanceerde instellingen. {RASTER_GRONDSLAG}
+          installateur. Instelbaar bij de geavanceerde instellingen. {rasterGrondslag(config)}
         </p>
       </div>
     </Figure>

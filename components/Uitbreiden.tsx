@@ -17,7 +17,7 @@ import type { GridState } from "../lib/useAnalysis";
 import type { Configuration } from "../lib/worker/protocol";
 import type { SavingCurvePoint } from "../lib/model/finance";
 import {
-  RASTER_GRONDSLAG,
+  rasterGrondslag,
   advies,
   dichtsteKolom,
   uitbreidingsstappen,
@@ -314,7 +314,7 @@ export function Uitbreiden({
           </dd>
         </div>
       </dl>
-      <p className="posten-noot">{RASTER_GRONDSLAG}</p>
+      <p className="posten-noot">{rasterGrondslag(config)}</p>
     </Figure>
   );
 }

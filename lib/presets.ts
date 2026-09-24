@@ -151,7 +151,8 @@ export const PRESETS: BatteryPreset[] = [
     // De klasse tussen stekker en vaste accu: 1,4 kW aan een eigen groep (1,6
     // kW met een extra accu; het model rekent met de basisset). Boven 0,8 kW,
     // dus met 300 euro voor de eigen groep, net als de andere modellen boven
-    // de stekkergrens. In de ANWB-webwinkel 966 euro (24-09-2026).
+    // de stekkergrens. De prijs rekent met de adviesprijs van Zendure (789
+    // euro); in de ANWB-webwinkel stond hij op 24-09-2026 voor 966 euro.
     id: "zendure-1600ac",
     naam: "Zendure SolarFlow 1600 AC+",
     merk: "Zendure",
@@ -237,11 +238,6 @@ export const PRESETS: BatteryPreset[] = [
   },
 ];
 
-/**
- * Waar de tool mee opent. De Marstek is het meest verkochte model van dit
- * moment en zit qua maat in het midden van de lijst, dus wie niets kiest ziet
- * een uitkomst die voor de meeste huishoudens herkenbaar is.
- */
 /**
  * De batterij die je ziet als je niets kiest.
  *

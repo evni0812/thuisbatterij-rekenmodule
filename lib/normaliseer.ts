@@ -18,7 +18,7 @@
  * gerekend wordt.
  *
  * Bewust: de standaardwaarden liggen ruim binnen de grenzen en veranderen niet
- * door normaliseren (tests/normaliseer.test.ts bewaakt dat), zodat de hash van
+ * door normaliseren (tests/url-state.test.ts bewaakt dat), zodat de hash van
  * de standaardconfiguratie — en daarmee het vooruitgerekende antwoord — blijft
  * wat hij was.
  *

@@ -994,11 +994,14 @@ python3 scripts/build_assets.py             # → public/data/
 
 `fetch_dynamic.py` slaat over wat er al ligt. De EDSN-API staat 1000 requests per
 dag per IP toe; alle netgebieden over de volle periode kost er ongeveer 700.
-DYNAMIC loopt twee dagen achter en recente dagen kunnen nog wijzigen. Het script
-vult alleen ontbrekende dagen aan en haalt dagen die er al staan niet opnieuw
-op, ook niet als EDSN ze later corrigeert. Wil je de laatste maanden verversen,
-haal die dagen dan eerst uit `data/raw/dynamic/<netgebied>.csv` (of verwijder het
-bestand) en draai het script opnieuw.
+DYNAMIC loopt twee dagen achter en recente dagen kunnen nog wijzigen. Zonder
+optie vult het script alleen ontbrekende dagen aan. Met `--opnieuw N` haalt het
+de laatste N dagen van de periode eerst uit het bestand en daarna opnieuw op,
+zodat correcties van EDSN meekomen:
+
+```bash
+python3 scripts/fetch_dynamic.py --opnieuw 60   # ververs de laatste twee maanden
+```
 
 Prestaties: ongeveer 410 ms voor de realistische strategie en 270 tot 325 ms
 voor het optimum per profieljaar (`tests/pipeline.test.ts` drukt het af). Eén

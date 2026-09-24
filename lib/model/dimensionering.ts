@@ -49,6 +49,19 @@ export const RASTER_GRONDSLAG =
   "jaar, zonder de overgang naar het nettarief in 2029 die het antwoord bovenaan wel meeneemt.";
 
 /**
+ * De grondslag voor deze configuratie. Kiest de bezoeker de heffing van toen,
+ * dan rekent het raster daar ook mee, en mag de zin niet "van nu" zeggen.
+ */
+export function rasterGrondslag(config: Pick<Configuration, "useHistoricalLevy">): string {
+  if (!config.useHistoricalLevy) return RASTER_GRONDSLAG;
+  return (
+    "Gerekend met de uurprijzen en de belasting en opslag van toen, herhaald over de hele " +
+    "looptijd, op het niveau van het gemiddelde jaar, zonder de overgang naar het nettarief " +
+    "in 2029 die het antwoord bovenaan wel meeneemt."
+  );
+}
+
+/**
  * Factoren die een rastercel van het rasterjaar naar het gemiddelde over de
  * volledige jaren brengen: gemiddelde gedeeld door rasterjaar, voor de
  * besparing en voor de cycli, gemeten op de gekozen batterij.
