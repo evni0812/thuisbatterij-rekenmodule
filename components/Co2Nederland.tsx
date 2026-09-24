@@ -5,9 +5,10 @@
  *
  * Voor jouw voetafdruk telt alleen wat je afneemt. Voor Nederland telt ook wat
  * je teruglevert: die zonnestroom gebruikt een buur, en die hoeft dan niet uit
- * een gascentrale te komen. Behalve als de mix op dat uur al vrijwel groen is:
- * dan is er meer groene stroom dan afname, gaat jouw kWh de grens over of wordt
- * hij afgeschakeld, en verdringt hij in Nederland niets. Waar die grens ligt
+ * een gascentrale te komen. Behalve als de mix op dat uur al heel schoon is:
+ * dan is er vaak, maar niet altijd, meer aanbod dan vraag, gaat jouw kWh de
+ * grens over of wordt hij afgeschakeld, en verdringt hij in Nederland weinig.
+ * De drempel is een benadering van overschot, geen meting. Waar die grens ligt
  * is een keuze; daarom staat er een schuif. De balans bewaart afname en
  * teruglevering per klasse emissiefactor, dus de schuif rekent zonder wachten.
  *
@@ -40,9 +41,12 @@ export function Co2Nederland({
   co2,
   drempel,
   onDrempel,
+  zonnepanelen = true,
   actie,
 }: {
   co2: Co2Jaar;
+  /** Zonder zonnepanelen is er geen teruglevering, en vallen de zinnen daarover weg. */
+  zonnepanelen?: boolean;
   /** Onder deze emissiefactor telt teruglevering als overschot, g/kWh. */
   drempel: number;
   onDrempel: (g: number) => void;
@@ -79,17 +83,30 @@ export function Co2Nederland({
       titel={
         nl.winstKg > 0.5
           ? `Voor Nederland scheelt de batterij ${kg(nl.winstKg)} CO2 per jaar`
-          : "Voor Nederland scheelt de batterij per saldo geen CO2"
+          : nl.winstKg < -0.5
+            ? `Voor Nederland stoot je aansluiting met deze batterij ${kg(-nl.winstKg)} méér CO2 uit per jaar`
+            : "Voor Nederland scheelt de batterij per saldo nauwelijks CO2"
       }
       toelichting={
-        <>
-          Voor jou telt alleen je afname ({kg(h.winstKg)} winst). Voor Nederland telt ook wat je
-          teruglevert: een buur gebruikt die stroom en er hoeft minder uit een gascentrale te komen.
-          Behalve op uren waarop de mix al onder {getal(drempel)} g/kWh zit: dan is er meer groene
-          stroom dan afname en gaat jouw kWh de grens over of wordt hij afgeschakeld. Van jouw
-          teruglevering viel {procent(overschotAandeelZonder)} in zulke uren; daar vangt de batterij{" "}
-          {kwh(opgeslagenOverschot)} van op en gebruikt hij die 's avonds.
-        </>
+        zonnepanelen ? (
+          <>
+            Voor jou telt alleen je afname ({h.winstKg >= 0 ? `${kg(h.winstKg)} minder` : `${kg(-h.winstKg)} meer`}).
+            Voor Nederland telt ook wat je teruglevert: een buur gebruikt die stroom en er hoeft minder
+            uit een gascentrale te komen. Behalve op uren waarop de mix al onder {getal(drempel)} g/kWh
+            zit: dan is er vaak, maar niet altijd, meer aanbod dan vraag, en gaat jouw kWh de grens over
+            of wordt hij afgeschakeld. Van jouw teruglevering viel {procent(overschotAandeelZonder)} in
+            zulke uren;{" "}
+            {opgeslagenOverschot > 0.5
+              ? `daarvan vangt de batterij ${kwh(opgeslagenOverschot)} op voor later.`
+              : "daarvan vangt de batterij vrijwel niets op."}{" "}
+            De drempel is een benadering van overschot, geen meting.
+          </>
+        ) : (
+          <>
+            Zonder zonnepanelen lever je niets terug. Voor Nederland telt dan alleen je afname, en is
+            de uitkomst gelijk aan die voor jou ({h.winstKg >= 0 ? `${kg(h.winstKg)} minder` : `${kg(-h.winstKg)} meer`}).
+          </>
+        )
       }
     >
       <label className="co2-drempel">
@@ -143,7 +160,7 @@ export function Co2Nederland({
             vanaf hier verdringt teruglevering opwek
           </text>
           <text x={Math.max(MARGE.links + 4, grensX - 6)} y={MARGE.boven + 12} textAnchor="end" className="mark-label" fill="var(--text-muted)">
-            {grensX > MARGE.links + 120 ? "overschot: export of afschakeling" : ""}
+            {grensX > MARGE.links + 120 ? "benaderd overschot" : ""}
           </text>
 
           {klassen.filter((k) => k % 5 === 0).map((k) => (
@@ -171,7 +188,7 @@ export function Co2Nederland({
                   ],
                   noot: nuttig
                     ? "Op deze uren vervangt jouw teruglevering opwek elders in Nederland."
-                    : "Op deze uren was er al meer groene stroom dan afname: overschot.",
+                    : "Op deze uren was de mix zo schoon dat er vaak, maar niet altijd, meer aanbod dan vraag was: hier geteld als overschot.",
                 });
               }}
               onWis={() => { setAangewezen(null); wis(); }}
@@ -192,14 +209,25 @@ export function Co2Nederland({
           <dt>Teruglevering als overschot</dt>
           <dd>
             {kwh(nl.overschotZonderKwh)} → {kwh(nl.overschotMetKwh)}
-            <span className="dd-noot">onder {getal(drempel)} g/kWh; de batterij vangt {kwh(opgeslagenOverschot)} op</span>
+            <span className="dd-noot">
+              onder {getal(drempel)} g/kWh;{" "}
+              {opgeslagenOverschot >= 0
+                ? `de batterij vangt ${kwh(opgeslagenOverschot)} op`
+                : `met batterij ${kwh(-opgeslagenOverschot)} meer`}
+            </span>
           </dd>
         </div>
         <div>
           <dt>Wat je teruglevering elders vermeed</dt>
           <dd>
             {kg(nl.vermedenZonderKg)} → {kg(nl.vermedenMetKg)}
-            <span className="dd-noot">minder, want een deel bewaar je nu zelf; dat weegt lichter dan wat je 's avonds uitspaart</span>
+            <span className="dd-noot">
+              {nl.vermedenMetKg < nl.vermedenZonderKg - 0.05
+                ? "minder, want een deel van je zonnestroom gaat nu de batterij in"
+                : nl.vermedenMetKg > nl.vermedenZonderKg + 0.05
+                  ? "meer, want de batterij levert ook terug op uren met een vuile mix"
+                  : "vrijwel gelijk"}
+            </span>
           </dd>
         </div>
       </dl>

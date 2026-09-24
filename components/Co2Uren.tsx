@@ -84,8 +84,8 @@ export function Co2Uren({
       }
       toelichting={
         <>
-          Boven: de gemiddelde uitstoot van één kWh uit het Nederlandse net per uur van de dag, in de
-          winter en in de zomer (april tot en met september). Onder: hoeveel afname de batterij op
+          Boven: de gemiddelde uitstoot van één kWh van de Nederlandse opwek per uur van de dag, in
+          de winter en in de zomer (april tot en met september); import zit er niet in. Onder: hoeveel afname de batterij op
           dat uur van het net weghaalt (boven de lijn) of erbij haalt om te laden (onder de lijn),
           kWh per gemiddelde dag.
         </>
