@@ -17,6 +17,7 @@ import {
   kostenregelVan,
   type Anker,
 } from "../lib/model/kosten";
+import { PRESETS } from "../lib/presets";
 
 const REGEL = STANDAARD_KOSTENREGEL;
 const ZENDURE: Anker = { investmentEur: 699, capaciteitKwh: 1.92, vermogenKw: 0.8 };
@@ -102,5 +103,24 @@ describe("de configuratie", () => {
       expect(kiesPreset(p).prijsNoot, p).toMatch(/eigen groep/);
     }
     expect(kiesPreset("marstek-venus-e3").prijsEur).toBe(1499);
+  });
+});
+
+describe("de catalogus", () => {
+  it("noemt bij elke batterij een bron en een peildatum", () => {
+    for (const p of PRESETS) {
+      expect(p.bron, p.id).toMatch(/^https:\/\//);
+      expect(p.peildatum, p.id).toMatch(/^\d{4}-\d{2}-\d{2}$/);
+    }
+  });
+
+  it("rekent de eigen groep bij elk merkmodel boven 0,8 kW in de prijsnoot", () => {
+    for (const p of PRESETS.filter((x) => isVasteAansluiting(x.vermogenKw) && x.merk !== "Generiek")) {
+      expect(p.prijsNoot, p.id).toMatch(/300 euro voor een eigen groep/);
+    }
+  });
+
+  it("heeft een batterij in de klasse tussen stekker en vaste accu", () => {
+    expect(PRESETS.some((p) => p.vermogenKw >= 1.2 && p.vermogenKw <= 1.6)).toBe(true);
   });
 });

@@ -52,6 +52,10 @@ export interface BatteryPreset {
   prijsEur: number;
   /** Waar de prijs vandaan komt: wat er wel en niet in zit. */
   prijsNoot: string;
+  /** Bron van prijs en specificaties. */
+  bron: string;
+  /** Wanneer de prijs is nagekeken, JJJJ-MM-DD. */
+  peildatum: string;
   spec: Omit<BatterySpec, "wearCostEurPerKwh">;
   cycleLife: number;
   /**
@@ -59,8 +63,16 @@ export interface BatteryPreset {
    *
    * Hoort bij de batterij, niet bij de analyse. Eerder werd hiervoor de
    * analyseperiode gebruikt, en dan ging de accu anders handelen zodra je die
-   * schuif verzette. Vijftien jaar is de gangbare garantietermijn-plus-marge
-   * voor LFP; geen fabrikant in deze lijst belooft er meer.
+   * schuif verzette.
+   *
+   * Vijftien jaar, naast een garantie die bij deze merken meestal tien jaar is
+   * (HomeWizard noemt zelf vijftien jaar of 6.000 cycli tot 70% capaciteit).
+   * De garantie is een ondergrens die de fabrikant durft toe te zeggen, geen
+   * levensduur. Met de kalenderdegradatie van het model (1,5% per jaar) staat
+   * er na vijftien jaar nog ruim 77% capaciteit, rond het gangbare einde-van-
+   * leven-criterium van 70 tot 80%. Twaalf jaar zou ook te verdedigen zijn,
+   * maar daar is geen bron die beter onderbouwt dan dit; het getal wordt
+   * alleen ter duiding gebruikt en stuurt de dispatch niet.
    */
   kalenderLevensduurJaren: number;
 }
@@ -89,7 +101,12 @@ export const PRESETS: BatteryPreset[] = [
     capaciteitKwh: 1.92,
     vermogenKw: 0.8,
     prijsEur: 699,
-    prijsNoot: "compleet in de ANWB-webwinkel, met de P1-meter erbij",
+    // Adviesprijs 789 euro; 699 is de actieprijs in de ANWB-webwinkel
+    // (marktcheck 24-09-2026). De standaardconfiguratie rekent met de prijs
+    // waarvoor hij nu te koop is.
+    prijsNoot: "actieprijs in de ANWB-webwinkel, compleet met de P1-meter (adviesprijs 789 euro)",
+    bron: "https://www.zendure.nl/products/solarflow-800-pro2",
+    peildatum: "2026-09-24",
     spec: spec(1.92, 0.8, 0.88, 0.9),
     cycleLife: 6000,
     kalenderLevensduurJaren: 15,
@@ -102,8 +119,13 @@ export const PRESETS: BatteryPreset[] = [
     vermogenKw: 0.8,
     prijsEur: 1220,
     prijsNoot: "1.195 euro plus de P1-meter van 25",
-    // 85% is het midden van wat gebruikers meten; het datasheet claimt 92%.
-    spec: spec(2.7, 0.8, 0.85, 0.9),
+    bron: "https://www.homewizard.com/shop/plug-in-battery/",
+    peildatum: "2026-09-24",
+    // HomeWizard noemt zelf een rendement in de praktijk van 70 tot 85%;
+    // gebruikers en testers meten rond 75 tot 80%. Het datasheet claimt 92%,
+    // maar dat is de cel, niet de wandcontactdoos. Eerder stond hier 85%, de
+    // bovenkant van die band.
+    spec: spec(2.7, 0.8, 0.8, 0.9),
     cycleLife: 6000,
     kalenderLevensduurJaren: 15,
   },
@@ -115,9 +137,31 @@ export const PRESETS: BatteryPreset[] = [
     vermogenKw: 0.8,
     prijsEur: 1134,
     prijsNoot: "1.099 euro plus de P1-meter van 35",
-    // Laadt tot 1.200 W maar levert 800 W terug; het model rekent met de
-    // laagste van de twee, want die bepaalt hoeveel er 's avonds uit kan.
+    bron: "https://www.ankersolix.com/nl/products/a17c5",
+    peildatum: "2026-09-24",
+    // Laadt én levert tot 1.200 W, maar alleen aan een eigen groep; aan een
+    // gewoon stopcontact is het 800 W, beide kanten op. Dit is de
+    // stekkerversie, dus 0,8 kW. Wie hem aan een eigen groep hangt, zet het
+    // vermogen op 1,2 kW en telt de installateur erbij.
     spec: spec(2.69, 0.8, 0.8, 0.9),
+    cycleLife: 6000,
+    kalenderLevensduurJaren: 15,
+  },
+  {
+    // De klasse tussen stekker en vaste accu: 1,4 kW aan een eigen groep (1,6
+    // kW met een extra accu; het model rekent met de basisset). Boven 0,8 kW,
+    // dus met 300 euro voor de eigen groep, net als de andere modellen boven
+    // de stekkergrens. In de ANWB-webwinkel 966 euro (24-09-2026).
+    id: "zendure-1600ac",
+    naam: "Zendure SolarFlow 1600 AC+",
+    merk: "Zendure",
+    capaciteitKwh: 1.92,
+    vermogenKw: 1.4,
+    prijsEur: 1119,
+    prijsNoot: "789 euro adviesprijs bij Zendure plus de P1-meter van 30 en 300 euro voor een eigen groep door een installateur, want aan het stopcontact levert hij maar 800 W",
+    bron: "https://www.zendure.nl/products/zendure-solarflow-1600-ac",
+    peildatum: "2026-09-24",
+    spec: spec(1.92, 1.4, 0.88, 0.9),
     cycleLife: 6000,
     kalenderLevensduurJaren: 15,
   },
@@ -129,6 +173,8 @@ export const PRESETS: BatteryPreset[] = [
     vermogenKw: 2.4,
     prijsEur: 1179,
     prijsNoot: "849 euro plus de P1-meter van 30 en 300 euro voor een eigen groep door een installateur, want aan het stopcontact levert hij maar 800 W",
+    bron: "https://www.zendure.nl/collections/solarflow-series",
+    peildatum: "2026-09-24",
     spec: spec(2.4, 2.4, 0.88, 0.9),
     cycleLife: 6000,
     kalenderLevensduurJaren: 15,
@@ -141,6 +187,8 @@ export const PRESETS: BatteryPreset[] = [
     vermogenKw: 2.5,
     prijsEur: 1499,
     prijsNoot: "1.199 euro met de P1-meter erbij, plus 300 euro voor een eigen groep door een installateur, want aan het stopcontact levert hij maar 800 W",
+    bron: "https://www.marstek.nl/product/marstek-venus-e-3-0-plug-charge-thuisbatterij-5-12-kwh-incl-p1-meter/",
+    peildatum: "2026-09-24",
     spec: spec(5.12, 2.5, 0.83, 0.9),
     cycleLife: 6000,
     kalenderLevensduurJaren: 15,
@@ -153,6 +201,8 @@ export const PRESETS: BatteryPreset[] = [
     vermogenKw: 3.5,
     prijsEur: 2434,
     prijsNoot: "2.099 euro plus de P1-meter van 35 en 300 euro voor een eigen groep door een installateur, want aan het stopcontact levert hij maar 800 W",
+    bron: "https://www.ankersolix.com/nl",
+    peildatum: "2026-09-24",
     spec: spec(7, 3.5, 0.85, 0.9),
     cycleLife: 6000,
     kalenderLevensduurJaren: 15,
@@ -165,6 +215,8 @@ export const PRESETS: BatteryPreset[] = [
     vermogenKw: 2.5,
     prijsEur: 3750,
     prijsNoot: "inclusief omvormer en installatie",
+    bron: "https://thuisbatterijgids.net/",
+    peildatum: "2026-09-24",
     spec: spec(5, 2.5, 0.9, 0.95),
     cycleLife: 6000,
     kalenderLevensduurJaren: 15,
@@ -177,6 +229,8 @@ export const PRESETS: BatteryPreset[] = [
     vermogenKw: 3.6,
     prijsEur: 5750,
     prijsNoot: "inclusief omvormer en installatie",
+    bron: "https://thuisbatterijgids.net/",
+    peildatum: "2026-09-24",
     spec: spec(10, 3.6, 0.9, 0.95),
     cycleLife: 6000,
     kalenderLevensduurJaren: 15,
