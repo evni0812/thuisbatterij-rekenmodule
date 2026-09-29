@@ -73,6 +73,7 @@ export function Uitbreiden({
   if (!grid || !grid.klaar || !huidig || huidig.stappen.length < 2) {
     return (
       <Figure
+        anker="uitbreiden"
         actie={actie}
         titel="Tot welke maat loont uitbreiden?"
         toelichting={<>Volgt zodra de kaart van maten klaar is.</>}
@@ -145,6 +146,7 @@ export function Uitbreiden({
 
   return (
     <Figure
+      anker="uitbreiden"
       actie={actie}
       titel={titel}
       toelichting={

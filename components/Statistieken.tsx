@@ -148,7 +148,7 @@ export function Statistieken({
     context ? <Uitleg blok={UITLEG[id](context)} variant="icoon" /> : null;
 
   return (
-    <section className="statistieken">
+    <section id="cijfers" className="statistieken">
       <h3>De cijfers op een rij</h3>
       <p className="statistieken-uitleg">
         Gemiddeld per jaar, over de volledige jaren in de gekozen periode.

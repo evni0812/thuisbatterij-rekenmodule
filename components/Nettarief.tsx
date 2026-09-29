@@ -72,6 +72,7 @@ export function Nettarief({
 
   return (
     <Figure
+      anker="nettarief"
       actie={actie}
       titel={
         !scenario

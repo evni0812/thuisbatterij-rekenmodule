@@ -8,15 +8,23 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { readFileSync, readdirSync } from "node:fs";
 import { afterEach, describe, expect, it, vi } from "vitest";
-import { Paneel, TABS, TabStapper, Tabs } from "../components/Tabs";
+import {
+  OpDitTabblad,
+  Paneel,
+  TABS,
+  TabStapper,
+  Tabs,
+  leesTab,
+  tabVanAnker,
+} from "../components/Tabs";
 import { Uitleg } from "../components/Uitleg";
 import type { UitlegBlok } from "../lib/uitleg";
 
 afterEach(cleanup);
 
 describe("de tabs", () => {
-  it("zijn een tablist met zes tabbladen en één geselecteerd", () => {
-    render(<Tabs actief="start" onKies={() => {}} />);
+  it("zijn een tablist met zeven tabbladen en één geselecteerd", () => {
+    render(<Tabs actief="uitkomst" onKies={() => {}} />);
     const tabs = screen.getAllByRole("tab");
     expect(tabs.length).toBe(TABS.length);
     expect(tabs.filter((t) => t.getAttribute("aria-selected") === "true").length).toBe(1);
@@ -26,35 +34,100 @@ describe("de tabs", () => {
 
   it("wisselen met de pijltjestoetsen, rondom", () => {
     const onKies = vi.fn();
-    render(<Tabs actief="start" onKies={onKies} />);
-    const eerste = screen.getByRole("tab", { name: "Start" });
+    render(<Tabs actief="uitkomst" onKies={onKies} />);
+    const eerste = screen.getByRole("tab", { name: "Uitkomst" });
     fireEvent.keyDown(eerste, { key: "ArrowRight" });
-    expect(onKies).toHaveBeenLastCalledWith("waarom");
+    expect(onKies).toHaveBeenLastCalledWith("besparing");
     fireEvent.keyDown(eerste, { key: "ArrowLeft" });
-    expect(onKies).toHaveBeenLastCalledWith("methode");
+    expect(onKies).toHaveBeenLastCalledWith("aannames");
     fireEvent.keyDown(eerste, { key: "End" });
-    expect(onKies).toHaveBeenLastCalledWith("methode");
-    fireEvent.click(screen.getByRole("tab", { name: "Wat als" }));
-    expect(onKies).toHaveBeenLastCalledWith("wat-als");
+    expect(onKies).toHaveBeenLastCalledWith("aannames");
+    fireEvent.click(screen.getByRole("tab", { name: "Welke batterij" }));
+    expect(onKies).toHaveBeenLastCalledWith("welke-batterij");
   });
 
   it("verbergt de panelen die niet actief zijn, maar houdt ze in de boom", () => {
     render(
       <>
-        <Paneel id="start" actief="waarom">
-          <p>start-inhoud</p>
+        <Paneel id="uitkomst" actief="besparing">
+          <p>uitkomst-inhoud</p>
         </Paneel>
-        <Paneel id="waarom" actief="waarom">
-          <p>waarom-inhoud</p>
+        <Paneel id="besparing" actief="besparing">
+          <p>besparing-inhoud</p>
         </Paneel>
       </>,
     );
-    const start = document.getElementById("paneel-start")!;
-    const waarom = document.getElementById("paneel-waarom")!;
-    expect(start.hidden).toBe(true);
-    expect(waarom.hidden).toBe(false);
-    expect(start.textContent).toContain("start-inhoud");
-    expect(waarom.getAttribute("aria-labelledby")).toBe("tab-waarom");
+    const uitkomst = document.getElementById("paneel-uitkomst")!;
+    const besparing = document.getElementById("paneel-besparing")!;
+    expect(uitkomst.hidden).toBe(true);
+    expect(besparing.hidden).toBe(false);
+    expect(uitkomst.textContent).toContain("uitkomst-inhoud");
+    expect(besparing.getAttribute("aria-labelledby")).toBe("tab-besparing");
+  });
+
+  it("sturen een gedeelde link van vóór de herindeling naar het goede tabblad", () => {
+    /**
+     * Er staan links met ?tab=wat-als in mails en documenten. Die moeten
+     * blijven werken, en op het tabblad landen waar de meeste van die
+     * figuren nu staan.
+     */
+    expect(leesTab("start")).toBe("uitkomst");
+    expect(leesTab("waarom")).toBe("besparing");
+    expect(leesTab("wanneer")).toBe("door-het-jaar");
+    expect(leesTab("wat-als")).toBe("welke-batterij");
+    expect(leesTab("uitstoot")).toBe("co2");
+    expect(leesTab("methode")).toBe("aannames");
+    expect(leesTab("terugverdienen")).toBe("terugverdienen");
+    expect(leesTab("onzin")).toBeNull();
+    expect(leesTab(null)).toBeNull();
+  });
+
+  it("vinden het tabblad bij een anker, en elk anker staat maar één keer", () => {
+    expect(tabVanAnker("per-maand")).toBe("door-het-jaar");
+    expect(tabVanAnker("nettarief")).toBe("terugverdienen");
+    expect(tabVanAnker("instellingen")).toBe("uitkomst");
+    expect(tabVanAnker("bestaat-niet")).toBeNull();
+    expect(tabVanAnker("")).toBeNull();
+
+    const ankers = TABS.flatMap((t) => t.figuren.map((f) => f.id));
+    expect(new Set(ankers).size).toBe(ankers.length);
+    // Een anker mag niet samenvallen met een tabblad: ?tab= en # zijn
+    // verschillende dingen, en een link moet eenduidig zijn.
+    for (const t of TABS) expect(ankers).not.toContain(t.id);
+  });
+
+  it("geven elk anker een element in de bron, zodat de inhoudsopgave nergens doodloopt", () => {
+    /**
+     * De inhoudsopgave en de kicker lezen de lijst in Tabs.tsx; de figuren
+     * zelf zetten hun anker in hun eigen component. Loopt dat uit elkaar, dan
+     * is er een link die nergens heen gaat. Elk anker moet dus als
+     * anker="…" of id="…" in een component of in de pagina staan.
+     */
+    const bronnen = [
+      readFileSync("app/page.tsx", "utf8"),
+      ...readdirSync("components")
+        .filter((f) => f.endsWith(".tsx"))
+        .map((f) => readFileSync(`components/${f}`, "utf8")),
+    ].join("\n");
+    for (const t of TABS) {
+      for (const f of t.figuren) {
+        expect(
+          bronnen.includes(`anker="${f.id}"`) || bronnen.includes(`id="${f.id}"`),
+          `anker "${f.id}" (${f.naam}) staat nergens`,
+        ).toBe(true);
+      }
+    }
+  });
+
+  it("zetten bovenaan elk tabblad een inhoudsopgave met links naar de figuren", () => {
+    render(<OpDitTabblad id="terugverdienen" />);
+    const links = screen.getAllByRole("link");
+    expect(links.map((a) => a.textContent)).toEqual([
+      "Over de looptijd",
+      "Laadbeurten en levensduur",
+      "Nettarief van 2029",
+    ]);
+    expect(links[0]!.getAttribute("href")).toBe("#looptijd");
   });
 });
 
@@ -66,34 +139,34 @@ describe("de stapper onderaan", () => {
      * Verdwijnt die buitenste laag, dan zweeft er een los kaartje in beeld
      * terwijl de inhoud er links en rechts langs schuift.
      */
-    const { container } = render(<TabStapper actief="start" onKies={() => {}} />);
+    const { container } = render(<TabStapper actief="uitkomst" onKies={() => {}} />);
     const balk = container.querySelector(".stapper-balk");
     expect(balk).not.toBeNull();
     expect(balk!.querySelector("nav.stapper")).not.toBeNull();
   });
 
   it("noemt het vorige en het volgende onderdeel bij naam", () => {
-    render(<TabStapper actief="wanneer" onKies={() => {}} />);
-    expect(screen.getByRole("button", { name: "Vorige: Waarom" })).toBeDefined();
-    expect(screen.getByRole("button", { name: "Volgende: Wat als" })).toBeDefined();
+    render(<TabStapper actief="door-het-jaar" onKies={() => {}} />);
+    expect(screen.getByRole("button", { name: "Vorige: Besparing" })).toBeDefined();
+    expect(screen.getByRole("button", { name: "Volgende: Terugverdienen" })).toBeDefined();
   });
 
   it("houdt elk tablabel kort genoeg voor het venster van de pil", () => {
     /**
-     * De pil is een venster van vaste breedte — 8,5rem, en 7,5rem onder 600px.
+     * De pil is een venster van vaste breedte — 12rem, en 11,5rem onder 600px.
      * Vast moet het zijn, anders springt de pil per titel van maat en schuift
      * het spoor niet meer. Maar een titel die er niet in past wordt gewoon
      * afgeknipt: geen foutmelding, geen kapotte test, alleen een half woord op
      * een telefoon.
      *
-     * Het smalste venster is 120px bij een basis van 16px, en de titel staat
-     * in 1rem vet. Elf tekens is daar een veilige bovengrens voor, ook met
-     * brede letters als W en M. Loopt een nieuw tabblad hiertegenaan, kies dan
+     * Het smalste venster is 184px bij een basis van 16px, en de titel staat
+     * in 1rem vet. Negentien tekens ("Aannames en bronnen") is daar de
+     * bovengrens voor; op 360px nagemeten. Loopt een nieuw tabblad hiertegenaan, kies dan
      * een korter woord of verruim beide breedtes in theme.css — en kijk dan
      * zelf op 360px of het klopt, want deze test meet tekens en geen pixels.
      */
     for (const t of TABS) {
-      expect(t.label.length, `"${t.label}" past niet in de pil`).toBeLessThanOrEqual(11);
+      expect(t.label.length, `"${t.label}" past niet in de pil`).toBeLessThanOrEqual(19);
     }
   });
 
@@ -103,7 +176,7 @@ describe("de stapper onderaan", () => {
      * elkaar, dan staan er weer drie losse dingen in de balk en wijst de knop
      * niet meer naar de plek waar de titel schuift.
      */
-    const { container } = render(<TabStapper actief="waarom" onKies={() => {}} />);
+    const { container } = render(<TabStapper actief="besparing" onKies={() => {}} />);
     const pil = container.querySelector(".stapper-pil")!;
     expect(pil).not.toBeNull();
 
@@ -122,12 +195,12 @@ describe("de stapper onderaan", () => {
 
   it("zet alle titels op één spoor en schuift naar de actieve", () => {
     /**
-     * De pil is een venster: alle vijf de titels staan naast elkaar en het
+     * De pil is een venster: alle titels staan naast elkaar en het
      * spoor schuift op. Staat de verschuiving niet op het juiste veelvoud van
      * honderd procent, dan kijk je door het venster naar de verkeerde titel —
      * of naar twee halve.
      */
-    const { container } = render(<TabStapper actief="wat-als" onKies={() => {}} />);
+    const { container } = render(<TabStapper actief="terugverdienen" onKies={() => {}} />);
     const spoor = container.querySelector<HTMLElement>(".stapper-spoor")!;
     expect(spoor.children.length).toBe(TABS.length);
     expect(spoor.style.transform).toBe("translateX(-300%)");
@@ -135,12 +208,12 @@ describe("de stapper onderaan", () => {
 
   it("stapt niet voorbij het eerste en het laatste onderdeel", () => {
     const onKies = vi.fn();
-    const { rerender, container } = render(<TabStapper actief="start" onKies={onKies} />);
+    const { rerender, container } = render(<TabStapper actief="uitkomst" onKies={onKies} />);
     const knoppen = () => [...container.querySelectorAll("button")];
     expect(knoppen()[0]!.disabled).toBe(true);
     expect(knoppen()[1]!.disabled).toBe(false);
 
-    rerender(<TabStapper actief="methode" onKies={onKies} />);
+    rerender(<TabStapper actief="aannames" onKies={onKies} />);
     expect(knoppen()[0]!.disabled).toBe(false);
     expect(knoppen()[1]!.disabled).toBe(true);
   });
@@ -149,9 +222,9 @@ describe("de stapper onderaan", () => {
     const onKies = vi.fn();
     const scroll = vi.fn();
     window.scrollTo = scroll as unknown as typeof window.scrollTo;
-    render(<TabStapper actief="waarom" onKies={onKies} />);
-    fireEvent.click(screen.getByRole("button", { name: "Volgende: Wanneer" }));
-    expect(onKies).toHaveBeenCalledWith("wanneer");
+    render(<TabStapper actief="besparing" onKies={onKies} />);
+    fireEvent.click(screen.getByRole("button", { name: "Volgende: Door het jaar" }));
+    expect(onKies).toHaveBeenCalledWith("door-het-jaar");
     // Zonder dit land je onderaan het volgende onderdeel: de knop staat immers
     // onder aan het vorige.
     expect(scroll).toHaveBeenCalled();

@@ -60,6 +60,7 @@ export function Verliezen({
 
   return (
     <Figure
+      anker="verliezen"
       actie={actie}
       titel={titel}
       toelichting={

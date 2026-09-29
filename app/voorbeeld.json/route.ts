@@ -114,7 +114,7 @@ export async function GET(): Promise<Response> {
     for (const v of huishoudensVarianten()) huishoudens.push(await huishoudenPunt(bron, config, v));
   }
 
-  // De vergelijking van de doelen (tabblad "Wat als"): de twee doelen die niet
+  // De vergelijking van de doelen (tabblad "Welke batterij"): de twee doelen die niet
   // gekozen zijn, op de tarieven van nu (met de voorbeelddag) en met het
   // nettarief. Het gekozen doel ís het antwoord en het scenario hierboven.
   // Vier doorrekeningen zonder optimum, ruim tien seconden; zonder dit rekent

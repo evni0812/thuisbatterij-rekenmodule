@@ -109,6 +109,7 @@ export function Laadbeurten({
 
   return (
     <Figure
+      anker="laadbeurten"
       actie={actie}
       titel={titel}
       toelichting={

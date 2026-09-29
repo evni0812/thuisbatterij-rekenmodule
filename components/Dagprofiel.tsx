@@ -503,6 +503,7 @@ export function Dagprofiel({
   return (
     <>
     <Figure
+      anker="dag-en-week"
       titel={toontWeek ? "Wat de batterij in een week precies doet" : "Wat de batterij op een dag precies doet"}
       toelichting={
         toontWeek ? (

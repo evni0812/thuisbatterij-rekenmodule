@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * Het antwoord van het tabblad Uitstoot: wat de batterij het huishouden aan
+ * Het antwoord van het tabblad CO2: wat de batterij het huishouden aan
  * CO2 scheelt, of kost.
  *
  * Alleen de afname telt hier. Elke kWh van het net is op dat uur met een
@@ -20,6 +20,7 @@ import type { ReactNode } from "react";
 import { huishoudPerspectief, type Co2Jaar } from "../lib/model/co2";
 import type { Doel } from "../lib/model/types";
 import { getal, kwh, procent } from "../lib/format";
+import { FiguurNaam } from "./chart-parts";
 import { Tegel } from "./Statistieken";
 
 /**
@@ -72,12 +73,13 @@ export function Co2Antwoord({
   const sturing =
     doel === "uitstoot"
       ? "De batterij stuurt hier op uitstoot: hij mijdt de vuilste uren, ongeacht de prijs."
-      : `De batterij stuurt hier op ${doel === "zelfconsumptie" ? "zelfconsumptie" : "prijs"}; de CO2-winst is een bijeffect. In de stand Uitstoot stuurt hij erop.`;
+      : `De batterij stuurt hier op ${doel === "zelfconsumptie" ? "zelfconsumptie" : "prijs"}; de CO2-winst is een bijeffect. Wat sturen op uitstoot scheelt, staat bij Sturing op het tabblad Welke batterij.`;
 
   return (
-    <section className="antwoord co2-antwoord" aria-live="polite">
+    <section id="jouw-co2" className="antwoord co2-antwoord" aria-live="polite">
       <div className="antwoord-kop">
         <div>
+          <FiguurNaam anker="jouw-co2" />
           <h2>{titel}</h2>
           <p className="antwoord-zin">
             De stroom die je van het net haalt, kostte {periodeLabel} {kg(h.zonderKg)} CO2;

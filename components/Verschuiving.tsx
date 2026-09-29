@@ -123,6 +123,7 @@ export function Verschuiving({
 
   return (
     <Figure
+      anker="zomer-en-winter"
       actie={actie}
       titel={
         grootsteDaling[1] && grootsteDaling[1].kwh > (grootsteDaling[0]?.kwh ?? 0)

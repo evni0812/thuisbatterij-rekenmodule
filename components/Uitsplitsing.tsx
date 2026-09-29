@@ -155,6 +155,7 @@ export function Uitsplitsing({
 
   return (
     <Figure
+      anker="opbouw"
       actie={actie}
       titel={titel}
       toelichting={

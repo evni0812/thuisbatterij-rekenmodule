@@ -36,6 +36,7 @@ export function BesparingPerJaar({ jaren, actie }: { jaren: YearAnalysis[]; acti
 
   return (
     <Figure
+      anker="per-jaar"
       actie={actie}
       titel="Van jaar tot jaar: elk jaar levert iets op, maar niet evenveel"
       toelichting={

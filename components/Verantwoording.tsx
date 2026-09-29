@@ -11,6 +11,7 @@ import type { Manifest } from "../lib/data/manifest";
 import { netgebiedNaam } from "../lib/data/manifest";
 import type { AnalysisResult } from "../lib/model/analysis";
 import { centPerKwh, datum, euroPrecies, getal, procent } from "../lib/format";
+import { FiguurNaam } from "./chart-parts";
 
 export function Verantwoording({
   manifest,
@@ -33,12 +34,13 @@ export function Verantwoording({
   const laatste = jaren[jaren.length - 1]?.laatste_dag;
 
   return (
-    <section className="verantwoording">
-      <h2>Waar deze cijfers vandaan komen</h2>
+    <section id="data-en-model" className="verantwoording">
+      <FiguurNaam anker="data-en-model" />
+      <h3>Waar deze cijfers vandaan komen</h3>
 
       <div className="verantwoording-grid">
         <div>
-          <h3>De data</h3>
+          <h4>De data</h4>
           <p>
             Verbruik en teruglevering volgen het{" "}
             <strong>gemeten gemiddelde kwartierpatroon</strong> van alle
@@ -59,7 +61,7 @@ export function Verantwoording({
         </div>
 
         <div>
-          <h3>Wat het model wel en niet meeneemt</h3>
+          <h4>Wat het model wel en niet meeneemt</h4>
           <ul>
             <li>
               De getoonde bedragen zijn de <strong>variabele stroomkosten</strong>.

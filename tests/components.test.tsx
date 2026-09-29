@@ -1080,40 +1080,52 @@ describe("het maandverloop", () => {
   });
 });
 
-describe("de pagina vertelt het verhaal in vier delen, in die volgorde", () => {
+describe("de pagina vertelt het verhaal in zeven tabbladen, in die volgorde", () => {
   /**
    * De paginacomponent draait op workers en is hier niet te renderen; de
    * volgorde staat wél letterlijk in de bron. Dat is voldoende om te bewaken
-   * dat niemand een sectie terugzet waar hij niet hoort — het antwoord voorop,
-   * dan waarom, dan wanneer van grof naar fijn, dan de wat-als-vragen, en pas
-   * daarna de instellingen.
+   * dat niemand een sectie terugzet waar hij niet hoort — de uitkomst voorop,
+   * dan waar de besparing vandaan komt, dan door het jaar van grof naar fijn,
+   * dan terugverdienen, welke batterij, CO2, en de aannames en bronnen. De
+   * volgorde binnen een tabblad is die van de inhoudsopgave in Tabs.tsx.
    */
   it("zet de tabbladen en de secties in de bedoelde volgorde", () => {
     const bron = readFileSync("app/page.tsx", "utf8");
     const volgorde = [
-      '<Paneel id="start"',
+      '<Paneel id="uitkomst"',
       "<Invoer",
       "<Antwoord",
       "<Statistieken",
       "<Geavanceerd",
       "<Bewaren",
-      '<Paneel id="waarom"',
+      '<Paneel id="besparing"',
       "<Prijskloof",
       "<Uitsplitsing",
       "<Verliezen",
-      '<Paneel id="wanneer"',
+      '<Paneel id="door-het-jaar"',
       "<BesparingPerJaar",
       "<MaandVerloop",
       "<Verschuiving",
+      "<Verloop",
       "<Dagprofiel",
-      '<Paneel id="wat-als"',
-      "<Nettarief",
-      "<Doelvergelijking",
-      "<BatterijMaat",
+      '<Paneel id="terugverdienen"',
       "<Cashflow",
-      '<Paneel id="methode"',
+      "<Laadbeurten",
+      "<Nettarief",
+      '<Paneel id="welke-batterij"',
+      "<BatterijMaat",
+      "<Uitbreiden",
+      "<Doelvergelijking",
+      "<VoorWie",
+      '<Paneel id="co2"',
+      "<Co2Antwoord",
+      "<Co2Uren",
+      "<Co2Maanden",
+      "<Co2Nederland",
+      '<Paneel id="aannames"',
       "<Verantwoording",
-      "Wat we niet weten",
+      'anker="wat-we-niet-weten"',
+      'anker="bronnen"',
     ];
     let vanaf = 0;
     for (const stuk of volgorde) {
@@ -1739,7 +1751,7 @@ describe("het wachtscherm", () => {
   });
 });
 
-describe("het tabblad Uitstoot", () => {
+describe("het tabblad CO2", () => {
   /**
    * Een kunstmatig jaar van vier kwartieren op een zomerdag: één vuil uur met
    * afname, twee schone kwartieren met teruglevering (overschot), en de

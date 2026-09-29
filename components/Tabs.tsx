@@ -7,22 +7,140 @@
  * dagprofiel blijft staan als je heen en weer gaat.
  */
 
-import { useRef, type KeyboardEvent } from "react";
+import { useEffect, useRef, type KeyboardEvent } from "react";
 
+/**
+ * De zeven tabbladen, elk over één onderwerp, en per tabblad de figuren die
+ * erop staan. Het label is een zelfstandig naamwoord: wie de balk leest, ziet
+ * waar iets over gaat, niet welk soort vraag het beantwoordt. De ondertitel
+ * staat als eyebrow boven elk tabblad en noemt wat je er vindt.
+ *
+ * De figuren hebben een vaste naam en een vast anker. Hun titel is een
+ * conclusie die met de invoer meebeweegt ("…in de zomer", "…in de winter");
+ * de naam niet, zodat je naar "Per maand" kunt verwijzen en er met
+ * `?tab=door-het-jaar#per-maand` direct naartoe kunt linken. Deze lijst is de
+ * enige bron: de inhoudsopgave per tabblad, de kicker boven elke figuur en de
+ * hash-navigatie lezen hem allemaal.
+ */
 export const TABS = [
-  { id: "start", label: "Start", vraag: "invoer en het antwoord" },
-  { id: "waarom", label: "Waarom", vraag: "waar de besparing vandaan komt" },
-  { id: "wanneer", label: "Wanneer", vraag: "van jaar tot dag" },
-  { id: "wat-als", label: "Wat als", vraag: "het nettarief, een andere maat, de looptijd" },
-  { id: "uitstoot", label: "Uitstoot", vraag: "wat het scheelt aan CO2" },
-  { id: "methode", label: "Methode", vraag: "data, aannames en wat we niet weten" },
+  {
+    id: "uitkomst",
+    label: "Uitkomst",
+    ondertitel: "jouw invoer en wat de batterij oplevert",
+    figuren: [
+      { id: "antwoord", naam: "Het antwoord" },
+      { id: "cijfers", naam: "Cijfers op een rij" },
+      { id: "instellingen", naam: "Instellingen" },
+      { id: "bewaren", naam: "Bewaren" },
+    ],
+  },
+  {
+    id: "besparing",
+    label: "Besparing",
+    ondertitel: "waar het geld vandaan komt, en wat verloren gaat",
+    figuren: [
+      { id: "prijsverschil", naam: "Prijsverschil" },
+      { id: "opbouw", naam: "Opbouw van de besparing" },
+      { id: "verliezen", naam: "Verliezen" },
+    ],
+  },
+  {
+    id: "door-het-jaar",
+    label: "Door het jaar",
+    ondertitel: "per jaar, per maand, per uur en per dag",
+    figuren: [
+      { id: "per-jaar", naam: "Per jaar" },
+      { id: "per-maand", naam: "Per maand" },
+      { id: "zomer-en-winter", naam: "Zomer- en winterdag" },
+      { id: "verloop", naam: "Verloop over tijd" },
+      { id: "dag-en-week", naam: "Een dag of week van dichtbij" },
+    ],
+  },
+  {
+    id: "terugverdienen",
+    label: "Terugverdienen",
+    ondertitel: "looptijd, laadbeurten en het nettarief van 2029",
+    figuren: [
+      { id: "looptijd", naam: "Over de looptijd" },
+      { id: "laadbeurten", naam: "Laadbeurten en levensduur" },
+      { id: "nettarief", naam: "Nettarief van 2029" },
+    ],
+  },
+  {
+    id: "welke-batterij",
+    label: "Welke batterij",
+    ondertitel: "maat, uitbreiden, sturing en voor wie hij loont",
+    figuren: [
+      { id: "maat", naam: "Maat en vermogen" },
+      { id: "uitbreiden", naam: "Uitbreiden" },
+      { id: "sturing", naam: "Sturing" },
+      { id: "voor-wie", naam: "Voor wie" },
+    ],
+  },
+  {
+    id: "co2",
+    label: "CO2",
+    ondertitel: "wat de batterij scheelt aan uitstoot",
+    figuren: [
+      { id: "jouw-co2", naam: "Jouw CO2" },
+      { id: "co2-per-uur", naam: "CO2 per uur" },
+      { id: "co2-per-seizoen", naam: "CO2 per seizoen" },
+      { id: "co2-nederland", naam: "CO2 voor Nederland" },
+    ],
+  },
+  {
+    id: "aannames",
+    label: "Aannames en bronnen",
+    ondertitel: "data, grenzen van het model en bronnen",
+    figuren: [
+      { id: "data-en-model", naam: "De data en het model" },
+      { id: "wat-we-niet-weten", naam: "Wat we niet weten" },
+      { id: "bronnen", naam: "Bronnen" },
+    ],
+  },
 ] as const;
 
 export type TabId = (typeof TABS)[number]["id"];
-export const STANDAARD_TAB: TabId = "start";
+export type FiguurId = (typeof TABS)[number]["figuren"][number]["id"];
+export const STANDAARD_TAB: TabId = "uitkomst";
 
 export function isTabId(v: string | null | undefined): v is TabId {
   return TABS.some((t) => t.id === v);
+}
+
+/**
+ * De tabbladen van vóór de herindeling. Gedeelde links met `?tab=wat-als`
+ * moeten blijven werken; "wat-als" gaat naar Welke batterij, omdat de meeste
+ * figuren van dat oude tabblad daar staan.
+ */
+const OUDE_TAB_IDS: Record<string, TabId> = {
+  start: "uitkomst",
+  waarom: "besparing",
+  wanneer: "door-het-jaar",
+  "wat-als": "welke-batterij",
+  uitstoot: "co2",
+  methode: "aannames",
+};
+
+/** Het tabblad uit een `?tab=`-waarde, ook een van vóór de herindeling. */
+export function leesTab(v: string | null | undefined): TabId | null {
+  if (isTabId(v)) return v;
+  return (v && OUDE_TAB_IDS[v]) || null;
+}
+
+/** Het tabblad waarop een figuur staat, of null als het anker er geen is. */
+export function tabVanAnker(anker: string | null | undefined): TabId | null {
+  if (!anker) return null;
+  const tab = TABS.find((t) => t.figuren.some((f) => f.id === anker));
+  return tab ? tab.id : null;
+}
+
+/** De vaste naam van een figuur, voor de kicker boven zijn titel. */
+export function figuurNaam(id: FiguurId): string {
+  for (const t of TABS) {
+    for (const f of t.figuren) if (f.id === id) return f.naam;
+  }
+  return id;
 }
 
 export function tabpaneelId(id: TabId): string {
@@ -31,6 +149,13 @@ export function tabpaneelId(id: TabId): string {
 
 export function Tabs({ actief, onKies }: { actief: TabId; onKies: (id: TabId) => void }) {
   const knoppen = useRef<(HTMLButtonElement | null)[]>([]);
+
+  // Op een smal scherm scrolt de balk opzij; het gekozen tabblad blijft in
+  // beeld, ook als je er met de stapper onderaan naartoe gaat.
+  useEffect(() => {
+    const i = TABS.findIndex((t) => t.id === actief);
+    knoppen.current[i]?.scrollIntoView?.({ block: "nearest", inline: "nearest" });
+  }, [actief]);
 
   const toets = (e: KeyboardEvent<HTMLButtonElement>, i: number) => {
     let doel: number | null = null;
@@ -64,7 +189,7 @@ export function Tabs({ actief, onKies }: { actief: TabId; onKies: (id: TabId) =>
             tabIndex={geselecteerd ? 0 : -1}
             onClick={() => onKies(t.id)}
             onKeyDown={(e) => toets(e, i)}
-            title={t.vraag}
+            title={t.ondertitel}
           >
             {t.label}
           </button>
@@ -75,14 +200,14 @@ export function Tabs({ actief, onKies }: { actief: TabId; onKies: (id: TabId) =>
 }
 
 /**
- * Doorstappen door de zes onderdelen, onder aan de pagina.
+ * Doorstappen door de zeven onderdelen, onder aan de pagina.
  *
  * De tablist bovenin is er om ergens naartóé te springen; dit is er om verder
- * te lezen. Een verhaal in zes delen hoort onderaan een "en dan?" te hebben,
+ * te lezen. Een verhaal in zeven delen hoort onderaan een "en dan?" te hebben,
  * anders moet je na elke sectie terug naar de balk.
  *
  * ── De pil is een venster, en bedient zichzelf ──────────────────────────────
- * Alle zes de titels staan naast elkaar op één spoor; de pil laat er precies
+ * Alle titels staan naast elkaar op één spoor; de pil laat er precies
  * één van zien en schuift het spoor op. Daardoor ís de beweging de navigatie:
  * je ziet de titel van waar je was naar links verdwijnen en die van waar je
  * heen gaat binnenkomen, en bij een sprong van twee schuift de tussenliggende
@@ -173,9 +298,9 @@ export function TabStapper({
       </div>
 
       {/* De aankondiging staat los van het spoor: een schermlezer hoort de
-          nieuwe titel één keer, niet alle zes. */}
+          nieuwe titel één keer, niet alle zeven. */}
       <span className="visueel-verborgen" role="status">
-        {TABS[i]?.label}: {TABS[i]?.vraag}
+        {TABS[i]?.label}: {TABS[i]?.ondertitel}
       </span>
     </nav>
     </div>
@@ -220,5 +345,36 @@ export function Paneel({
     >
       {children}
     </section>
+  );
+}
+
+/** De eyebrow boven elk tabblad: het label en wat je er vindt. */
+export function TabEyebrow({ id }: { id: TabId }) {
+  const tab = TABS.find((t) => t.id === id)!;
+  return (
+    <span className="eyebrow">
+      {tab.label} · {tab.ondertitel}
+    </span>
+  );
+}
+
+/**
+ * De inhoudsopgave bovenaan een tabblad: de vaste namen van de figuren, als
+ * links naar hun anker. Wie een tabblad opent, ziet zonder te scrollen wat
+ * erop staat en springt naar het stuk dat hij zoekt.
+ */
+export function OpDitTabblad({ id }: { id: TabId }) {
+  const tab = TABS.find((t) => t.id === id)!;
+  return (
+    <nav className="op-dit-tabblad" aria-label={`Op het tabblad ${tab.label}`}>
+      <span className="op-dit-tabblad-kop">Op dit tabblad</span>
+      <ul>
+        {tab.figuren.map((f) => (
+          <li key={f.id}>
+            <a href={`#${f.id}`}>{f.naam}</a>
+          </li>
+        ))}
+      </ul>
+    </nav>
   );
 }

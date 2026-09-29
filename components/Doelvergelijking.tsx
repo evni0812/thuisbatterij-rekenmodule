@@ -87,6 +87,7 @@ export function Doelvergelijking({
 
   return (
     <Figure
+      anker="sturing"
       actie={actie}
       titel={titel}
       toelichting={

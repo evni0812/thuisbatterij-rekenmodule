@@ -79,6 +79,7 @@ export function Co2Nederland({
 
   return (
     <Figure
+      anker="co2-nederland"
       actie={actie}
       titel={
         nl.winstKg > 0.5

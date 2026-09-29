@@ -67,6 +67,7 @@ export function MaandVerloop({ maanden, actie }: { maanden: MonthTotals[]; actie
 
   return (
     <Figure
+      anker="per-maand"
       actie={actie}
       titel={
         som(zomer) > som(winter)

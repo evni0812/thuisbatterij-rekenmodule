@@ -48,6 +48,7 @@ export function Prijskloof({
 
   return (
     <Figure
+      anker="prijsverschil"
       actie={actie}
       titel="Je betaalt veel meer voor stroom dan je ervoor terugkrijgt"
       toelichting={

@@ -138,7 +138,7 @@ export interface HuishoudensState {
 }
 
 /**
- * De drie doelen naast elkaar (tabblad "Wat als", lib/model/vergelijking.ts).
+ * De drie doelen naast elkaar (tabblad "Welke batterij", lib/model/vergelijking.ts).
  *
  * Per doel twee delen: op de tarieven van nu (met de voorbeelddag) en met het
  * nettarief van 2029, voor de terugverdientijd met overgang. `undefined` is
@@ -237,7 +237,7 @@ export interface AnalysisState {
 
 export interface AnalyseOpties {
   /**
-   * Of het raster van maten en de reeks huishoudens (tabblad "Wat als") nu
+   * Of het raster van maten en de reeks huishoudens (tabblad "Welke batterij") nu
    * nodig zijn. Die kosten samen vijftig jaarsimulaties; op een telefoon is
    * dat een halve minuut rekenen op de achtergrond, bij elke nieuwe invoer,
    * voor een tabblad dat misschien nooit open gaat. Zonder deze optie worden
@@ -915,7 +915,7 @@ export function useAnalysis(config: Configuration | null, opties: AnalyseOpties 
    * Zet een antwoord op het scherm en maak de achtergrond erbij compleet: wat
    * er al is (uit cache of preload, of een scenario dat eerder binnenkwam)
    * tonen, de rest starten. Raster en huishoudens alleen als het tabblad
-   * "Wat als" ze nodig heeft.
+   * "Welke batterij" ze nodig heeft.
    */
   const toonAntwoord = useCallback(
     (

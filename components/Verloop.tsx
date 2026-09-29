@@ -146,6 +146,7 @@ export function Verloop({
 
   return (
     <Figure
+      anker="verloop"
       titel={titel}
       toelichting={
         <>

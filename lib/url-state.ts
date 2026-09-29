@@ -152,6 +152,8 @@ export function schrijfUrl(
   standaard: Instellingen,
   /** Losse parameters naast de instellingen, zoals het open tabblad. */
   extra: Record<string, string> = {},
+  /** Een anker naar een figuur (`per-maand`), dat achter de URL blijft staan. */
+  anker?: string,
 ): void {
   if (typeof window === "undefined") return;
   const p = new URLSearchParams();
@@ -168,7 +170,9 @@ export function schrijfUrl(
   }
 
   const query = p.toString();
-  const doel = query ? `${window.location.pathname}?${query}` : window.location.pathname;
+  const doel =
+    (query ? `${window.location.pathname}?${query}` : window.location.pathname) +
+    (anker ? `#${anker}` : "");
   // replaceState in plaats van pushState: elke schuif zou anders een stap in de
   // geschiedenis worden en de terugknop onbruikbaar maken.
   window.history.replaceState(null, "", doel);

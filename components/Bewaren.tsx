@@ -44,7 +44,7 @@ export function Bewaren({
   };
 
   return (
-    <section className="bewaren" aria-labelledby="bewaren-kop">
+    <section id="bewaren" className="bewaren" aria-labelledby="bewaren-kop">
       <div className="bewaren-kop">
         <div>
           <h2 id="bewaren-kop">Instellingen bewaren</h2>

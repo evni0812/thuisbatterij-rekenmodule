@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Antwoord } from "../components/Antwoord";
 import { BatterijMaat } from "../components/BatterijMaat";
 import { BesparingPerJaar } from "../components/BesparingPerJaar";
@@ -19,13 +19,16 @@ import { MaandVerloop } from "../components/MaandVerloop";
 import { Nettarief } from "../components/Nettarief";
 import { Prijskloof } from "../components/Prijskloof";
 import { Statistieken } from "../components/Statistieken";
+import { FiguurNaam } from "../components/chart-parts";
 import {
+  OpDitTabblad,
   Paneel,
   STANDAARD_TAB,
-  TABS,
+  TabEyebrow,
   TabStapper,
   Tabs,
-  isTabId,
+  leesTab,
+  tabVanAnker,
   type TabId,
 } from "../components/Tabs";
 import { Uitbreiden } from "../components/Uitbreiden";
@@ -61,12 +64,13 @@ function opsomming(delen: readonly string[]): string {
 }
 
 /**
- * De pagina is een verhaal in zes tabbladen, in de volgorde van een gesprek:
- * wat is het antwoord (Start), waarom, wanneer gebeurt het, wat als het anders
- * was, wat scheelt het aan CO2 (Uitstoot), en waar komen de cijfers vandaan
- * (Methode). Elke sectie heeft één plek,
- * één vraag en één knop "Hoe is dit berekend?" met de getallen van deze
- * doorrekening.
+ * De pagina is een verhaal in zeven tabbladen, elk over één onderwerp: de
+ * uitkomst, waar de besparing vandaan komt, hoe die door het jaar valt, of de
+ * batterij zich terugverdient, welke batterij het beste past, wat hij scheelt
+ * aan CO2, en de aannames en bronnen. Elk tabblad opent met dezelfde kop:
+ * het onderwerp, één vraag en een inhoudsopgave. Elke figuur heeft een vaste
+ * naam, een conclusie als titel en één knop "Hoe is dit berekend?" met de
+ * getallen van deze doorrekening.
  *
  * De panelen blijven gemount; alleen het actieve is zichtbaar. Zo houdt het
  * dagprofiel zijn gekozen dag en hoeft niets opnieuw te renderen als je heen
@@ -76,6 +80,12 @@ export default function Page() {
   const [inst, setInst] = useState<Instellingen>(STANDAARD);
   const [geladen, setGeladen] = useState(false);
   const [tab, setTab] = useState<TabId>(STANDAARD_TAB);
+  /**
+   * Een anker uit de link (`#per-maand`) waar nog naartoe gescrold moet
+   * worden. De figuur bestaat pas als zijn tabblad open is en het antwoord er
+   * is; tot dan wacht het anker hier.
+   */
+  const wachtendAnker = useRef<string | null>(null);
   /** Zet een doorrekening in de wacht tot de nieuwe invoer is verwerkt. */
   const [rekenNa, setRekenNa] = useState(false);
   const [profielen, setProfielen] = useState<Profiel[]>([]);
@@ -93,8 +103,17 @@ export default function Page() {
     const uitUrl = leesUrl(gecorrigeerd);
     if (gecorrigeerd.length > 0) setAangepast(gecorrigeerd);
     const p = new URLSearchParams(window.location.search);
-    const tabUrl = p.get("tab");
-    if (isTabId(tabUrl)) setTab(tabUrl);
+    // Ook een tabblad van vóór de herindeling (?tab=wat-als) komt goed uit.
+    const tabUrl = leesTab(p.get("tab"));
+    if (tabUrl) setTab(tabUrl);
+    // Een anker wint van het tabblad: het wijst een figuur aan, en die staat
+    // maar op één tabblad.
+    const anker = window.location.hash.slice(1);
+    const tabAnker = tabVanAnker(anker);
+    if (tabAnker) {
+      setTab(tabAnker);
+      wachtendAnker.current = anker;
+    }
 
     const laatste = leesLaatste();
     // Een link met alleen onleesbare instellingen is nog steeds een link: dan
@@ -110,8 +129,33 @@ export default function Page() {
     setGeladen(true);
   }, []);
 
+  // Een link naar een figuur op een ander tabblad (of met de hand in de
+  // adresbalk) opent eerst dat tabblad; de browser kan niet scrollen naar iets
+  // dat verborgen is.
   useEffect(() => {
-    if (geladen) schrijfUrl(inst, STANDAARD, tab === STANDAARD_TAB ? {} : { tab });
+    const opHash = () => {
+      const anker = window.location.hash.slice(1);
+      const tabAnker = tabVanAnker(anker);
+      if (!tabAnker) return;
+      setTab(tabAnker);
+      wachtendAnker.current = anker;
+    };
+    window.addEventListener("hashchange", opHash);
+    return () => window.removeEventListener("hashchange", opHash);
+  }, []);
+
+  useEffect(() => {
+    if (!geladen) return;
+    // Het anker blijft in de adresbalk zolang het bij het open tabblad hoort,
+    // zodat die link direct naar de figuur blijft wijzen. Wie van tabblad
+    // wisselt, laat het achter.
+    const anker = window.location.hash.slice(1);
+    schrijfUrl(
+      inst,
+      STANDAARD,
+      tab === STANDAARD_TAB ? {} : { tab },
+      tabVanAnker(anker) === tab ? anker : undefined,
+    );
   }, [inst, geladen, tab]);
 
   const preset = kiesPreset(inst.presetId);
@@ -124,9 +168,9 @@ export default function Page() {
       () => (geladen ? maakConfiguratie(inst) : null),
       [geladen, inst],
     ),
-    // Het raster en de huishoudens staan alleen op "Wat als"; zolang dat
+    // Het raster en de huishoudens staan alleen op "Welke batterij"; zolang dat
     // tabblad dicht is, rekent de telefoon er niet aan.
-    { rasterNodig: tab === "wat-als" },
+    { rasterNodig: tab === "welke-batterij" },
   );
 
   const {
@@ -259,19 +303,30 @@ export default function Page() {
       })()
     : "";
 
+  // Scrol naar een wachtend anker zodra zijn figuur er is: het tabblad is
+  // open en het antwoord binnen.
+  useEffect(() => {
+    const anker = wachtendAnker.current;
+    if (!anker) return;
+    const el = document.getElementById(anker);
+    if (!el || el.closest("[hidden]")) return;
+    wachtendAnker.current = null;
+    el.scrollIntoView({ block: "start" });
+  }, [tab, result]);
+
   const wachtOpResultaat = !result ? (
     <div className="notitie">
       <p>
         {fataal ? (
           <>
             De gegevens voor de berekening konden niet worden geladen, dus dit
-            tabblad blijft leeg. Op het tabblad Start kun je het opnieuw
-            proberen.
+            tabblad blijft leeg. Op het tabblad Uitkomst kun je het
+            opnieuw proberen.
           </>
         ) : error ? (
           <>
             De berekening is mislukt, dus dit tabblad blijft leeg. Op het
-            tabblad Start kun je het opnieuw proberen.
+            tabblad Uitkomst kun je het opnieuw proberen.
           </>
         ) : (
           <>De doorrekening loopt nog. Dit tabblad vult zich zodra het antwoord er is.</>
@@ -301,10 +356,10 @@ export default function Page() {
           onBereken={herbereken}
         />
 
-        {/* ── Start ──────────────────────────────────────────────────────── */}
-        <Paneel id="start" actief={tab}>
+        {/* ── Uitkomst ───────────────────────────────────────────────────── */}
+        <Paneel id="uitkomst" actief={tab}>
           <div className="sectiekop">
-            <span className="eyebrow">{TABS[0].label} · {TABS[0].vraag}</span>
+            <TabEyebrow id="uitkomst" />
             <h1>Wat had een thuisbatterij je opgeleverd?</h1>
             <p>
               Op 1 januari 2027 stopt de salderingsregeling. Met een dynamisch
@@ -320,6 +375,7 @@ export default function Page() {
                 : "Eén getal van je jaarafrekening is genoeg: je afname."}
             </p>
           </div>
+          <OpDitTabblad id="uitkomst" />
 
           {uitOpslag ? (
             <div className="notitie" role="status">
@@ -472,18 +528,19 @@ export default function Page() {
           />
         </Paneel>
 
-        {/* ── Waarom ─────────────────────────────────────────────────────── */}
-        <Paneel id="waarom" actief={tab}>
+        {/* ── Besparing ──────────────────────────────────────────────────── */}
+        <Paneel id="besparing" actief={tab}>
           <div className="sectiekop">
-            <span className="eyebrow">Waarom · {TABS[1].vraag}</span>
-            <h2>Je betaalt veel meer voor stroom dan je ervoor terugkrijgt</h2>
+            <TabEyebrow id="besparing" />
+            <h2>Waar komt de besparing vandaan?</h2>
             <p>
               Zonder saldering is het gat tussen wat afname kost en wat
-              teruglevering oplevert het hele verdienmodel van een batterij. Hier
-              staat hoe groot dat gat is, uit welke posten de besparing bestaat, en
-              wat er onderweg verloren gaat.
+              teruglevering oplevert het hele verdienmodel van een batterij.
+              Hieronder hoe groot dat gat is, uit welke posten de besparing
+              bestaat en wat er bij laden en ontladen verloren gaat.
             </p>
           </div>
+          <OpDitTabblad id="besparing" />
           {wachtOpResultaat}
           {result ? (
             <>
@@ -509,18 +566,18 @@ export default function Page() {
           ) : null}
         </Paneel>
 
-        {/* ── Wanneer ────────────────────────────────────────────────────── */}
-        <Paneel id="wanneer" actief={tab}>
+        {/* ── Door het jaar ──────────────────────────────────────────────── */}
+        <Paneel id="door-het-jaar" actief={tab}>
           <div className="sectiekop">
-            <span className="eyebrow">Wanneer · {TABS[2].vraag}</span>
-            <h2>Elk jaar levert iets op, maar niet evenveel, en niet in elke maand</h2>
+            <TabEyebrow id="door-het-jaar" />
+            <h2>Wanneer verdient de batterij zijn geld?</h2>
             <p>
-              Van grof naar fijn: per profieljaar, door het jaar heen, over de
-              uren van een gemiddelde dag, en ten slotte één dag van dichtbij.
-              Hoe grilliger de prijzen, hoe meer een batterij verdient; en een
-              zomerdag ziet er heel anders uit dan een winterdag.
+              Van grof naar fijn: per jaar, per maand, over een gemiddelde
+              zomer- en winterdag, en ten slotte één dag of week van dichtbij.
+              Hoe grilliger de prijzen, hoe meer een batterij verdient.
             </p>
           </div>
+          <OpDitTabblad id="door-het-jaar" />
           {wachtOpResultaat}
           {result ? (
             <>
@@ -558,24 +615,38 @@ export default function Page() {
           ) : null}
         </Paneel>
 
-        {/* ── Wat als ────────────────────────────────────────────────────── */}
-        <Paneel id="wat-als" actief={tab}>
+        {/* ── Terugverdienen ─────────────────────────────────────────────── */}
+        <Paneel id="terugverdienen" actief={tab}>
           <div className="sectiekop">
-            <span className="eyebrow">Wat als · {TABS[3].vraag}</span>
-            <h2>Een ander nettarief, een ander doel of een andere maat verandert de uitkomst</h2>
+            <TabEyebrow id="terugverdienen" />
+            <h2>Verdient de batterij zichzelf terug?</h2>
             <p>
-              Wat doet het tijdsafhankelijke nettarief dat de netbeheerders
-              voorstellen en waarover de ACM beslist (naar verwachting vanaf 1
-              januari 2029, mogelijk later), wat verandert er als de batterij op zelfconsumptie of
-              uitstoot stuurt in plaats van op rendement, welke maat batterij
-              loont netto en tot waar loont uitbreiden, voor wie kan deze
-              batterij uit, hoe zuinig gaat hij met zijn laadbeurten om, en hoe
-              ziet de investering er over de looptijd uit.
+              Wat de batterij over zijn looptijd kost en oplevert, hoe lang de
+              cellen meegaan, en wat het tijdsafhankelijke nettarief doet dat
+              de netbeheerders voorstellen. Daarover beslist de ACM; invoering
+              is naar verwachting 1 januari 2029, mogelijk later.
             </p>
           </div>
+          <OpDitTabblad id="terugverdienen" />
           {wachtOpResultaat}
           {result ? (
             <>
+              <Cashflow
+                finance={result.finance}
+                overgang={overgang}
+                investeringEur={toonPrijs}
+                cycleLife={toon?.cycleLife}
+                actie={uitleg("cashflow")}
+              />
+              {toon ? (
+                <Laadbeurten
+                  finance={result.finance}
+                  stats={result.stats}
+                  config={toon}
+                  overgang={overgang}
+                  actie={uitleg("beurten")}
+                />
+              ) : null}
               <Nettarief
                 huidig={result}
                 scenario={scenario}
@@ -590,72 +661,71 @@ export default function Page() {
                   <span className="fout-detail">(Technische melding: {scenarioFout})</span>
                 </p>
               ) : null}
-              {toon ? (
-                <>
-                  <Doelvergelijking
-                    vergelijking={vergelijking}
-                    config={toon}
-                    zonnepanelen={toonZonnepanelen}
-                    bezig={busy}
-                    onKies={(doel) => {
-                      // Een expliciete opdracht, net als een klik op de kaart
-                      // van maten: het doel in de instellingen en meteen
-                      // doorrekenen, zodat de hele pagina meeloopt.
-                      setInst((s) => ({ ...s, doel }));
-                      setRekenNa(true);
-                    }}
-                    actie={uitleg("doelen")}
-                  />
-                  <BatterijMaat
-                    grid={grid}
-                    huidigeCapaciteit={toonCapaciteit}
-                    huidigVermogen={toonVermogen}
-                    config={toon}
-                    curve={result.curve}
-                    niveau={rasterNiveau(result)}
-                    jaar={referentieJaar(result).year}
-                    onKies={(cap, kw) => {
-                      // Een klik op een vakje is een expliciete opdracht: meteen
-                      // doorrekenen. Anders kost de klik je het raster en levert
-                      // hij niets op, want de rekenknop staat op een ander
-                      // tabblad. De prijs gaat mee: de maat uit de kaart met de
-                      // prijs die de kaart ervoor rekende, anders rekent de
-                      // hoofddoorrekening een grote batterij voor de prijs van de
-                      // kleine.
-                      const prijs = Math.round(kostenVan(ankerVan(toon), kostenregelVan(toon), cap, kw));
-                      setInst((s) => ({ ...s, capaciteitKwh: cap, vermogenKw: kw, prijsEur: prijs }));
-                      setRekenNa(true);
-                    }}
-                    actie={uitleg("batterijmaat")}
-                  />
-                  <Uitbreiden grid={grid} config={toon} curve={result.curve} niveau={rasterNiveau(result)} actie={uitleg("uitbreiden")} />
-                  <VoorWie huishoudens={huishoudens} result={result} config={toon} actie={uitleg("voorwie")} />
-                </>
-              ) : null}
-              {toon ? (
-                <Laadbeurten
-                  finance={result.finance}
-                  stats={result.stats}
-                  config={toon}
-                  overgang={overgang}
-                  actie={uitleg("beurten")}
-                />
-              ) : null}
-              <Cashflow
-                finance={result.finance}
-                overgang={overgang}
-                investeringEur={toonPrijs}
-                cycleLife={toon?.cycleLife}
-                actie={uitleg("cashflow")}
-              />
             </>
           ) : null}
         </Paneel>
 
-        {/* ── Uitstoot ───────────────────────────────────────────────────── */}
-        <Paneel id="uitstoot" actief={tab}>
+        {/* ── Welke batterij ─────────────────────────────────────────────── */}
+        <Paneel id="welke-batterij" actief={tab}>
           <div className="sectiekop">
-            <span className="eyebrow">Uitstoot · {TABS[4].vraag}</span>
+            <TabEyebrow id="welke-batterij" />
+            <h2>Welke batterij past bij jou?</h2>
+            <p>
+              Dezelfde doorrekening voor andere maten, een grotere accu, een
+              andere sturing en andere huishoudens. Klik op een maat of een
+              doel, en de hele pagina rekent daarmee door.
+            </p>
+          </div>
+          <OpDitTabblad id="welke-batterij" />
+          {wachtOpResultaat}
+          {result && toon ? (
+            <>
+              <BatterijMaat
+                grid={grid}
+                huidigeCapaciteit={toonCapaciteit}
+                huidigVermogen={toonVermogen}
+                config={toon}
+                curve={result.curve}
+                niveau={rasterNiveau(result)}
+                jaar={referentieJaar(result).year}
+                onKies={(cap, kw) => {
+                  // Een klik op een vakje is een expliciete opdracht: meteen
+                  // doorrekenen. Anders kost de klik je het raster en levert
+                  // hij niets op, want de rekenknop staat op een ander
+                  // tabblad. De prijs gaat mee: de maat uit de kaart met de
+                  // prijs die de kaart ervoor rekende, anders rekent de
+                  // hoofddoorrekening een grote batterij voor de prijs van de
+                  // kleine.
+                  const prijs = Math.round(kostenVan(ankerVan(toon), kostenregelVan(toon), cap, kw));
+                  setInst((s) => ({ ...s, capaciteitKwh: cap, vermogenKw: kw, prijsEur: prijs }));
+                  setRekenNa(true);
+                }}
+                actie={uitleg("batterijmaat")}
+              />
+              <Uitbreiden grid={grid} config={toon} curve={result.curve} niveau={rasterNiveau(result)} actie={uitleg("uitbreiden")} />
+              <Doelvergelijking
+                vergelijking={vergelijking}
+                config={toon}
+                zonnepanelen={toonZonnepanelen}
+                bezig={busy}
+                onKies={(doel) => {
+                  // Een expliciete opdracht, net als een klik op de kaart
+                  // van maten: het doel in de instellingen en meteen
+                  // doorrekenen, zodat de hele pagina meeloopt.
+                  setInst((s) => ({ ...s, doel }));
+                  setRekenNa(true);
+                }}
+                actie={uitleg("doelen")}
+              />
+              <VoorWie huishoudens={huishoudens} result={result} config={toon} actie={uitleg("voorwie")} />
+            </>
+          ) : null}
+        </Paneel>
+
+        {/* ── CO2 ────────────────────────────────────────────────────────── */}
+        <Paneel id="co2" actief={tab}>
+          <div className="sectiekop">
+            <TabEyebrow id="co2" />
             <h2>Wat scheelt de batterij aan CO2?</h2>
             <p>
               Elke kWh uit het net is op dat uur met een bepaalde uitstoot
@@ -666,6 +736,7 @@ export default function Page() {
               daar telt je teruglevering ook mee.
             </p>
           </div>
+          <OpDitTabblad id="co2" />
           {wachtOpResultaat}
           {result && toon ? (
             result.co2 ? (
@@ -699,30 +770,32 @@ export default function Page() {
           ) : null}
         </Paneel>
 
-        {/* ── Methode ────────────────────────────────────────────────────── */}
-        <Paneel id="methode" actief={tab}>
+        {/* ── Aannames en bronnen ─────────────────────────────────────────── */}
+        <Paneel id="aannames" actief={tab}>
           <div className="sectiekop">
-            <span className="eyebrow">Methode · {TABS[5].vraag}</span>
-            <h2>Waar de cijfers vandaan komen, en wat we eerlijk moeten zeggen</h2>
+            <TabEyebrow id="aannames" />
+            <h2>Hoe hard zijn deze cijfers?</h2>
             <p>
               Geen voorspelling maar een doorrekening op de prijzen zoals ze
               werkelijk waren en het gemeten gemiddelde verbruikspatroon.
-              Hieronder de data, de grenzen van het model, en de aannames die nog
-              kunnen bewegen.
+              Hieronder de data, de aannames die nog kunnen bewegen, en de
+              bronnen.
             </p>
           </div>
+          <OpDitTabblad id="aannames" />
           {wachtOpResultaat}
           {result && manifest ? (
             <Verantwoording manifest={manifest} result={result} domein={inst.domein} />
           ) : null}
 
-          <section className="figure">
+          <section className="figure" id="wat-we-niet-weten">
             <div className="figure-kop">
               <div>
-                <h3>Wat we niet weten</h3>
+                <FiguurNaam anker="wat-we-niet-weten" />
+                <h3>De richting is stevig, de exacte hoogte niet</h3>
                 <p className="figure-uitleg">
-                  De richting van de uitkomst is stevig; de exacte hoogte niet.
-                  Dit zijn de aannames waar het om draait.
+                  Dit zijn de aannames waar het om draait, elk met een label
+                  dat zegt hoe ze de uitkomst raken.
                 </p>
               </div>
             </div>
@@ -852,13 +925,13 @@ export default function Page() {
             </ul>
           </section>
 
-          <section className="figure">
+          <section className="figure" id="bronnen">
             <div className="figure-kop">
               <div>
-                <h3>Bronnen</h3>
+                <FiguurNaam anker="bronnen" />
+                <h3>Waar de data en de aannames vandaan komen</h3>
                 <p className="figure-uitleg">
-                  Waar de data en de aannames vandaan komen. Geraadpleegd op
-                  24 september 2026.
+                  Geraadpleegd op 24 september 2026.
                 </p>
               </div>
             </div>

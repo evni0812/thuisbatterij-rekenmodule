@@ -1167,7 +1167,7 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
           De terugverdientijd rekent voor elk doel zoals het antwoord bovenaan:
           eerst de tarieven van nu, daarna het voorgestelde nettarief. De
           voorbeelddag is voor alle drie dezelfde: de doorsnee zomerdag van het
-          tabblad Wanneer.
+          tabblad Door het jaar.
         </>,
       ],
       ...(regels.length > 0 ? { voorbeeld: { regels } } : {}),
@@ -1236,7 +1236,7 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
     bronnen: [NED_BRON],
     stappen: [
       <>De lijn is het gemiddelde van de emissiefactor over alle dagen van het seizoen, per uur van de dag, over de volledige jaren. Zomer is april tot en met september, dezelfde grens als het nettarief.</>,
-      <>De staven eronder komen uit de seizoensprofielen op het tabblad Wanneer: de gemiddelde afname per uur zonder batterij min die met batterij. Boven de lijn haalt de batterij afname weg, eronder laadt hij van het net.</>,
+      <>De staven eronder komen uit de seizoensprofielen op het tabblad Door het jaar: de gemiddelde afname per uur zonder batterij min die met batterij. Boven de lijn haalt de batterij afname weg, eronder laadt hij van het net.</>,
       <>Vallen de staven boven de lijn samen met de hoge uren van de curve, dan komt de CO2-winst uit de avond; vallen de staven onder de lijn samen met de lage uren, dan laadt de batterij schoon.</>,
     ],
     letop: [

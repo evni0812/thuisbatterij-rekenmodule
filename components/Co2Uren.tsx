@@ -76,6 +76,7 @@ export function Co2Uren({
 
   return (
     <Figure
+      anker="co2-per-uur"
       actie={actie}
       titel={
         verschuiftNaarSchoon

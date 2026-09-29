@@ -29,7 +29,7 @@ gebruik, alles vanaf de CDN.
 ```bash
 npm install
 npm run dev          # http://localhost:3000
-npm test             # 460 tests, waaronder de modelinvarianten
+npm test             # 464 tests, waaronder de modelinvarianten
 npm run build        # statische export naar out/
 npm run clean        # bij een vastgelopen build-cache
 ```
@@ -48,25 +48,46 @@ te maken, is de webpack-compile gesmoord door geheugendruk — kijk naar
 `vm.swapusage`. `npx next build --turbopack` doet hetzelfde werk in een fractie
 van het geheugen en levert dezelfde export op.
 
-## De pagina: zes tabbladen, één verhaal
+## De pagina: zeven tabbladen, elk over één onderwerp
 
-De pagina volgt de volgorde van een gesprek, in zes tabbladen in de balk
-bovenaan. Het open tabblad staat in de URL (`?tab=waarom`), de panelen blijven
-gemount zodat het dagprofiel zijn gekozen dag houdt.
+De balk bovenaan heeft zeven tabbladen. Het label is een onderwerp, geen
+vraagwoord: wie de balk leest, ziet waar iets over gaat. Het open tabblad staat
+in de URL (`?tab=terugverdienen`); de panelen blijven gemount, zodat het
+dagprofiel zijn gekozen dag houdt.
 
-| Tab | Vraag | Secties |
+| Tab | Kop | Op dit tabblad |
 |---|---|---|
-| **Start** | Wat had het opgeleverd? | invoer (drie velden), antwoord (nu én met het nettarief vanaf 2029), de cijfers op een rij, de uitklapbare geavanceerde instellingen, instellingen bewaren |
-| **Waarom** | Waar komt de besparing vandaan? | prijskloof, uitsplitsing, verliezen |
-| **Wanneer** | Wanneer gebeurt het? | van jaar tot jaar, door het jaar heen, de gemiddelde dag in winter en zomer, één dag van dichtbij |
-| **Wat als** | En als het anders was? | het nettarief, een andere maat, over de looptijd |
-| **Uitstoot** | Wat scheelt het aan CO2? | de voetafdruk van je netafname, wanneer stroom schoon is, de winst per maand, het perspectief van Nederland |
-| **Methode** | Waar komen de cijfers vandaan? | verantwoording, controlegegevens, "wat we niet weten" |
+| **Uitkomst** | Wat had een thuisbatterij je opgeleverd? | invoer, het antwoord (nu én met het nettarief vanaf 2029), cijfers op een rij, instellingen, bewaren |
+| **Besparing** | Waar komt de besparing vandaan? | prijsverschil, opbouw van de besparing, verliezen |
+| **Door het jaar** | Wanneer verdient de batterij zijn geld? | per jaar, per maand, zomer- en winterdag, verloop over tijd, een dag of week van dichtbij |
+| **Terugverdienen** | Verdient de batterij zichzelf terug? | over de looptijd, laadbeurten en levensduur, nettarief van 2029 |
+| **Welke batterij** | Welke batterij past bij jou? | maat en vermogen, uitbreiden, sturing, voor wie |
+| **CO2** | Wat scheelt de batterij aan CO2? | jouw CO2, CO2 per uur, CO2 per seizoen, CO2 voor Nederland |
+| **Aannames en bronnen** | Hoe hard zijn deze cijfers? | de data en het model, wat we niet weten, bronnen |
+
+**Elk tabblad opent op dezelfde manier.** Eerst een eyebrow met het label en wat
+je er vindt, dan één vraag als kop, twee zinnen intro en een regel "Op dit
+tabblad" met links naar de figuren. Wie de tool doorneemt, weet zonder te
+scrollen wat er staat.
+
+**Elke figuur heeft een vaste naam en een anker.** De titel van een figuur is
+een conclusie die met de invoer meebeweegt ("De batterij verdient zijn geld in
+de zomer", of in de winter). Daarboven staat een vaste naam ("Per maand"), en
+daar kun je in een tekst naar verwijzen. Die naam is een link naar de figuur
+zelf: `?tab=door-het-jaar#per-maand` opent het tabblad en scrolt ernaartoe, en
+een anker zonder `?tab=` vindt zelf het goede tabblad. De namen, ankers en
+volgorde staan op één plek, in `TABS` in `components/Tabs.tsx`;
+`tests/tabs-uitleg.test.tsx` bewaakt dat elk anker een element heeft.
+
+**Oude links blijven werken.** Tot september 2026 heetten de tabbladen Start,
+Waarom, Wanneer, Wat als, Uitstoot en Methode. `leesTab()` stuurt die ids naar
+het nieuwe tabblad. `?tab=wat-als` komt uit op Welke batterij, omdat de meeste
+figuren van dat oude tabblad daar staan.
 
 **Twee manieren om van tabblad te wisselen.** De tablist in de balk is er om
 ergens naartóé te springen; de stapper onder aan de pagina is er om verder te
 lezen — chevron naar links, chevron naar rechts, en daartussen een pil met het
-tabblad waar je staat. Die pil is letterlijk een venster: alle zes de titels
+tabblad waar je staat. Die pil is letterlijk een venster: alle zeven titels
 staan naast elkaar op één spoor, de pil laat er één van zien en het spoor
 schuift op (`translateX(-i * 100%)`). Daardoor ís de beweging de navigatie — je
 ziet de oude titel weglopen en de nieuwe binnenkomen, en bij een sprong van twee
@@ -549,7 +570,7 @@ Rendement). Elke knop draagt zijn uitleg als tooltip en de regel eronder zegt
 wat de stand in centen betekent: drempel per geleverde kWh, en het minimale
 prijsverschil bij inkoop tegen 20 ct inclusief omzettingsverlies.
 
-**De drie doelen naast elkaar** staan op het tabblad Wat als
+**De drie doelen naast elkaar** staan onder Sturing op het tabblad Welke batterij
 (`components/Doelvergelijking.tsx`): per doel een kaart met besparing, CO2-winst
 voor het huishouden, eigen verbruik, netafname en teruglevering, laadbeurten en
 de terugverdientijd met de overgang naar het nettarief (dezelfde grondslag als
@@ -713,7 +734,7 @@ aanschafprijs zit al volledig in de terugverdientijd. "Besparing min slijtage"
 telt die prijs dus twee keer en is geen betekenisvol getal.
 
 **De figuur "Laadbeurten over de levensduur"** (`components/Laadbeurten.tsx`, in
-het tabblad Wat als vóór de cashflow) maakt die afweging zichtbaar: de
+het tabblad Terugverdienen, na de cashflow) maakt die afweging zichtbaar: de
 opgetelde beurten uit `finance.cashflows` tegenover de cycluslevensduur
 (horizontale streep) en de kalenderlevensduur (verticale streep). Waar de lijn
 het eerst tegenaan loopt, daaraan sterft de batterij. De kerncijfers noemen de

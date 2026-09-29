@@ -59,6 +59,7 @@ export function Co2Maanden({
 
   return (
     <Figure
+      anker="co2-per-seizoen"
       actie={actie}
       titel={
         zomer <= 0 && winter <= 0

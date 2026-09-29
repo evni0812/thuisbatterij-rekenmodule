@@ -9,6 +9,7 @@
  */
 
 import { useCallback, useRef, useState, type ReactNode } from "react";
+import { figuurNaam, type FiguurId } from "./Tabs";
 
 export const SERIES_VARS = [
   "var(--series-1)",
@@ -18,11 +19,19 @@ export const SERIES_VARS = [
 ] as const;
 
 export function Figure({
+  anker,
   titel,
   toelichting,
   children,
   actie,
 }: {
+  /**
+   * Het vaste anker van de figuur in de lijst van tabbladen. Het levert de
+   * naam boven de titel en het id waar een link naartoe springt. Alleen een
+   * figuur binnen een andere figuur (het meterprofiel in de voorbeelddag)
+   * laat hem weg.
+   */
+  anker?: FiguurId;
   /** De titel noemt de conclusie, niet de asnamen. */
   titel: string;
   toelichting?: ReactNode;
@@ -30,9 +39,10 @@ export function Figure({
   actie?: ReactNode;
 }) {
   return (
-    <figure className="figure">
+    <figure className="figure" id={anker}>
       <div className="figure-kop">
         <div>
+          {anker ? <FiguurNaam anker={anker} /> : null}
           <h3>{titel}</h3>
           {toelichting ? <p className="figure-uitleg">{toelichting}</p> : null}
         </div>
@@ -40,6 +50,20 @@ export function Figure({
       </div>
       {children}
     </figure>
+  );
+}
+
+/**
+ * De vaste naam boven een figuur. De titel eronder is een conclusie die met de
+ * invoer meebeweegt; deze naam niet, zodat je er in een tekst naar kunt
+ * verwijzen. Het is een link naar de figuur zelf: klik erop en de adresbalk
+ * bevat een link die direct hierheen springt.
+ */
+export function FiguurNaam({ anker }: { anker: FiguurId }) {
+  return (
+    <a className="eyebrow figuur-naam" href={`#${anker}`} title="Link naar dit onderdeel">
+      {figuurNaam(anker)}
+    </a>
   );
 }
 

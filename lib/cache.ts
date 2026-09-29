@@ -83,7 +83,7 @@ export interface Bundel {
  *
  * Versie 14: elk jaar en elk resultaat dragen een CO2-balans (`co2`, uit de
  * emissiefactor per uur van NED.nl). Een bewaard antwoord van versie 13 mist
- * dat veld en het tabblad Uitstoot zou erop stuklopen. De bedragen veranderen
+ * dat veld en het tabblad CO2 zou erop stuklopen. De bedragen veranderen
  * niet.
  *
  * Versie 13: de planner rekent standaard met de volle slijtageprijs als

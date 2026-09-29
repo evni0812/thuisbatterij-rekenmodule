@@ -1594,13 +1594,13 @@ details.voetnoot-uitklap .schakel {
   color: var(--text-secondary);
 }
 
-.verantwoording h2 {
+.verantwoording > h3 {
   font-size: 1.15rem;
   margin-bottom: 18px;
   color: var(--text-primary);
 }
 
-.verantwoording h3 {
+.verantwoording h4 {
   font-size: 0.92rem;
   color: var(--text-primary);
   margin-bottom: 8px;
@@ -1948,6 +1948,14 @@ details.voetnoot-uitklap .schakel {
   margin-left: auto;
 }
 
+/* Zeven tabbladen en de datadekking passen niet samen op een laptop; de
+   tabbladen gaan voor, de dekking staat ook op Aannames en bronnen. */
+@media (max-width: 1240px) {
+  .balk-meta {
+    display: none;
+  }
+}
+
 /*
  * Tabs in de balk. Semantiek van een tablist: pijltjestoetsen wisselen, Tab
  * springt eruit. De panelen blijven gemount maar verborgen, zodat de dagkiezer
@@ -2093,9 +2101,10 @@ details.voetnoot-uitklap .schakel {
 
 .stapper-venster {
   /* Vaste breedte is de hele truc: zonder dat springt de pil per titel van
-     maat en schuift er niets. Ruim genoeg voor "Wanneer" en "Methode". */
+     maat en schuift er niets. Ruim genoeg voor "Aannames en bronnen", ook op
+     een telefoon van 360px. */
   flex: none;
-  width: 8.5rem;
+  width: 12rem;
   overflow: hidden;
 }
 
@@ -2126,7 +2135,7 @@ details.voetnoot-uitklap .schakel {
   }
 
   .stapper-venster {
-    width: 7.5rem;
+    width: 11.5rem;
   }
 }
 
@@ -2177,6 +2186,72 @@ details.voetnoot-uitklap .schakel {
   color: var(--ac);
   opacity: 0.7;
   margin-bottom: 4px;
+}
+
+/*
+ * De vaste naam boven een figuur: dezelfde eyebrow, maar een link naar de
+ * figuur zelf. De titel eronder beweegt mee met de invoer; deze naam niet.
+ */
+.figuur-naam {
+  width: fit-content;
+  text-decoration: none;
+}
+
+.figuur-naam:hover,
+.figuur-naam:focus-visible {
+  text-decoration: underline;
+  opacity: 1;
+}
+
+/* Wie naar een anker springt, landt onder de plakkende balk, niet erachter. */
+.figure,
+.antwoord,
+.statistieken,
+.geavanceerd,
+.bewaren,
+.verantwoording {
+  scroll-margin-top: calc(var(--nav-h) + 16px);
+}
+
+/* ── Op dit tabblad: de inhoudsopgave onder de sectiekop ──────────────────── */
+
+.op-dit-tabblad {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 6px 12px;
+  padding: 10px 0;
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.86rem;
+}
+
+.op-dit-tabblad-kop {
+  font-size: 0.72rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+}
+
+.op-dit-tabblad ul {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px 16px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.op-dit-tabblad a {
+  color: var(--ac);
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.op-dit-tabblad a:hover,
+.op-dit-tabblad a:focus-visible {
+  text-decoration: underline;
 }
 
 .sectiekop h1,
@@ -2957,7 +3032,7 @@ details.uitklap[open] > summary {
   accent-color: var(--ac);
 }
 
-/* ── De drie doelen naast elkaar (Wat als) ────────────────────────────────── */
+/* ── De drie doelen naast elkaar (Sturing) ─────────────────────────────────── */
 
 .doelkaarten {
   display: grid;

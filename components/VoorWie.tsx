@@ -86,6 +86,7 @@ export function VoorWie({
   if (!huishoudens || (!huishoudens.klaar && punten.length < 2)) {
     return (
       <Figure
+        anker="voor-wie"
         actie={actie}
         titel="Voor wie loont deze batterij?"
         toelichting={<>Dezelfde batterij voor zeven andere huishoudens. Dat rekent op de achtergrond.</>}
@@ -163,6 +164,7 @@ export function VoorWie({
 
   return (
     <Figure
+      anker="voor-wie"
       actie={actie}
       titel={titel}
       toelichting={

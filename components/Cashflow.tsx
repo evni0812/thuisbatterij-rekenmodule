@@ -101,6 +101,7 @@ export function Cashflow({
 
   return (
     <Figure
+      anker="looptijd"
       actie={actie}
       titel={titel}
       toelichting={

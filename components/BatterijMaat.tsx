@@ -164,6 +164,7 @@ export function BatterijMaat({
     // er is; hier staat alleen wat er komt.
     return (
       <Figure
+        anker="maat"
         actie={actie}
         titel="Welke maat batterij loont eigenlijk?"
         toelichting={
@@ -300,6 +301,7 @@ export function BatterijMaat({
 
   return (
     <Figure
+      anker="maat"
       titel={titel}
       toelichting={
         <>

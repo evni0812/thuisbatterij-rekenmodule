@@ -84,7 +84,7 @@ export function Antwoord({
   );
 
   return (
-    <section className={bezig ? "antwoord bezig" : "antwoord"} aria-live="polite">
+    <section id="antwoord" className={bezig ? "antwoord bezig" : "antwoord"} aria-live="polite">
       <div className="antwoord-kop">
         <p className="antwoord-aanhef">Zonder saldering had deze batterij je</p>
         {actie}
@@ -159,7 +159,7 @@ export function Antwoord({
           <>
             Met het voorgestelde nettarief: dat lukte niet door te rekenen. De
             terugverdientijd hierboven gaat daarom uit van het huidige
-            nettarief; op het tabblad Wat als staat wat er misging.
+            nettarief; op het tabblad Terugverdienen staat wat er misging.
           </>
         ) : (
           <>Met het voorgestelde nettarief: wordt doorgerekend…</>

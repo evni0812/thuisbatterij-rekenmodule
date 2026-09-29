@@ -121,7 +121,7 @@ export function Uitleg({
           <p className="uitleg-voet">
             De getallen hierboven komen uit jouw doorrekening en veranderen mee met
             je invoer. Alles over de data, het model en wat we niet weten staat op
-            het tabblad Methode.
+            het tabblad Aannames en bronnen.
           </p>
         </div>
       </dialog>
