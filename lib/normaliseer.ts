@@ -35,6 +35,14 @@ import { DOELEN } from "./model/doel";
 import type { Doel } from "./model/types";
 import type { Instellingen } from "./url-state";
 
+/**
+ * De eerste dag waarvoor er profieldata is, en de laatste die we ooit willen
+ * meenemen. Leeg in de instellingen betekent: alles wat er is. De pagina klemt
+ * daarnaast op wat het manifest van het gekozen netgebied echt heeft.
+ */
+export const VROEGSTE_DAG = "2023-04-01";
+export const LAATSTE_DAG = "2026-12-31";
+
 /** De getalvelden van de instellingen. */
 export type GetalVeld = {
   [K in keyof Instellingen]: Instellingen[K] extends number | null ? K : never;
@@ -171,9 +179,15 @@ export function normaliseerDeel(
         break;
       case "van":
       case "tot":
-        // Leeg betekent: de hele beschikbare periode.
-        if (v === "" || (typeof v === "string" && isDatum(v))) uit[k] = v;
-        else meld(k);
+        // Leeg betekent: de hele beschikbare periode. Een dag buiten wat we
+        // ooit hebben (of ooit meenemen) klemt op de rand: `?van=2027-03-01`
+        // is geen periode zonder data maar een periode aan het eind ervan.
+        if (v === "") uit[k] = v;
+        else if (typeof v === "string" && isDatum(v)) {
+          const klem = v < VROEGSTE_DAG ? VROEGSTE_DAG : v > LAATSTE_DAG ? LAATSTE_DAG : v;
+          if (klem !== v) meld(k);
+          uit[k] = klem;
+        } else meld(k);
         break;
       default:
         // Een veld dat de instellingen niet kennen: weg.
@@ -183,13 +197,52 @@ export function normaliseerDeel(
 
   // Een periode die eindigt voordat hij begint, bestaat niet; dan de hele
   // beschikbare periode in plaats van een foutmelding over ontbrekende data.
+  // De pagina zegt in de "aangepast"-melding dat het om de periode gaat.
   if (typeof uit.van === "string" && typeof uit.tot === "string" && uit.van && uit.tot && uit.van > uit.tot) {
-    meld("van");
-    meld("tot");
+    if (!gecorrigeerd?.includes("van")) meld("van");
+    if (!gecorrigeerd?.includes("tot")) meld("tot");
     uit.van = "";
     uit.tot = "";
   }
   return uit as Partial<Instellingen>;
+}
+
+/**
+ * De periode nadat de gebruiker één van de twee data verandert: het paar blijft
+ * een geldige periode. Schuift `van` voorbij `tot`, dan schuift `tot` mee (en
+ * omgekeerd), zodat er nooit een periode ontstaat die eindigt voor hij begint.
+ * Een dag buiten de beschikbare data klemt op de rand ervan; leeg betekent
+ * "vanaf het begin" of "tot het eind" en laat de andere helft ongemoeid.
+ */
+export function klemPeriode(
+  gewijzigd: "van" | "tot",
+  waarde: string,
+  huidig: { van: string; tot: string },
+  beschikbaar: { vroegste: string; laatste: string },
+): { van: string; tot: string } {
+  if (waarde === "") return gewijzigd === "van" ? { ...huidig, van: "" } : { ...huidig, tot: "" };
+  const v = waarde < beschikbaar.vroegste ? beschikbaar.vroegste : waarde > beschikbaar.laatste ? beschikbaar.laatste : waarde;
+  if (gewijzigd === "van") return { van: v, tot: huidig.tot && v > huidig.tot ? v : huidig.tot };
+  return { van: huidig.van && v < huidig.van ? v : huidig.van, tot: v };
+}
+
+/**
+ * De instellingen met de periode op de beschikbare data geklemd (`van` en `tot`
+ * van het manifest van het gekozen netgebied). Geeft de sleutels terug die
+ * daarbij zijn veranderd, voor de "aangepast"-melding. Leeg blijft leeg.
+ */
+export function klemOpBeschikbaar(
+  inst: Pick<Instellingen, "van" | "tot">,
+  beschikbaar: { vroegste: string; laatste: string },
+): { van: string; tot: string; veranderd: ("van" | "tot")[] } {
+  const klem = (d: string) =>
+    !d ? d : d < beschikbaar.vroegste ? beschikbaar.vroegste : d > beschikbaar.laatste ? beschikbaar.laatste : d;
+  const van = klem(inst.van);
+  const tot = klem(inst.tot);
+  const veranderd: ("van" | "tot")[] = [];
+  if (van !== inst.van) veranderd.push("van");
+  if (tot !== inst.tot) veranderd.push("tot");
+  return { van, tot, veranderd };
 }
 
 /** Hoe een instelling heet in een melding dat hij is aangepast. */
@@ -231,6 +284,8 @@ export function normaliseer(
   // Een periode is een paar: viel één helft weg, dan past de andere mogelijk
   // niet meer bij de standaard; controleer het paar opnieuw.
   if (schoon.van && schoon.tot && schoon.van > schoon.tot) {
+    if (!gecorrigeerd?.includes("van")) gecorrigeerd?.push("van");
+    if (!gecorrigeerd?.includes("tot")) gecorrigeerd?.push("tot");
     schoon.van = "";
     schoon.tot = "";
   }

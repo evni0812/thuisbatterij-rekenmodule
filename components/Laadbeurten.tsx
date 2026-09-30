@@ -23,9 +23,8 @@ import { centPerKwh, getal, jaren, procent } from "../lib/format";
 import { strategieVoor } from "../lib/strategie";
 import { Figure, Grafiek, Raster, Trefvlak, kiesTicks, useTip } from "./chart-parts";
 
-const B = 720;
+const B_STANDAARD = 720;
 const H = 240;
-const MARGE = { boven: 16, rechts: 16, onder: 34, links: 64 };
 
 /** Illustratieve inkoopprijs voor het minimale prijsverschil, EUR/kWh. */
 export const VOORBEELD_INKOOP = 0.2;
@@ -65,10 +64,16 @@ export function Laadbeurten({
   /** De knop "Hoe is dit berekend?" in de kop. */
   actie?: ReactNode;
 }) {
-  const { kader, tip, toon, wis } = useTip();
+  const { kader, tip, toon, wis, breedte: gemeten } = useTip();
   const [aangewezen, setAangewezen] = useState<number | null>(null);
   const cf = finance.cashflows;
   if (cf.length === 0) return null;
+
+  // De viewBox volgt het kader: op een telefoon past de grafiek zonder te
+  // scrollen, met letters op ware grootte.
+  const B = gemeten ?? B_STANDAARD;
+  const smal = B < 560;
+  const MARGE = { boven: 16, rechts: smal ? 10 : 16, onder: 34, links: smal ? 50 : 64 };
 
   const deel = config.wearFraction ?? 1;
   const drempel = stats.wearCostEurPerKwh * deel;
@@ -89,6 +94,10 @@ export function Laadbeurten({
   const x = (j: number) => MARGE.links + (j / cf.length) * plotB;
 
   const punten = waarden.map((v, i) => `${i === 0 ? "M" : "L"}${x(i)} ${y(v)}`).join(" ");
+  // De cellenlabel staat boven de rode lijn, het kalenderlabel onderaan de
+  // plot: bovenin raakten ze elkaar zodra de lijn tegen het plafond aan loopt.
+  const yCellen = y(config.cycleLife) - 6;
+  const yKalenderLabel = MARGE.boven + plotH - 8;
   const kleur = sterftAanBeurten ? "var(--series-2)" : "var(--series-3)";
 
   // Met het nettarief handelt de batterij vaker; zegt de cashflow daardoor dat
@@ -96,16 +105,16 @@ export function Laadbeurten({
   const ov = overgang?.finance ?? null;
   const nettariefZin =
     ov && ov.totalCycles > finance.totalCycles + 0.5
-      ? `Met het voorgestelde nettarief vanaf ${overgang!.ingangsjaar} handelt de batterij vaker: over ${ov.cashflows.length} jaar lopen de beurten dan op tot ${getal(ov.totalCycles)}${
+      ? `Met het voorgestelde nettarief vanaf ${overgang!.ingangsjaar} laadt en levert de batterij vaker. Over ${ov.cashflows.length} jaar zijn dat ${getal(ov.totalCycles)} laadbeurten${
           ov.endOfLifeYear !== null && finance.endOfLifeYear === null
-            ? `, en in jaar ${ov.endOfLifeYear} zijn de ${getal(config.cycleLife)} beurten van de cellen op`
+            ? `, en in jaar ${ov.endOfLifeYear} zijn de ${getal(config.cycleLife)} laadbeurten van de batterij op`
             : ""
         }. Dat telt de looptijd hieronder.`
       : null;
 
   const titel = sterftAanBeurten
-    ? `Met ${getal(stats.cyclesPerYear, 0)} beurten per jaar zijn de cellen na ${jaren(jarenTotOp)} op, eerder dan de kalender`
-    : `Met ${getal(stats.cyclesPerYear, 0)} beurten per jaar sterft de batterij aan zijn leeftijd, niet aan zijn beurten`;
+    ? `Met ${getal(stats.cyclesPerYear, 0)} laadbeurten per jaar is de batterij na ${jaren(jarenTotOp)} aan vervanging toe, eerder door gebruik dan door leeftijd`
+    : `Met ${getal(stats.cyclesPerYear, 0)} laadbeurten per jaar is de batterij eerder aan vervanging toe door leeftijd dan door gebruik`;
 
   return (
     <Figure
@@ -115,12 +124,12 @@ export function Laadbeurten({
       toelichting={
         <>
           De lijn telt de laadbeurten op over de looptijd, met het huidige
-          nettarief. De streep bij{" "}
-          {getal(config.cycleLife)} is wat de cellen aankunnen; de streep bij{" "}
-          {kalender} jaar is de kalenderlevensduur. Waar de lijn het eerst
-          tegenaan loopt, daaraan gaat de batterij kapot. De strategie-instelling
-          bepaalt hoe steil de lijn loopt: hoe lager de drempel, hoe meer beurten
-          en hoe hoger de jaaropbrengst, maar ook hoe eerder de cellen op zijn.
+          nettarief. De streep bij {getal(config.cycleLife)} laadbeurten is wat de
+          batterij aankan. De streep bij {kalender} jaar is zijn levensduur in
+          jaren. Wat de lijn het eerst raakt, bepaalt of de batterij aan zijn einde
+          komt door gebruik of door leeftijd. De strategie-instelling bepaalt hoe steil de lijn loopt: hoe
+          lager de drempel, hoe meer laadbeurten en hoe hoger de besparing per
+          jaar, maar ook hoe eerder de batterij op is.
         </>
       }
     >
@@ -131,13 +140,13 @@ export function Laadbeurten({
           setAangewezen(null);
           wis();
         }}
-        label="Opgetelde laadbeurten over de looptijd tegenover de cycluslevensduur"
+        label="Opgetelde laadbeurten over de looptijd tegenover de levensduur in laadbeurten"
       >
         <svg
           viewBox={`0 0 ${B} ${H}`}
-          className="chart"
+          className="chart chart-fluid"
           role="img"
-          aria-label="Opgetelde laadbeurten over de looptijd tegenover de cycluslevensduur"
+          aria-label="Opgetelde laadbeurten over de looptijd tegenover de levensduur in laadbeurten"
         >
           {aangewezen !== null ? (
             <rect
@@ -158,7 +167,7 @@ export function Laadbeurten({
             formatter={(v) => getal(v)}
           />
 
-          {/* De cycluslevensduur: zoveel beurten kunnen de cellen aan. */}
+          {/* De levensduur in laadbeurten: zoveel kan de batterij aan. */}
           <line
             x1={MARGE.links}
             x2={B - MARGE.rechts}
@@ -170,12 +179,12 @@ export function Laadbeurten({
           />
           <text
             x={B - MARGE.rechts - 4}
-            y={y(config.cycleLife) - 6}
+            y={yCellen}
             textAnchor="end"
-            className="mark-label"
-            fill="var(--critical)"
+            className="mark-label op-lijn"
+            style={{ fill: "var(--critical)" }}
           >
-            cellen op na {getal(config.cycleLife)} beurten
+            batterij op na {getal(config.cycleLife)} laadbeurten
           </text>
 
           {/* De kalenderlevensduur, als hij binnen de looptijd valt. */}
@@ -190,8 +199,8 @@ export function Laadbeurten({
                 strokeWidth={1.5}
                 strokeDasharray="4 3"
               />
-              <text x={x(kalender) - 6} y={MARGE.boven + 12} textAnchor="end" className="mark-label">
-                kalender op na {kalender} jaar
+              <text x={x(kalender) - 6} y={yKalenderLabel} textAnchor="end" className="mark-label op-lijn">
+                levensduur van {kalender} jaar
               </text>
             </g>
           ) : null}
@@ -213,7 +222,13 @@ export function Laadbeurten({
           {[0, 5, 10, 15, 20, 25]
             .filter((j) => j <= cf.length)
             .map((j) => (
-              <text key={j} x={x(j)} y={H - 12} textAnchor="middle" className="as-label">
+              <text
+                key={j}
+                x={x(j)}
+                y={H - 12}
+                textAnchor={x(j) > B - MARGE.rechts - 20 ? "end" : "middle"}
+                className="as-label"
+              >
                 {j === 0 ? "nu" : `${j} jaar`}
               </text>
             ))}
@@ -249,14 +264,14 @@ export function Laadbeurten({
                     },
                     ...(post
                       ? [
-                          { label: "Beurten dat jaar", waarde: getal(post.cyclesThisYear) },
+                          { label: "Laadbeurten dat jaar", waarde: getal(post.cyclesThisYear) },
                           { label: "Resterende capaciteit", waarde: procent(post.capacityFraction) },
                         ]
                       : []),
                   ],
                   noot:
                     finance.endOfLifeYear !== null && i === finance.endOfLifeYear
-                      ? "In dit jaar zijn de beurten op."
+                      ? "In dit jaar zijn de laadbeurten op."
                       : undefined,
                 });
               }}
@@ -275,17 +290,16 @@ export function Laadbeurten({
           <dd>{getal(stats.cyclesPerYear, 0)}</dd>
         </div>
         <div>
-          <dt>In de kalenderlevensduur</dt>
+          <dt>Laadbeurten in {kalender} jaar</dt>
           <dd>
             {getal(inKalender)}
             <span className="dd-noot">
-              van de {getal(config.cycleLife)} beurten die de cellen aankunnen, in{" "}
-              {kalender} jaar
+              van de {getal(config.cycleLife)} laadbeurten die de batterij aankan
             </span>
           </dd>
         </div>
         <div>
-          <dt>Drempel van de planner</dt>
+          <dt>Drempel van de aansturing</dt>
           <dd>
             {centPerKwh(drempel)}
             <span className="dd-noot">
@@ -299,8 +313,9 @@ export function Laadbeurten({
           <dd>
             {centPerKwh(minimaalPrijsverschil(VOORBEELD_INKOOP, config.battery.efficiency, drempel))}
             <span className="dd-noot">
-              bij inkoop tegen {centPerKwh(VOORBEELD_INKOOP)}: omzettingsverlies plus drempel.
-              Onder dat verschil laat de planner de beurt liggen
+              als je stroom van het net haalt voor {centPerKwh(VOORBEELD_INKOOP)}: het
+              omzettingsverlies plus de drempel. Onder dat verschil laat de
+              aansturing de laadbeurt liggen
             </span>
           </dd>
         </div>
@@ -309,24 +324,24 @@ export function Laadbeurten({
       <p className="posten-noot">
         {sterftAanBeurten ? (
           <>
-            De beurten raken op vóór de kalender. Elke beurt kost dan echt een
-            stukje levensduur, en de volle slijtageprijs is de juiste drempel.
-            Een lagere stand kan per jaar meer opleveren, maar de beurten raken
-            dan nog eerder op.
+            De laadbeurten zijn op voordat de batterij te oud is. Elke laadbeurt
+            kost dan echt een stukje levensduur, en de volle slijtageprijs is de
+            juiste drempel. Een lagere stand kan per jaar meer besparen, maar de
+            laadbeurten zijn dan nog eerder op.
           </>
         ) : deel > 0.2 ? (
           <>
-            De beurten raken niet op vóór de kalender. Een extra beurt kost dan
-            in werkelijkheid minder dan de volle slijtageprijs, want de batterij
-            was toch al afgeschreven op leeftijd. Een lagere stand van de
-            strategie kan dan meer opleveren, zolang de beurten niet alsnog
-            opraken vóór de kalender. Kies een andere stand en reken opnieuw om
-            het te zien.
+            De laadbeurten zijn niet op voordat de batterij te oud is. Een extra
+            laadbeurt kost dan in werkelijkheid minder dan de volle slijtageprijs,
+            want de batterij verliest toch al waarde door leeftijd. Een lagere
+            stand van de strategie kan dan meer besparen, zolang de laadbeurten
+            niet alsnog eerder op zijn dan de leeftijd. Kies een andere stand en
+            reken opnieuw om het te zien.
           </>
         ) : (
           <>
-            De beurten raken niet op vóór de kalender. De batterij gaat eerder
-            door ouderdom dan door zijn laadbeurten achteruit.
+            De laadbeurten zijn niet op voordat de batterij te oud is. De batterij
+            gaat eerder door leeftijd achteruit dan door zijn laadbeurten.
           </>
         )}
         {nettariefZin ? <> {nettariefZin}</> : null}

@@ -124,9 +124,14 @@ export function getal(value: number, decimalen = 0): string {
   return f.format(value);
 }
 
-/** "8 jaar en 4 maanden" leest prettiger dan "8,3 jaar". */
+/**
+ * "8 jaar en 4 maanden" leest prettiger dan "8,3 jaar". Zonder terugverdientijd
+ * (null): "niet terugverdiend binnen de looptijd". Die woorden staan vast, en
+ * ook in labels als "Terugverdientijd" of "terugverdiend na" komt geen
+ * "verdient zichzelf niet terug" meer voor.
+ */
 export function jaren(value: number | null): string {
-  if (value === null) return "verdient zichzelf niet terug";
+  if (value === null) return "niet terugverdiend binnen de looptijd";
   const heel = Math.floor(value);
   const maanden = Math.round((value - heel) * 12);
   if (maanden === 0) return `${heel} jaar`;
@@ -146,7 +151,7 @@ export function datum(iso: string): string {
   return `${d} ${MAANDEN[m - 1]} ${y}`;
 }
 
-/** Korte periodeaanduiding, bijvoorbeeld "apr – dec 2023". */
+/** Korte periodeaanduiding, bijvoorbeeld "apr tot dec 2023" of "apr 2023 tot mrt 2024". */
 export function periode(vanIso: string, totIso: string): string {
   const [y1, m1] = vanIso.split("-").map(Number);
   const [y2, m2] = totIso.split("-").map(Number);

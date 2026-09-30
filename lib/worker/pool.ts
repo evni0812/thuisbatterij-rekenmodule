@@ -17,6 +17,16 @@
  * een fout of een annulering. Zonder dat signaal zou een worker die zijn
  * rasterrijen halverwege liet vallen voor altijd bezet lijken.
  *
+ * Een worker die crasht (`error`), of een bericht krijgt dat hij niet kan lezen
+ * (`messageerror`), wordt vervangen. Was hij klaar met initialiseren, dan is
+ * dat een runtimefout: zijn lopende taak eindigt als fout (`REKENFOUT`), de
+ * worker gaat weg en een nieuwe start, en de rest van de wachtrij loopt door.
+ * Zonder dat bleef de taak voor altijd "bezig" en de worker voor altijd bezet.
+ * Was hij dat nog niet, dan is het een initfout: de worker doet niets meer en
+ * de aanroeper beslist of dat fataal is. Elke worker mag hoogstens
+ * `MAX_HERSTARTS` keer worden vervangen; daarna geldt hij als kapot, zodat een
+ * fout die elke keer terugkomt niet eindeloos herstart.
+ *
  * Een worker krijgt pas taken als hij `ready` heeft gemeld; tot dan blijven ze
  * in de wachtrij voor wie wel klaar is. En met een ophaaldienst beantwoordt de
  * pool de `haal`-verzoeken van de workers, zodat elk bestand één keer wordt
@@ -24,6 +34,18 @@
  */
 
 import type { WorkerRequest, WorkerResponse } from "./protocol";
+
+/** Wat een taak meldt als zijn worker crashte terwijl hij eraan werkte. */
+export const REKENFOUT = "de berekening liep vast; probeer het opnieuw";
+
+/** Hoe vaak één worker wordt vervangen voordat hij als kapot geldt. */
+export const MAX_HERSTARTS = 3;
+
+/**
+ * Wanneer een worker faalde: tijdens het opstarten (`init`, de gegevens konden
+ * niet worden geladen) of erna (`runtime`, de berekening liep vast).
+ */
+export type PoolFase = "init" | "runtime";
 
 export interface PoolTaak {
   bericht: WorkerRequest & { id: number };
@@ -80,26 +102,107 @@ export class WorkerPool {
   private readonly gereed: boolean[] = [];
   /** De initialisatie van deze worker mislukte; hij doet niets meer. */
   private readonly kapot: boolean[] = [];
+  /** Hoe vaak elke worker al is vervangen. */
+  private readonly herstarts: number[] = [];
+  private baseUrl: string | null = null;
   private wachtrij: PoolTaak[] = [];
   private gestopt = false;
 
   constructor(
     aantal: number,
-    maak: () => Worker,
+    private readonly maak: () => Worker,
     private readonly onBericht: (msg: WorkerResponse, worker: number) => void,
-    private readonly onFout: (bericht: string) => void,
+    /**
+     * Een worker faalde. Bij `runtime` is hij al vervangen en heeft zijn lopende
+     * taak al een foutbericht gekregen via `onBericht`; dit is er om te
+     * weten dat het gebeurde, bijvoorbeeld voor de dispatches die hij bewaarde.
+     */
+    private readonly onFout: (bericht: string, fase: PoolFase, worker: number) => void,
     /** Zonder dienst haalt elke worker zijn bestanden zelf op. */
     private readonly dienst: Ophaaldienst | null = null,
   ) {
     for (let i = 0; i < aantal; i++) {
-      const w = maak();
-      w.onmessage = (event: MessageEvent<WorkerResponse>) => this.ontvang(event.data, i);
-      w.onerror = (event: ErrorEvent) => this.onFout(event.message || "de rekenmodule kon niet starten");
-      this.workers.push(w);
+      this.workers.push(this.maak());
+      this.koppel(i);
       this.huidig.push(null);
       this.gereed.push(false);
       this.kapot.push(false);
+      this.herstarts.push(0);
     }
+  }
+
+  /** Hang de handlers van de pool aan de worker op deze plek. */
+  private koppel(i: number): void {
+    const w = this.workers[i]!;
+    w.onmessage = (event: MessageEvent<WorkerResponse>) => this.ontvang(event.data, i);
+    w.onerror = (event: ErrorEvent) => this.faal(i, event.message || "de rekenmodule kon niet starten");
+    w.onmessageerror = () => this.faal(i, "een bericht van de rekenmodule was onleesbaar");
+  }
+
+  /**
+   * Een worker crashte of gaf een onleesbaar bericht. Voor het `ready` is dat
+   * een initfout; erna wordt de worker vervangen en eindigt zijn taak als fout.
+   */
+  private faal(worker: number, reden: string): void {
+    if (this.gestopt) return;
+    if (!this.gereed[worker]) {
+      this.geefOp(worker);
+      this.onFout(reden, "init", worker);
+      this.verdeel();
+      return;
+    }
+    const lopend = this.huidig[worker] ?? null;
+    this.huidig[worker] = null;
+    this.vervang(worker);
+    if (lopend) this.onBericht({ type: "error", id: lopend.bericht.id, message: REKENFOUT }, worker);
+    this.onFout(REKENFOUT, "runtime", worker);
+    this.verdeel();
+  }
+
+  /** Deze worker doet niets meer; taken die alleen hij mocht doen gaan naar wie er wel is. */
+  private geefOp(worker: number): void {
+    this.kapot[worker] = true;
+    this.gereed[worker] = false;
+    for (const t of this.wachtrij) if (t.worker === worker) delete t.worker;
+  }
+
+  /** Vervang een gecrashte worker door een nieuwe, die opnieuw initialiseert. */
+  private vervang(worker: number): void {
+    const oud = this.workers[worker]!;
+    // Berichten van de oude worker horen niet meer bij deze plek.
+    oud.onmessage = null;
+    oud.onerror = null;
+    oud.onmessageerror = null;
+    try {
+      oud.terminate();
+    } catch {
+      // Hij was al weg.
+    }
+    this.gereed[worker] = false;
+    if (this.herstarts[worker]! >= MAX_HERSTARTS) {
+      this.geefOp(worker);
+      return;
+    }
+    this.herstarts[worker]!++;
+    try {
+      this.workers[worker] = this.maak();
+    } catch {
+      this.geefOp(worker);
+      return;
+    }
+    this.koppel(worker);
+    if (this.baseUrl !== null) {
+      this.workers[worker]!.postMessage({
+        type: "init",
+        baseUrl: this.baseUrl,
+        viaHoofdthread: this.dienst !== null,
+      } satisfies WorkerRequest);
+    }
+  }
+
+  /** Is er nog een worker die werk kan doen? */
+  heeftWerkers(): boolean {
+    return this.kapot.some((k) => !k);
   }
 
   get aantal(): number {
@@ -108,6 +211,7 @@ export class WorkerPool {
 
   /** Stuur `init` naar alle workers; met een ophaaldienst halen ze hun bestanden via de hoofdthread. */
   init(baseUrl: string): void {
+    this.baseUrl = baseUrl;
     for (const w of this.workers) {
       w.postMessage({ type: "init", baseUrl, viaHoofdthread: this.dienst !== null } satisfies WorkerRequest);
     }
@@ -121,6 +225,8 @@ export class WorkerPool {
   /** Zet een taak in de wachtrij en start hem zodra er een worker vrij is. */
   plaats(taak: PoolTaak): void {
     if (this.gestopt) return;
+    // Een taak voor een worker die er niet meer is, mag door wie er wel is.
+    if (taak.worker !== undefined && this.kapot[taak.worker]) delete taak.worker;
     if (taak.voorrang) {
       const plek = this.wachtrij.findIndex((t) => !t.voorrang);
       if (plek < 0) this.wachtrij.push(taak);
@@ -173,8 +279,7 @@ export class WorkerPool {
     if (msg.type === "error" && msg.id === null) {
       // De initialisatie van deze worker is mislukt. Taken die alleen hij mocht
       // doen gaan naar wie er wel is; de aanroeper beslist of dit fataal is.
-      this.kapot[worker] = true;
-      for (const t of this.wachtrij) if (t.worker === worker) delete t.worker;
+      this.geefOp(worker);
       this.onBericht(msg, worker);
       this.verdeel();
       return;

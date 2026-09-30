@@ -6,7 +6,7 @@
  *
  * Bovenaan per doel een kaart met dezelfde cijfers in dezelfde volgorde, zodat
  * je van links naar rechts kunt vergelijken; het doel waarmee de pagina nu
- * rekent is gemarkeerd, en met "Reken hiermee" zet je een ander doel in de
+ * rekent is gemarkeerd, en met "Kies dit doel" zet je een ander doel in de
  * instellingen. Daaronder hoe dat eruitziet: dezelfde zomerdag drie keer, met
  * wanneer de batterij laadt en levert, en waarvandaan en waarheen.
  *
@@ -49,8 +49,8 @@ export function vergelijkingsTitel(
   const extra = u.co2WinstKg !== null && r.co2WinstKg !== null ? u.co2WinstKg - r.co2WinstKg : null;
   const kostDeel = kost >= 0.5 ? `kost je ${euro(kost)} per jaar` : "kost je hier niets";
   if (extra === null) return `Sturen op uitstoot ${kostDeel} tegenover sturen op rendement`;
-  if (extra < 0.5) return `Sturen op uitstoot ${kostDeel} en scheelt hier geen CO2 extra`;
-  return `Sturen op uitstoot ${kostDeel} en scheelt ${kg(extra)} CO2 extra`;
+  if (extra < 0.5) return `Sturen op uitstoot ${kostDeel} en geeft hier niet minder CO2`;
+  return `Sturen op uitstoot ${kostDeel} en geeft ${kg(extra)} minder CO2`;
 }
 
 function vanNaar(van: string, naar: string): ReactNode {
@@ -73,7 +73,7 @@ export function Doelvergelijking({
   /** De configuratie van het getoonde antwoord: het gekozen doel en de afleiding. */
   config: Configuration;
   zonnepanelen?: boolean;
-  /** Er loopt een hoofddoorrekening; dan wacht "Reken hiermee". */
+  /** Er loopt een hoofddoorrekening; dan wacht "Kies dit doel". */
   bezig?: boolean;
   /** Zet dit doel in de instellingen en reken door. */
   onKies: (doel: Doel) => void;
@@ -92,8 +92,8 @@ export function Doelvergelijking({
       titel={titel}
       toelichting={
         <>
-          Dezelfde batterij en hetzelfde huishouden, drie keer doorgerekend: alleen
-          waar de batterij op stuurt verschilt. Afgerekend wordt altijd in echte
+          Dezelfde batterij en hetzelfde huishouden, drie keer doorgerekend. Alleen
+          het doel van de aansturing verschilt. Afgerekend wordt altijd in echte
           euro&apos;s, op dezelfde uurprijzen. Gemiddeld per jaar, over de volledige
           jaren.
         </>
@@ -154,12 +154,12 @@ function Kaart({
             <dd className="doelcijfer-hoofd">{euro(kaart.besparingEur)}</dd>
           </div>
           <div>
-            <dt>CO2-winst per jaar</dt>
+            <dt>Minder CO2 per jaar</dt>
             <dd>
               {kaart.co2WinstKg === null
-                ? "—"
+                ? "niet bekend"
                 : kaart.co2WinstKg < 0
-                  ? `${kg(-kaart.co2WinstKg)} méér`
+                  ? `${kg(-kaart.co2WinstKg)} meer`
                   : kg(kaart.co2WinstKg)}
             </dd>
           </div>
@@ -186,7 +186,7 @@ function Kaart({
           <div>
             <dt>Terugverdientijd</dt>
             <dd>
-              {kaart.terugverdientijd === null ? "niet binnen de looptijd" : jaren(kaart.terugverdientijd)}
+              {kaart.terugverdientijd === null ? "niet terugverdiend binnen de looptijd" : jaren(kaart.terugverdientijd)}
               <span className="dd-noot">
                 {kaart.metOvergang
                   ? "met de overgang naar het nettarief, zoals bovenaan"
@@ -210,11 +210,11 @@ function Kaart({
           <button
             type="button"
             className="knop licht klein"
-            disabled={bezig}
+            disabled={bezig || !kaart}
             onClick={() => onKies(doel)}
-            aria-label={`Reken hiermee: ${info.naam}`}
+            aria-label={`Kies dit doel: ${info.naam}`}
           >
-            Reken hiermee
+            Kies dit doel
           </button>
         )}
       </div>
@@ -304,7 +304,7 @@ function DoelDag({
       const leveren = a.naarHuis[i]! + a.naarNet[i]!;
       const wat =
         laden > 0.02
-          ? `laadt ${getal(laden, 1)} kW${a.uitNet[i]! > 0.02 ? (a.uitZon[i]! > 0.02 ? ", deels uit het net" : " uit het net") : " uit eigen zon"}`
+          ? `laadt ${getal(laden, 1)} kW${a.uitNet[i]! > 0.02 ? (a.uitZon[i]! > 0.02 ? ", deels van het net" : " van het net") : " uit eigen zon"}`
           : leveren > 0.02
             ? `levert ${getal(leveren, 1)} kW${a.naarNet[i]! > 0.02 ? (a.naarHuis[i]! > 0.02 ? ", deels aan het net" : " aan het net") : " aan je huis"}`
             : "doet niets";
@@ -316,12 +316,13 @@ function DoelDag({
   return (
     <div className="doeldag">
       <h4 className="doeldag-kop">
-        Hoe dat eruitziet op {datum(basis.date)}, een doorsnee zomerdag
+        Hoe dat eruitziet op {datum(basis.date)}, een gewone zomerdag (juni tot en met augustus)
       </h4>
       <p className="figure-uitleg">
-        Boven de prijs die je die dag voor afname betaalde. Daaronder per doel
-        wat de batterij deed: boven de lijn laden (groen uit eigen zon, blauw uit
-        het net), eronder leveren (groen aan je huis, oranje aan het net).
+        Bovenaan staat de prijs die je die dag betaalde. Daaronder zie je per doel
+        wat de batterij deed: boven de middenlijn laadt hij, eronder levert hij.
+        Groen is je eigen zonnestroom, blauw is stroom van het net, oranje is
+        stroom naar het net.
       </p>
       <Grafiek
         kader={kader}
@@ -372,10 +373,10 @@ function DoelDag({
                   {r.doel === gekozen ? " (gekozen)" : ""}
                 </text>
                 <text x={B - MARGE.rechts} y={top - 8} textAnchor="end" className="as-label">
-                  {`${euroPrecies(s.savingEur)} bespaard · ${getal(s.chargedFromSolarKwh, 1)} kWh uit zon, ${getal(
+                  {`${s.savingEur < 0 ? `kostte ${euroPrecies(-s.savingEur)}` : `${euroPrecies(s.savingEur)} bespaard`} · ${getal(s.chargedFromSolarKwh, 1)} kWh uit zon, ${getal(
                     s.chargedFromGridKwh,
                     1,
-                  )} uit het net`}
+                  )} van het net`}
                 </text>
                 <Raster
                   ticks={kwTicks}
@@ -428,7 +429,7 @@ function DoelDag({
                 textAnchor={u === 0 ? "start" : u === 24 ? "end" : "middle"}
                 className="as-label"
               >
-                {`${String(u).padStart(2, "0")}:00`}
+                {`${u}.00 uur`}
               </text>
             );
           })}

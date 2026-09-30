@@ -23,7 +23,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from "react";
 import { datum, euro, euroPrecies, getal, kwh } from "../lib/format";
 import { dagenLater, type PeriodeReeks, type PeriodeVak, type Resolutie } from "../lib/model/periode";
-import { Figure, Legenda } from "./chart-parts";
+import { Figure, Legenda, ScrollKader } from "./chart-parts";
 
 export type Weergave = "maand" | "jaar";
 
@@ -139,8 +139,11 @@ export function Verloop({
   const t = periode?.totaal;
   const titel =
     past && t
-      ? `${periodeLabel(weergave, bereik.van, bereik.tot).replace(/^./, (c) => c.toUpperCase())}: ${euro(t.savingEur)} bespaard`
-      : "Het resultaat over een week, een maand of een jaar";
+      ? `${periodeLabel(weergave, bereik.van, bereik.tot).replace(/^./, (c) => c.toUpperCase())}: ${
+          t.savingEur < 0 ? `de batterij kostte ${euro(-t.savingEur)}` : `${euro(t.savingEur)} bespaard`
+        }`
+      : "Het resultaat over een maand of een jaar";
+  const ietsNegatief = vakken.some((v) => v.savingEur < 0) || (t?.savingEur ?? 0) < 0;
 
   const ticks = [hoogste, hoogste / 2, 0, laagste].filter((v, i, a) => a.indexOf(v) === i);
 
@@ -152,9 +155,12 @@ export function Verloop({
         <>
           Dezelfde doorrekening als het dagprofiel, opgeteld{" "}
           {WEERGAVEN.find((w) => w.id === weergave)!.per}. Groen is wat de
-          batterij die periode opleverde, rood wat hij kostte. Klik op een{" "}
+          batterij die periode bespaarde, rood wat hij kostte. Klik op een{" "}
           {resolutie === "week" ? "week" : "dag"} om die in het dagprofiel te
           bekijken.
+          {ietsNegatief
+            ? ` Een ${resolutie === "week" ? "week" : "dag"} kan negatief uitvallen. De batterij haalt 's nachts stroom van het net en levert die de volgende dag, dus kosten en besparing vallen op verschillende dagen.`
+            : ""}
         </>
       }
       actie={
@@ -199,12 +205,12 @@ export function Verloop({
         {bezig ? <span className="verloop-bezig">wordt opgeteld…</span> : null}
       </div>
 
-      <div className="chart-wrap">
+      <ScrollKader label={`Besparing ${WEERGAVEN.find((w) => w.id === weergave)!.per}, horizontaal scrollbaar`}>
         <svg
           viewBox={`0 0 ${B} ${H}`}
           className={bezig ? "chart verloop bezig" : "chart verloop"}
           role="img"
-          aria-label={`Besparing en slijtage ${WEERGAVEN.find((w) => w.id === weergave)!.per}, ${periodeLabel(weergave, bereik.van, bereik.tot)}`}
+          aria-label={`Besparing ${WEERGAVEN.find((w) => w.id === weergave)!.per}, ${periodeLabel(weergave, bereik.van, bereik.tot)}`}
         >
           {ticks.map((tick) => (
             <g key={tick}>
@@ -227,7 +233,7 @@ export function Verloop({
                 tabIndex={-1}
               >
                 <title>
-                  {`${titelTekst}\nbesparing ${euroPrecies(v.savingEur)}\ngeleverd ${getal(v.deliveredKwh, 1)} kWh, geladen ${getal(v.chargedKwh, 1)} kWh\nnetafname ${getal(v.gridImportBaselineKwh, 1)} → ${getal(v.gridImportBatteryKwh, 1)} kWh`}
+                  {`${titelTekst}\n${v.savingEur < 0 ? "de batterij kostte" : "besparing"} ${euroPrecies(Math.abs(v.savingEur))}\ngeleverd ${getal(v.deliveredKwh, 1)} kWh, geladen ${getal(v.chargedKwh, 1)} kWh\nvan het net ${getal(v.gridImportBaselineKwh, 1)} → ${getal(v.gridImportBatteryKwh, 1)} kWh`}
                 </title>
                 <rect x={x(i) - (slot - staaf) / 2} y={MARGE.boven} width={slot} height={plotH} fill="transparent" />
                 <rect
@@ -247,28 +253,28 @@ export function Verloop({
             </text>
           ))}
         </svg>
-      </div>
+      </ScrollKader>
 
       <Legenda
         items={[
           { kleur: "var(--series-3)", label: "Bespaard" },
-          { kleur: "var(--critical)", label: "Gekost" },
+          { kleur: "var(--critical)", label: "Kostte" },
         ]}
       />
 
       {past && t ? (
         <dl className="kerncijfers">
           <div>
-            <dt>Bespaard</dt>
-            <dd>{euro(t.savingEur)}</dd>
+            <dt>{t.savingEur < 0 ? "De batterij kostte" : "Bespaard"}</dt>
+            <dd>{euro(Math.abs(t.savingEur))}</dd>
           </div>
           <div>
-            <dt>Waarvan afschrijving</dt>
+            <dt>Waarvan slijtage</dt>
             <dd className="zacht">
               {euro(t.wearCostEur)}
               <span className="dd-noot">
-                het deel van de aanschafprijs dat deze beurten opmaken — al
-                betaald, gaat niet nóg een keer van de besparing af
+                het deel van de aanschafprijs dat deze laadbeurten opmaken. Dat zit
+                al in de aanschafprijs en gaat niet nog een keer van de besparing af
               </span>
             </dd>
           </div>

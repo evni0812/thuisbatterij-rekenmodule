@@ -76,7 +76,7 @@ export function Uitbreiden({
         anker="uitbreiden"
         actie={actie}
         titel="Tot welke maat loont uitbreiden?"
-        toelichting={<>Volgt zodra de kaart van maten klaar is.</>}
+        toelichting={<>Volgt zodra de tabel met maten klaar is.</>}
       >
         <p className="raster-wacht">De grafiek wordt doorgerekend…</p>
       </Figure>
@@ -89,7 +89,12 @@ export function Uitbreiden({
   const x = (cap: number) => MARGE.links + (cap / capMax) * plotB;
 
   const reeksen: { naam: string; kleur: string; stappen: Uitbreidingsstap[]; kw: number }[] = [
-    { naam: `bij ${getal(grid.powers[kHuidig]!, 1)} kW (jouw vermogen)`, kleur: "var(--series-1)", stappen: huidig.stappen, kw: grid.powers[kHuidig]! },
+    {
+      // De kolom die het dichtst bij jouw vermogen ligt: zeg het als ze verschillen.
+      naam:
+        Math.abs(grid.powers[kHuidig]! - config.battery.maxDischargeKw) < 0.05
+          ? `bij ${getal(grid.powers[kHuidig]!, 1)} kW (jouw vermogen)`
+          : `bij ${getal(grid.powers[kHuidig]!, 1)} kW (dichtst bij jouw ${getal(config.battery.maxDischargeKw, 1)} kW)`, kleur: "var(--series-1)", stappen: huidig.stappen, kw: grid.powers[kHuidig]! },
     ...(beste
       ? [{ naam: `bij ${getal(grid.powers[kBeste]!, 1)} kW (het beste vermogen)`, kleur: "var(--series-2)", stappen: beste.stappen, kw: grid.powers[kBeste]! }]
       : []),
@@ -118,7 +123,7 @@ export function Uitbreiden({
     totCap !== null
       ? `Bij jouw vermogen loont uitbreiden tot ${getal(totCap, 1)} kWh`
       : top.fin.npvEur > 0
-        ? "Binnen dit raster levert elke stap omhoog nog iets op"
+        ? "In deze tabel loont elke stap omhoog nog"
         : "Bij jouw vermogen komt geen enkele capaciteit netto uit de kosten";
 
   /*
@@ -151,11 +156,11 @@ export function Uitbreiden({
       titel={titel}
       toelichting={
         <>
-          Dezelfde cellen als in de kaart, nu als lijn: wat elke capaciteit
-          opbrengt min wat hij kost, over {config.analysisYears} jaar en bij een
+          Dezelfde vakjes als in de tabel, nu als lijn: wat elke capaciteit
+          bespaart min wat hij kost, over {config.analysisYears} jaar en bij een
           vast vermogen. Zolang de lijn stijgt, verdient een grotere batterij
           zijn meerprijs terug; waar hij afbuigt niet meer. Boven de nullijn
-          levert de batterij geld op, eronder kost hij geld.
+          bespaart de batterij meer dan hij kost, eronder minder.
         </>
       }
     >
@@ -295,23 +300,23 @@ export function Uitbreiden({
             <dd>
               {getal(huidig.stappen[omslag]!.capacityKwh, 1)} kWh
               <span className="dd-noot">
-                levert {euro(huidig.stappen[omslag - 1]!.fin.npvEur - huidig.stappen[omslag]!.fin.npvEur)} minder
-                op dan {getal(huidig.stappen[omslag - 1]!.capacityKwh, 1)} kWh, terwijl hij meer kost
+                heeft een netto resultaat dat {euro(huidig.stappen[omslag - 1]!.fin.npvEur - huidig.stappen[omslag]!.fin.npvEur)} lager
+                is dan bij {getal(huidig.stappen[omslag - 1]!.capacityKwh, 1)} kWh, terwijl hij meer kost
               </span>
             </dd>
           ) : (
             <dd>
-              levert nog iets op
-              <span className="dd-noot">binnen dit raster buigt de lijn nergens naar beneden af</span>
+              loont nog
+              <span className="dd-noot">in deze tabel buigt de lijn nergens naar beneden af</span>
             </dd>
           )}
         </div>
         <div>
-          <dt>De grootste maat in het raster</dt>
+          <dt>De grootste maat in de tabel</dt>
           <dd className={laatste.fin.npvEur >= 0 ? "goed" : "slecht"}>
             {euro(laatste.fin.npvEur)}
             <span className="dd-noot">
-              wat {getal(laatste.capacityKwh, 1)} kWh netto zou opleveren: zo duur is doorschieten
+              het netto resultaat van {getal(laatste.capacityKwh, 1)} kWh: zo duur is doorschieten
             </span>
           </dd>
         </div>

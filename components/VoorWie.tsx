@@ -89,7 +89,7 @@ export function VoorWie({
         anker="voor-wie"
         actie={actie}
         titel="Voor wie loont deze batterij?"
-        toelichting={<>Dezelfde batterij voor zeven andere huishoudens. Dat rekent op de achtergrond.</>}
+        toelichting={<>Dezelfde batterij voor zeven huishoudens. Dat rekenen we op de achtergrond door.</>}
       >
         <p className="raster-wacht">De figuur wordt doorgerekend…</p>
       </Figure>
@@ -98,6 +98,11 @@ export function VoorWie({
 
   const metPanelen = punten.filter((p) => p.zonnepanelen).sort((a, b) => a.terugleveringKwh - b.terugleveringKwh);
   const zonder = punten.find((p) => !p.zonnepanelen) ?? null;
+
+  // Bij de standaardinvoer (2.000 kWh teruglevering) is jouw huishouden er al een van.
+  const samenMet = eigen.zonnepanelen
+    ? metPanelen.some((p) => p.terugleveringKwh === eigen.terugleveringKwh)
+    : zonder !== null;
 
   const strook = zonder ? AZI_STROOK : 0;
   const x0 = MARGE.links + strook;
@@ -131,7 +136,7 @@ export function VoorWie({
 
   const titel =
     grens === null
-      ? "Deze batterij komt bij geen van deze huishoudens netto uit de kosten"
+      ? "Deze batterij levert bij geen van deze huishoudens een positief netto resultaat op"
       : grens === 0
         ? "Als een gemiddeld jaar zich herhaalt, loont deze batterij ook zonder teruglevering"
         : `Als een gemiddeld jaar zich herhaalt, loont deze batterij vanaf ongeveer ${kwh(Math.round(grens / 100) * 100)} teruglevering per jaar`;
@@ -156,8 +161,8 @@ export function VoorWie({
     titel: naam,
     regels: [
       { label: "Besparing per jaar", waarde: euro(p.fin.besparingEur) },
-      { label: "Netto na rente", waarde: euro(p.fin.npvEur), uitkomst: true },
-      { label: "Terugverdiend na", waarde: jaren(p.fin.paybackYears) },
+      { label: "Netto resultaat", waarde: euro(p.fin.npvEur), uitkomst: true },
+      { label: "Terugverdientijd", waarde: jaren(p.fin.paybackYears) },
     ],
     noot: `Bij een afname van ${kwh(config.household.annualGridImportKwh)}, op het niveau van het gemiddelde jaar.`,
   });
@@ -170,11 +175,12 @@ export function VoorWie({
       toelichting={
         <>
           Jouw batterij ({getal(cap, 2)} kWh, {euro(config.investmentEur)}) voor huishoudens met jouw
-          afname maar een andere teruglevering, en voor een huishouden zonder zonnepanelen. Netto
-          resultaat over {config.analysisYears} jaar; boven de nullijn komt hij uit de kosten. Netto
-          is hier ná aftrek van de {procent(config.discountRate, 1)} rente die je misloopt; een
-          terugverdientijd telt de euro's kaal, en kan daardoor binnen die {config.analysisYears} jaar
-          vallen terwijl er netto nog een tekort staat.
+          afname maar een andere teruglevering, en voor een huishouden zonder zonnepanelen. Het netto
+          resultaat is wat de batterij over {config.analysisYears} jaar oplevert, na aftrek van de
+          aanschaf en de {procent(config.discountRate, 1)} rente die je misloopt. Boven de nullijn
+          verdient de batterij zich terug. De terugverdientijd telt de euro's zonder rente, en kan
+          daardoor binnen die {config.analysisYears} jaar vallen terwijl het netto resultaat nog
+          negatief is.
           {huishoudens.bezig ? " De figuur vult zich nog." : ""}
         </>
       }
@@ -303,7 +309,7 @@ export function VoorWie({
           </dd>
         </div>
         <div>
-          <dt>Uit de kosten vanaf</dt>
+          <dt>Netto positief vanaf</dt>
           <dd>
             {grens === null ? "geen van deze huishoudens" : grens === 0 ? "elke teruglevering" : `${kwh(Math.round(grens / 100) * 100)} teruglevering`}
           </dd>
@@ -315,9 +321,9 @@ export function VoorWie({
               {euro(zonder.fin.npvEur)}
               <span className="dd-noot">
                 {zonder.fin.paybackYears === null
-                  ? "verdient zich niet terug"
+                  ? jaren(null)
                   : zonder.fin.npvEur < 0
-                    ? `de aanschaf is er na ${jaren(zonder.fin.paybackYears)} uit, maar de gemiste rente niet`
+                    ? `de aanschaf is na ${jaren(zonder.fin.paybackYears)} terugverdiend, maar de rente die je misloopt niet`
                     : `terugverdiend na ${jaren(zonder.fin.paybackYears)}`}
               </span>
             </dd>
@@ -334,7 +340,9 @@ export function VoorWie({
       <p className="posten-noot">
         Alleen de teruglevering verschuift; afname, batterij, tarieven en prijs blijven die van jou.
         Het huishouden zonder zonnepanelen rekent met het gemeten gemiddelde profiel van alle aansluitingen zonder
-        invoeding: een batterij verdient daar alleen aan het prijsverschil over de dag. {rasterGrondslag(config)}
+        invoeding: een batterij bespaart daar alleen dankzij het prijsverschil over de dag.
+        {samenMet ? " Jouw huishouden is gelijk aan één van deze zeven, dus ‘jij’ ligt op dat punt." : ""}{" "}
+        {rasterGrondslag(config)}
       </p>
     </Figure>
   );

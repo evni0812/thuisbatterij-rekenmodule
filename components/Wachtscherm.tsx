@@ -74,7 +74,7 @@ export function Wachtscherm({
     return (
       <section className="wachtscherm" role="status" aria-live="polite">
         <div className="wachtscherm-kop">
-          <h2>{eersteKeer ? "Je antwoord wordt berekend" : "Het antwoord wordt opnieuw berekend"}</h2>
+          <h2>{eersteKeer ? "We rekenen je antwoord uit" : "We rekenen het antwoord opnieuw uit"}</h2>
           {seconden !== null ? (
             <span className="wachtscherm-tijd" aria-hidden="true">
               {seconden.toFixed(0)} s
@@ -83,10 +83,10 @@ export function Wachtscherm({
         </div>
         <p className="wachtscherm-uitleg">
           {v
-            ? `Elk profieljaar is een jaar aan kwartierdata, twee keer doorgerekend: zoals een slimme batterij het zou kunnen doen, en met perfecte kennis van morgen als ijkpunt. Dat verdeelt zich over ${
+            ? `We rekenen elk jaar twee keer door: zoals de batterij het in het echt kan, en met perfecte kennis van morgen om mee te vergelijken. Het gaat om ${
                 v.vensters.totaal
-              } ${v.vensters.totaal === 1 ? "jaar" : "jaren"} en een handvol workers; meestal is het binnen tien seconden klaar.`
-            : "De gegevens worden geladen…"}
+              } ${v.vensters.totaal === 1 ? "jaar" : "jaren"}; meestal is het binnen tien seconden klaar.`
+            : "We laden de gegevens…"}
         </p>
         <div
           className={pct === null ? "voortgang onbepaald" : "voortgang"}
@@ -101,16 +101,16 @@ export function Wachtscherm({
         {v ? (
           <ol className="wacht-stappen">
             <Stap klaar={stappen[0]!} bezig={lopend === 0} teller={`${v.vensters.klaar} van ${v.vensters.totaal}`}>
-              Profieljaren doorrekenen
+              Jaren doorrekenen
             </Stap>
             <Stap klaar={stappen[1]!} bezig={lopend === 1} teller={`${v.curve.klaar} van ${v.curve.totaal}`}>
-              Besparing bij slijtage meten
+              Effect van slijtage bepalen
             </Stap>
             <Stap klaar={stappen[2]!} bezig={lopend === 2}>
-              Perfecte voorspelling als ijkpunt
+              Vergelijken met het ideale geval
             </Stap>
             <Stap klaar={stappen[3]!} bezig={lopend === 3}>
-              Samenvoegen tot het antwoord
+              Antwoord samenstellen
             </Stap>
           </ol>
         ) : null}

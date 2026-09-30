@@ -236,14 +236,17 @@ export function splitsActies(
   return { uitZon, uitNet, naarHuis, naarNet };
 }
 
-/** "13:15" binnen een dag, "wo 13:00" binnen een week. */
+/** "13.15 uur" binnen een dag, "wo 13.00 uur" binnen een week. */
 export function momentLabel(ms: number, perUur: boolean): string {
   const d = new Date(ms);
-  const klok = d.toLocaleTimeString("nl-NL", {
-    hour: "2-digit",
-    minute: "2-digit",
-    timeZone: "Europe/Amsterdam",
-  });
+  const klok = `${d
+    .toLocaleTimeString("nl-NL", {
+      hour: "numeric",
+      minute: "2-digit",
+      hourCycle: "h23",
+      timeZone: "Europe/Amsterdam",
+    })
+    .replace(":", ".")} uur`;
   if (!perUur) return klok;
   const dag = d.toLocaleDateString("nl-NL", { weekday: "short", timeZone: "Europe/Amsterdam" });
   return `${dag} ${klok}`;
@@ -269,6 +272,58 @@ function ontvlecht(posities: number[]): number[] {
   const uit = [...posities];
   for (const { y, i } of volgorde) uit[i] = y;
   return uit;
+}
+
+type Dagdeel = "nacht" | "overdag" | "avond";
+
+function dagdeelVan(ms: number): Dagdeel {
+  const uur = Number(
+    new Intl.DateTimeFormat("nl-NL", { hour: "numeric", hourCycle: "h23", timeZone: "Europe/Amsterdam" }).format(new Date(ms)),
+  );
+  if (uur < 6 || uur >= 23) return "nacht";
+  return uur < 17 ? "overdag" : "avond";
+}
+
+const DAGDEEL_TEKST: Record<Dagdeel, string> = { nacht: "'s nachts", overdag: "overdag", avond: "'s avonds" };
+
+/**
+ * In welk deel van de dag de meeste kWh liggen, als dat ruim de helft is.
+ * Een titel die zegt wanneer de batterij laadt of levert, moet ook waar zijn:
+ * bij een verspreid patroon geeft deze functie niets terug.
+ */
+function overheersendDagdeel(startMs: number[], kwh: number[]): Dagdeel | null {
+  const som: Record<Dagdeel, number> = { nacht: 0, overdag: 0, avond: 0 };
+  let totaal = 0;
+  kwh.forEach((v, i) => {
+    som[dagdeelVan(startMs[i]!)] += v;
+    totaal += v;
+  });
+  if (totaal < 0.05) return null;
+  const beste = (Object.keys(som) as Dagdeel[]).sort((a, b) => som[b] - som[a])[0]!;
+  return som[beste] / totaal >= 0.5 ? beste : null;
+}
+
+/** De titel van het dagprofiel: wat de batterij deed, alleen als de data dat laat zien. */
+export function dagTitel(
+  dag: Pick<Profiel, "startMs" | "chargeKwh" | "dischargeKwh">,
+  week: boolean,
+): string {
+  const wanneer = week ? "In deze week" : "Op deze dag";
+  const laadt = dag.chargeKwh.reduce((a, b) => a + b, 0);
+  const levert = dag.dischargeKwh.reduce((a, b) => a + b, 0);
+  if (laadt < 0.05 && levert < 0.05) return `${wanneer} doet de batterij vrijwel niets`;
+  const laad = overheersendDagdeel(dag.startMs, dag.chargeKwh);
+  const lever = overheersendDagdeel(dag.startMs, dag.dischargeKwh);
+  if (laad && lever && laad !== lever) {
+    return `${wanneer} laadt de batterij vooral ${DAGDEEL_TEKST[laad]} en levert hij vooral ${DAGDEEL_TEKST[lever]}`;
+  }
+  return week ? "Zo werkt de batterij in deze week" : "Zo werkt de batterij op deze dag";
+}
+
+/** "een gewone zomerdag (juni tot en met augustus)", naar het label van de voorbeelddag. */
+function voorbeeldOmschrijving(label: string | undefined): string {
+  if (label?.includes("winter")) return "een gewone winterdag (december tot en met februari)";
+  return "een gewone zomerdag (juni tot en met augustus)";
 }
 
 /** Eén lijnlabel rechts van de plot, met een verbindingsstreepje. */
@@ -504,20 +559,25 @@ export function Dagprofiel({
     <>
     <Figure
       anker="dag-en-week"
-      titel={toontWeek ? "Wat de batterij in een week precies doet" : "Wat de batterij op een dag precies doet"}
+      titel={dagTitel(dag, toontWeek)}
       toelichting={
         toontWeek ? (
           <>
-            De week van {datum(dag.date)}, opgeteld per uur. Dezelfde vier panelen
-            als bij een dag, maar over zeven dagen: je ziet het ritme terug —
-            welke dagen wat opleverden en welke nacht de batterij oversloeg. Wijs
-            een uur aan voor de waarden op dat moment.
+            De week van {datum(dag.date)}, opgeteld per uur. Dezelfde vier grafieken
+            als bij een dag, maar over zeven dagen. Je ziet het ritme terug: welke
+            dagen wat opleverden en welke nacht de batterij oversloeg. Wijs een uur
+            aan voor de waarden op dat moment.
+          </>
+        ) : isVoorbeeld ? (
+          <>
+            {datum(dag.date)}: {voorbeeldOmschrijving(losDag?.label)}, de dag met het
+            middelste prijsverschil van die maanden. Niet de dag waarop de batterij
+            het best presteerde. Wijs een moment aan voor de waarden op dat kwartier.
           </>
         ) : (
           <>
-            {datum(dag.date)}, een dag met een middelmatig prijsverschil. Niet de dag
-            waarop de batterij het best presteerde. Wijs een moment aan voor de
-            waarden op dat kwartier.
+            {datum(dag.date)}: de dag die je koos. Wijs een moment aan voor de waarden
+            op dat kwartier.
           </>
         )
       }
@@ -802,8 +862,13 @@ export function Dagprofiel({
             );
           })}
           <line x1={PLOT_LINKS} x2={PLOT_RECHTS} y1={yA(0)} y2={yA(0)} stroke="var(--axis)" strokeWidth={1.5} />
-          <text x={PLOT_LINKS - 10} y={Y.actie + 10} textAnchor="end" className="as-kop">
-            erin
+          {/* Het paneel is boven en onder afgesloten met een rasterlijn, en de
+              richtingen staan erin: "erin" hoort bij de bovenrand, "eruit" bij
+              de onderrand en niet bij het paneel dat eronder begint. */}
+          <line x1={PLOT_LINKS} x2={PLOT_RECHTS} y1={yA(aMax)} y2={yA(aMax)} stroke="var(--grid)" />
+          <line x1={PLOT_LINKS} x2={PLOT_RECHTS} y1={yA(-aMax)} y2={yA(-aMax)} stroke="var(--grid)" />
+          <text x={PLOT_LINKS - 10} y={yA(aMax) + 14} textAnchor="end" className="as-kop">
+            {"\u2191"} erin
           </text>
           <text x={PLOT_LINKS - 10} y={yA(aMax / 2)} textAnchor="end" dominantBaseline="middle" className="as-label">
             {getal(aMax / 2, 1)} kW
@@ -812,10 +877,10 @@ export function Dagprofiel({
             0
           </text>
           <text x={PLOT_LINKS - 10} y={yA(-aMax / 2)} textAnchor="end" dominantBaseline="middle" className="as-label">
-            {getal(aMax / 2, 1)} kW
+            {"\u2212"}{getal(aMax / 2, 1)} kW
           </text>
-          <text x={PLOT_LINKS - 10} y={Y.actie + HOOGTE.actie - 2} textAnchor="end" className="as-kop">
-            eruit
+          <text x={PLOT_LINKS - 10} y={yA(-aMax) - 6} textAnchor="end" className="as-kop">
+            {"\u2193"} eruit
           </text>
 
           {/* De dagtotalen dragen dit paneel: niet elk staafje telt, maar wel
@@ -1088,7 +1153,7 @@ export function Dagprofiel({
                 const k = Math.round((u / 24) * (n - 1));
                 return (
                   <text key={u} x={x(k)} y={H_TOTAAL - 9} textAnchor="middle" className="as-label">
-                    {String(u).padStart(2, "0")}:00
+                    {u}.00 uur
                   </text>
                 );
               })}
@@ -1201,10 +1266,10 @@ function WeekCijfers({ reeks }: { reeks: PeriodeReeks }) {
         </dd>
       </div>
       <div>
-        <dt>Waarvan afschrijving</dt>
+        <dt>Waarvan slijtage</dt>
         <dd className="zacht">
           {euroPrecies(t.wearCostEur)}
-          <span className="dd-noot">al betaald bij de aanschaf, gaat er niet nóg een keer af</span>
+          <span className="dd-noot">zit al in de aanschafprijs, gaat er niet nog een keer af</span>
         </dd>
       </div>
     </dl>
@@ -1243,9 +1308,9 @@ function DagCijfers({ dag, zonnepanelen = true }: { dag: SampleDay; zonnepanelen
           <span className="dagcijfer-waarde">{euroPrecies(s.wearCostEur)}</span>
           <span className="dagcijfer-label">slijtage van deze dag</span>
           <span className="dagcijfer-noot">
-            wat {getal(s.deliveredKwh, 1)} kWh leveren van de aanschafprijs
-            opsoupeert. Niet van het dagbedrag afgetrokken; na slijtage blijft{" "}
-            {euroPrecies(s.savingEur - s.wearCostEur)} over.
+            wat het leveren van {getal(s.deliveredKwh, 1)} kWh van de batterij
+            aan waarde kost. Het dagbedrag hierboven is nog zonder slijtage; erna
+            blijft {euroPrecies(s.savingEur - s.wearCostEur)} over.
           </span>
         </div>
       ) : null}
@@ -1265,11 +1330,11 @@ function DagCijfers({ dag, zonnepanelen = true }: { dag: SampleDay; zonnepanelen
             {overDeRand > 0 ? "gaat mee naar morgen" : "kwam van gisteren"}
           </span>
           <span className="dagcijfer-noot">
-            {getal(s.socStartKwh, 1)} kWh om 00:00, {getal(s.socEndKwh, 1)} kWh om
-            24:00.{" "}
+            {getal(s.socStartKwh, 1)} kWh aan het begin van de dag,{" "}
+            {getal(s.socEndKwh, 1)} kWh om 24.00 uur.{" "}
             {overDeRand > 0
-              ? "Wat je hier inkocht, gebruik je morgen; die opbrengst staat op de volgende dag."
-              : "Wat je hier gebruikte, kocht je gisteren; die kosten staan op de vorige dag."}
+              ? "Wat je hier van het net haalde, gebruik je morgen. Die besparing staat op de volgende dag."
+              : "Wat je hier gebruikte, haalde je gisteren van het net. Die kosten staan op de vorige dag."}
           </span>
         </div>
       ) : null}
@@ -1279,7 +1344,7 @@ function DagCijfers({ dag, zonnepanelen = true }: { dag: SampleDay; zonnepanelen
         <span className="dagcijfer-label">uit de batterij gehaald</span>
         <span className="dagcijfer-noot">
           {getal(s.chargedKwh, 1)} kWh erin, waarvan{" "}
-          {getal(s.chargedFromGridKwh, 1)} ingekocht
+          {getal(s.chargedFromGridKwh, 1)} van het net
         </span>
       </div>
 
@@ -1342,11 +1407,11 @@ function DagCijfers({ dag, zonnepanelen = true }: { dag: SampleDay; zonnepanelen
               ? procent(Math.min(1, s.savingEur / s.optimalSavingEur!))
               : euroPrecies(s.savingEur)}
           </span>
-          <span className="dagcijfer-label">van wat er in zat</span>
+          <span className="dagcijfer-label">van het maximaal haalbare</span>
           <span className="dagcijfer-noot">
             {Math.abs(gemist) < 0.01
-              ? "gelijk aan wat met perfecte kennis van prijzen én weer mogelijk was; dit dagbedrag komt dus niet door een verkeerde inschatting"
-              : `met perfecte kennis van prijzen én weer was het ${euroPrecies(
+              ? "gelijk aan het ideale geval (perfecte kennis van morgen): deze dag ging dus niets mis door een verkeerde inschatting"
+              : `in het ideale geval (perfecte kennis van morgen) was het ${euroPrecies(
                   s.optimalSavingEur!,
                 )} geweest, dus ${euroPrecies(gemist)} meer`}
           </span>
@@ -1440,7 +1505,7 @@ function Uitlezing({
   if (zon + uitNet > 0.02) {
     const delen: string[] = [];
     if (zon > 0.02) delen.push(`${getal(zon, 1)} kW uit eigen zon`);
-    if (uitNet > 0.02) delen.push(`${getal(uitNet, 1)} kW ingekocht`);
+    if (uitNet > 0.02) delen.push(`${getal(uitNet, 1)} kW van het net`);
     batterijTekst = `laadt ${delen.join(" en ")}`;
     // Blijft er zon liggen omdat de batterij vol is of te weinig vermogen
     // heeft? Dat is precies wat je wilt weten.
@@ -1449,7 +1514,7 @@ function Uitlezing({
   } else if (huis + verkocht > 0.02) {
     const delen: string[] = [];
     if (huis > 0.02) delen.push(`${getal(huis, 1)} kW voor eigen gebruik`);
-    if (verkocht > 0.02) delen.push(`${getal(verkocht, 1)} kW verkocht`);
+    if (verkocht > 0.02) delen.push(`${getal(verkocht, 1)} kW aan het net`);
     batterijTekst = `levert ${delen.join(" en ")}`;
   }
 

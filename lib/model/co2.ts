@@ -250,6 +250,40 @@ export function gemiddeldCo2(jaren: readonly Co2Jaar[]): Co2Jaar | null {
   };
 }
 
+/**
+ * De som over een aantal deelvensters, geschaald met `schaal` (365 gedeeld door
+ * het aantal dagen dat ze beslaan): de CO2-balans van één jaar uit een periode
+ * zonder volledig kalenderjaar. Alleen de hoeveelheden schalen; wat een factor
+ * of een gemiddelde per maand of uur is, blijft het gemiddelde over de vensters.
+ */
+export function somCo2(jaren: readonly Co2Jaar[], schaal: number): Co2Jaar | null {
+  const gem = gemiddeldCo2(jaren);
+  if (!gem) return null;
+  // Gemiddelde maal aantal is de som.
+  const f = jaren.length * schaal;
+  const sch = (x: number) => x * f;
+  const schLijst = (l: number[]) => l.map(sch);
+  return {
+    ...gem,
+    importBasisKg: sch(gem.importBasisKg),
+    importBatKg: sch(gem.importBatKg),
+    importBasisKwh: sch(gem.importBasisKwh),
+    importBatKwh: sch(gem.importBatKwh),
+    exportBasisKwh: sch(gem.exportBasisKwh),
+    exportBatKwh: sch(gem.exportBatKwh),
+    klassen: {
+      importBasisKwh: schLijst(gem.klassen.importBasisKwh),
+      importBatKwh: schLijst(gem.klassen.importBatKwh),
+      exportBasisKwh: schLijst(gem.klassen.exportBasisKwh),
+      exportBatKwh: schLijst(gem.klassen.exportBatKwh),
+      exportBasisKg: schLijst(gem.klassen.exportBasisKg),
+      exportBatKg: schLijst(gem.klassen.exportBatKg),
+      kwartieren: schLijst(gem.klassen.kwartieren),
+    },
+    ontbrekendeKwartieren: sch(gem.ontbrekendeKwartieren),
+  };
+}
+
 /** Het perspectief van het huishouden: wat de batterij aan uitstoot scheelt. */
 export interface Huishouden {
   zonderKg: number;

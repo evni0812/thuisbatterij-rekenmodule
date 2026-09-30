@@ -3,9 +3,9 @@
 /**
  * Hoe efficiënt een thuisbatterij werkelijk is.
  *
- * Eén verlies: de omzetting, wat er bij laden en ontladen verdwijnt. Schaalt
- * mee met hoeveel je opslaat, en is wat "rendement heen en terug" op een
- * datasheet betekent.
+ * Eén verlies: het omzettingsverlies, wat er bij laden en ontladen verdwijnt.
+ * Schaalt mee met hoeveel je opslaat, en is wat "rendement heen en terug" op
+ * een datasheet betekent.
  *
  * Het sluipverbruik van de omvormer stond hier eerder als tweede blok. Het zit
  * niet meer in het model: dit model gaat over wat de handel oplevert, en
@@ -15,11 +15,14 @@
 
 import type { ReactNode } from "react";
 import type { EnergyLosses } from "../lib/model/analysis";
-import { euro, getal, kwh, procent } from "../lib/format";
-import { Figure, TipLaag, useTip } from "./chart-parts";
+import { euro, euroPrecies, getal, kwh, procent } from "../lib/format";
+import { Figure, Legenda, TipLaag, useTip } from "./chart-parts";
 
 const GELEVERD = "var(--series-3)";
 const OMZETTING = "var(--series-4)";
+/** Het verlies bij het ontladen: dezelfde amber, met een streeppatroon erover. */
+const OMZETTING_ONTLADEN =
+  "repeating-linear-gradient(135deg, rgba(255,255,255,0.65) 0 2px, transparent 2px 5px), var(--series-4)";
 
 export function Verliezen({
   losses,
@@ -67,9 +70,9 @@ export function Verliezen({
         <>
           Stroom opslaan kost stroom: bij het laden en bij het ontladen gaat een
           deel verloren in de omzetting. Gemiddeld per jaar over de volledige
-          jaren in de gekozen periode. Het eigen stroomverbruik van de batterij
-          (stand-by; fabrikanten noemen zo'n 7 tot 25 watt, 60 tot 220 kWh per
-          jaar) staat hier niet bij en is ook niet van de besparing afgetrokken.
+          jaren in de gekozen periode. Het stand-byverbruik van de batterij
+          (fabrikanten noemen 7 tot 25 watt, dus 60 tot 220 kWh per jaar) staat
+          hier niet bij en is niet van de besparing afgetrokken.
         </>
       }
     >
@@ -79,8 +82,8 @@ export function Verliezen({
           <div className="efficientie-kop">
             <h4>De omzetting</h4>
             <p>
-              Wat er van je lading overblijft. Dit schaalt mee met hoeveel je
-              opslaat.
+              Wat er van je stroom overblijft na het opslaan. Het omzettingsverlies
+              schaalt mee met hoeveel je opslaat.
             </p>
           </div>
 
@@ -92,10 +95,10 @@ export function Verliezen({
                 regels: [
                   { kleur: GELEVERD, label: "Geleverd aan het huis", waarde: kwh(deliveredKwh) },
                   { kleur: OMZETTING, label: "Verlies bij het laden", waarde: kwh(chargeLossKwh) },
-                  { kleur: OMZETTING, label: "Verlies bij het ontladen", waarde: kwh(dischargeLossKwh) },
+                  { kleur: OMZETTING_ONTLADEN, label: "Verlies bij het ontladen", waarde: kwh(dischargeLossKwh) },
                   { label: "In de batterij gestopt", waarde: kwh(chargedKwh), uitkomst: true },
                 ],
-                noot: `Rondgang: ${procent(roundtrip, 1)} van wat erin gaat, komt er weer uit.`,
+                noot: `Van wat erin gaat, komt ${procent(roundtrip, 1)} er weer uit.`,
               })
             }
           >
@@ -111,16 +114,23 @@ export function Verliezen({
             />
             <span
               className="verlies-deel streep"
-              style={{ width: deelVanLading(dischargeLossKwh), background: OMZETTING }}
+              style={{ width: deelVanLading(dischargeLossKwh), background: OMZETTING_ONTLADEN }}
             />
           </div>
+          <Legenda
+            items={[
+              { kleur: GELEVERD, label: "geleverd aan het huis" },
+              { kleur: OMZETTING, label: "verlies bij het laden" },
+              { kleur: OMZETTING_ONTLADEN, label: "verlies bij het ontladen" },
+            ]}
+          />
 
           <p className="efficientie-zin">
             Je stopte er <strong>{kwh(chargedKwh)}</strong> in en kreeg{" "}
             <strong>{kwh(deliveredKwh)}</strong> terug. De omzetting kostte{" "}
             {kwh(omzetting)}, oftewel {euro(omzettingEur)}
             {restInCel > 1
-              ? `; ${kwh(restInCel)} zat aan het eind van het jaar nog in de cel`
+              ? `; ${kwh(restInCel)} zat aan het eind van het jaar nog in de batterij`
               : ""}
             .
           </p>
@@ -132,7 +142,7 @@ export function Verliezen({
       {/* ── Samen ──────────────────────────────────────────────────────────── */}
       <dl className="kerncijfers">
         <div>
-          <dt>Rondgang van de omzetting</dt>
+          <dt>Deel dat terugkomt</dt>
           <dd>{procent(roundtrip, 1)}</dd>
         </div>
         <div>
@@ -153,7 +163,7 @@ export function Verliezen({
               <span className="dd-noot">
                 tegenover {euro(besparingEur)} besparing; zonder enig verlies had
                 de batterij ruwweg {euro(besparingEur + losses.totalEur)}{" "}
-                opgeleverd
+                bespaard
               </span>
             ) : null}
           </dd>
@@ -178,30 +188,31 @@ export function Verliezen({
               <span>Verlies bij het laden</span>
             </th>
             <td>{kwh(chargeLossKwh)}</td>
-            <td>{euro(losses.chargeLossEur)}</td>
+            <td>{euroPrecies(losses.chargeLossEur)}</td>
           </tr>
           <tr>
             <th scope="row">
-              <span className="post-vlak" style={{ background: OMZETTING }} />
+              <span className="post-vlak" style={{ background: OMZETTING_ONTLADEN }} />
               <span>Verlies bij het ontladen</span>
             </th>
             <td>{kwh(dischargeLossKwh)}</td>
-            <td>{euro(losses.dischargeLossEur)}</td>
+            <td>{euroPrecies(losses.dischargeLossEur)}</td>
           </tr>
         </tbody>
         <tfoot>
           <tr>
             <th scope="row">Samen verloren</th>
             <td>{kwh(totalKwh)}</td>
-            <td>{euro(losses.totalEur)}</td>
+            <td>{euroPrecies(losses.totalEur)}</td>
           </tr>
         </tfoot>
       </table>
 
       <p className="posten-noot">
         Deze kilowatturen zijn geen extra kostenpost bovenop de besparing
-        hierboven: ze zitten er al in verwerkt. Je bespaart minder afname dan je
-        aan stroom opsloeg, en dat verschil is precies wat hier staat.
+        hierboven: ze zitten er al in verwerkt. Je haalt minder van het
+        net dan je in de batterij stopte, en dat verschil is precies wat hier
+        staat.
       </p>
     </Figure>
   );

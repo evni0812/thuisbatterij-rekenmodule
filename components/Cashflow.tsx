@@ -14,9 +14,8 @@ import type { Overgang } from "../lib/overgang";
 import { euro, euroAs, getal, jaren, procent } from "../lib/format";
 import { Figure, Grafiek, Raster, Trefvlak, kiesTicks, useTip } from "./chart-parts";
 
-const B = 720;
+const B_STANDAARD = 720;
 const H = 240;
-const MARGE = { boven: 16, rechts: 16, onder: 34, links: 64 };
 
 export function Cashflow({
   finance: huidigeFinance,
@@ -39,7 +38,7 @@ export function Cashflow({
   /** De knop "Hoe is dit berekend?" in de kop. */
   actie?: ReactNode;
 }) {
-  const { kader, tip, toon, wis } = useTip();
+  const { kader, tip, toon, wis, breedte: gemeten } = useTip();
   const [aangewezen, setAangewezen] = useState<number | null>(null);
   const finance = overgang?.finance ?? huidigeFinance;
   const wisseljaar =
@@ -48,6 +47,12 @@ export function Cashflow({
       : null;
   const cf = finance.cashflows;
   if (cf.length === 0) return null;
+
+  // De viewBox volgt het kader: op een telefoon past de grafiek zonder te
+  // scrollen, met letters op ware grootte.
+  const B = gemeten ?? B_STANDAARD;
+  const smal = B < 560;
+  const MARGE = { boven: 16, rechts: smal ? 10 : 16, onder: 34, links: smal ? 60 : 64 };
 
   const plotB = B - MARGE.links - MARGE.rechts;
   const plotH = H - MARGE.boven - MARGE.onder;
@@ -70,9 +75,9 @@ export function Cashflow({
   // het huidige tarief rekent) laat zien. Dat staat er daarom bij, en "daarna"
   // alleen als er na het eindjaar nog looptijd over is.
   const beurtenNoot = ((): string | null => {
-    const cellen = cycleLife ? `de ${getal(cycleLife)} beurten van de cellen` : "de opgegeven laadbeurten";
+    const cellen = cycleLife ? `de ${getal(cycleLife)} laadbeurten van de batterij` : "de opgegeven laadbeurten";
     const grondslag = overgang
-      ? `met het nettarief vanaf ${overgang.ingangsjaar} handelt de batterij vaker dan nu`
+      ? `met het nettarief vanaf ${overgang.ingangsjaar} laadt en levert de batterij vaker dan nu`
       : null;
     const eind = finance.endOfLifeYear;
     const op =
@@ -94,10 +99,10 @@ export function Cashflow({
   // dan zeggen dat hij zich niet terugverdient terwijl de grafiek eronder een
   // break-evenpunt markeert.
   const titel = positief
-    ? "Over de looptijd levert de batterij meer op dan hij kost"
+    ? "Over de looptijd bespaart de batterij meer dan hij kost"
     : breakEven !== null
       ? "Je krijgt je geld terug, maar niet de rente die je erop misloopt"
-      : "Over de looptijd verdient de batterij zichzelf niet terug";
+      : "De batterij is niet terugverdiend binnen de looptijd";
 
   return (
     <Figure
@@ -113,13 +118,13 @@ export function Cashflow({
             <>
               {" "}
               Bij de stippellijn gaat het voorgestelde nettarief in, als het
-              voorstel doorgaat; vanaf daar volgt de lijn de jaaropbrengst onder
-              dat tarief.
+              voorstel doorgaat. Vanaf daar volgt de lijn de besparing per jaar
+              onder dat tarief.
             </>
           ) : null}{" "}
-          De contante waarde hieronder trekt de rente eraf die je op dat geld
-          had kunnen maken. De besparing loopt terug naarmate de batterij
-          slijt.
+          Het netto resultaat hieronder is wat overblijft na aftrek van de
+          aanschafprijs en de rente die je misloopt. De
+          besparing loopt terug naarmate de batterij slijt.
         </>
       }
     >
@@ -130,13 +135,13 @@ export function Cashflow({
           setAangewezen(null);
           wis();
         }}
-        label="Cumulatief terugverdiend bedrag over de analyseperiode"
+        label="Opgetelde besparing min de aanschafprijs, over de looptijd"
       >
         <svg
           viewBox={`0 0 ${B} ${H}`}
-          className="chart"
+          className="chart chart-fluid"
           role="img"
-          aria-label="Cumulatief terugverdiend bedrag over de analyseperiode"
+          aria-label="Opgetelde besparing min de aanschafprijs, over de looptijd"
         >
           {aangewezen !== null ? (
             <rect
@@ -187,7 +192,7 @@ export function Cashflow({
                 x={x(wisseljaar) + 6}
                 y={MARGE.boven + plotH - 6}
                 className="mark-label op-lijn"
-                fill="var(--ac)"
+                style={{ fill: "var(--ac)" }}
               >
                 nettarief {overgang!.ingangsjaar}
               </text>
@@ -205,11 +210,14 @@ export function Cashflow({
                 strokeWidth={1.5}
                 strokeDasharray="4 3"
               />
+              {/* Staat het punt in de rechterhelft, dan loopt de tekst naar links,
+                  zodat hij binnen de grafiek blijft. */}
               <text
-                x={x(breakEven) + 6}
+                x={x(breakEven) + (x(breakEven) > B * 0.55 ? -6 : 6)}
                 y={MARGE.boven + 12}
-                className="mark-label"
-                fill="var(--success-text)"
+                textAnchor={x(breakEven) > B * 0.55 ? "end" : "start"}
+                className="mark-label op-lijn"
+                style={{ fill: "var(--success-text)" }}
               >
                 terugverdiend na {jaren(breakEven)}
               </text>
@@ -219,7 +227,13 @@ export function Cashflow({
           {[0, 5, 10, 15, 20, 25].
             filter((j) => j <= cf.length).
             map((j) => (
-              <text key={j} x={x(j)} y={H - 12} textAnchor="middle" className="as-label">
+              <text
+                key={j}
+                x={x(j)}
+                y={H - 12}
+                textAnchor={x(j) > B - MARGE.rechts - 20 ? "end" : "middle"}
+                className="as-label"
+              >
                 {j === 0 ? "nu" : `${j} jaar`}
               </text>
             ))}
@@ -292,20 +306,25 @@ export function Cashflow({
           </dd>
         </div>
         <div>
-          <dt>
-            Contante waarde
-            <span className="hint" title="De waarde van alle toekomstige besparingen, teruggerekend naar vandaag, minus de aanschafprijs.">?</span>
-          </dt>
+          <dt>Netto resultaat</dt>
           <dd className={finance.npvEur >= 0 ? "goed" : "slecht"}>
             {euro(finance.npvEur)}
+            <span className="dd-noot">
+              alle besparingen over de looptijd, minus de aanschafprijs en de
+              rente die je misloopt
+            </span>
           </dd>
         </div>
         <div>
-          <dt>
-            Rendement
-            <span className="hint" title="Wat de batterij per jaar opbrengt, uitgedrukt als rentepercentage. Ligt dat onder wat je op een spaarrekening krijgt, dan was je geld daar beter af.">?</span>
-          </dt>
-          <dd>{finance.irr === null ? "—" : procent(finance.irr, 1)}</dd>
+          <dt>Rendement op je aankoop</dt>
+          <dd>
+            {finance.irr === null ? "niet te berekenen" : procent(finance.irr, 1)}
+            <span className="dd-noot">
+              wat je aankoop per jaar oplevert, als rentepercentage. Ligt dat
+              onder de rente van een spaarrekening, dan had je je geld daar
+              beter kunnen laten staan
+            </span>
+          </dd>
         </div>
         <div>
           <dt>Laadbeurten in totaal</dt>

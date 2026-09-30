@@ -68,6 +68,12 @@
      cel heeft zo een markering van minstens 3:1. */
   --winnaar-rand: #1a1f1e;
   --critical: #b3261e;
+  /* Verlies in een divergerende schaal (netto resultaat): oranje tegenover het
+     teal van winst. Tekst erop haalt overal 4,5:1 of meer. */
+  --verlies-100: #fbe6d5;
+  --verlies-200: #f1c39c;
+  --verlies-300: #d98a4a;
+  --verlies-400: #a9490a;
   --success-text: #1a6b40;
 
   --radius: 8px;
@@ -485,17 +491,78 @@ input[type="date"] {
 }
 
 /*
- * Op smalle schermen schaalt een viewBox van 860 breed naar 0,32x, en worden de
- * as-labels van 11px zo'n 3,5px hoog. Onleesbaar. Onder 760px laten we de
- * grafiek daarom op ware grootte staan en horizontaal scrollen.
+ * Op smalle schermen schaalt een viewBox van 860 breed naar 0,37x, en worden de
+ * as-labels van 11px zo'n 4px hoog. Onleesbaar. Grafieken die hun viewBox aan
+ * het scherm aanpassen (`.chart-fluid`) hebben daar geen last van en passen
+ * zonder scrollen. De andere blijven op ruim 0,7x van hun eigen maat staan
+ * (Grafiek zet `--vb` op de viewBox-breedte) en scrollen dan zijwaarts, met
+ * een vervaagde rand en een hint.
  */
 @media (max-width: 759px) {
   .chart {
-    min-width: 620px;
+    min-width: calc(var(--vb, 800) * 0.7px);
+  }
+  .chart-fluid {
+    min-width: 0;
   }
   .dagprofiel-svg {
-    min-width: 720px;
+    min-width: calc(var(--vb, 860) * 0.74px);
   }
+  .chart .as-label {
+    font-size: 12.5px;
+  }
+  .chart .as-label.zwak {
+    font-size: 11px;
+  }
+  .chart .mark-label {
+    font-size: 13px;
+  }
+}
+
+/* De rand van een scrollende grafiek vervaagt aan de kant waar nog iets
+   staat, en een korte hint zegt wat te doen. */
+.chart-scrollkader {
+  position: relative;
+}
+
+.chart-scrollkader::before,
+.chart-scrollkader::after {
+  content: "";
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  width: 32px;
+  pointer-events: none;
+  opacity: 0;
+  transition: opacity 0.15s;
+  z-index: 2;
+}
+
+.chart-scrollkader::before {
+  left: 0;
+  background: linear-gradient(to right, var(--surface-1), transparent);
+}
+
+.chart-scrollkader::after {
+  right: 0;
+  background: linear-gradient(to left, var(--surface-1), transparent);
+}
+
+.chart-scrollkader[data-links]::before,
+.chart-scrollkader[data-rechts]::after {
+  opacity: 1;
+}
+
+.chart-hint {
+  margin: 6px 0 0;
+  font-size: 0.8rem;
+  color: var(--text-secondary);
+  text-align: center;
+}
+
+.chart-hint span {
+  color: var(--ac);
+  font-weight: 700;
 }
 
 /* Een scrollende regio zonder focus is voor toetsenbordgebruikers een
@@ -1315,6 +1382,28 @@ input[type="date"] {
   color: var(--series-3);
 }
 
+/* Met kleine labels boven de waarden: welke kant is nu, welke straks. */
+.stat-verloop.met-labels {
+  align-items: flex-start;
+}
+
+.stat-kolom {
+  display: flex;
+  flex-direction: column;
+  gap: 1px;
+}
+
+.stat-kolomlabel {
+  font-size: 0.7rem;
+  font-weight: 500;
+  color: var(--text-muted);
+  line-height: 1.2;
+}
+
+.stat-verloop.met-labels .stat-pijl {
+  padding-top: 1.05rem;
+}
+
 /* De derde stand onder een tegel: wat het wordt onder het nettarief van 2029. */
 /*
  * Hoeveel er veranderde, als chipje onder de twee waarden. Procentpunten bij
@@ -1398,7 +1487,10 @@ input[type="date"] {
 .bereken-balk {
   display: flex;
   align-items: center;
-  gap: 12px;
+  flex-wrap: wrap;
+  gap: 6px 12px;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .bereken-hint {
@@ -1803,10 +1895,42 @@ details.voetnoot-uitklap .schakel {
 .heat-cel.stap-0 { background: var(--seq-100); color: #0b0b0b; }
 .heat-cel.stap-1 { background: var(--seq-200); color: #0b0b0b; }
 .heat-cel.stap-2 { background: var(--seq-300); color: #0b0b0b; }
-.heat-cel.stap-3 { background: var(--seq-400); color: #fff; }
+.heat-cel.stap-3 { background: var(--seq-400); color: #0b0b0b; }
 .heat-cel.stap-4 { background: var(--seq-500); color: #fff; }
 .heat-cel.stap-5 { background: var(--seq-600); color: #fff; }
 .heat-cel.stap-6 { background: var(--seq-700); color: #fff; }
+
+/* Divergerend, voor het netto resultaat: winst in teal, verlies in oranje. */
+.heat-cel.winst-0 { background: var(--seq-200); color: #0b0b0b; }
+.heat-cel.winst-1 { background: var(--seq-400); color: #0b0b0b; }
+.heat-cel.winst-2 { background: var(--seq-600); color: #fff; }
+.heat-cel.winst-3 { background: var(--seq-700); color: #fff; }
+.heat-cel.verlies-0 { background: var(--verlies-100); color: #0b0b0b; }
+.heat-cel.verlies-1 { background: var(--verlies-200); color: #0b0b0b; }
+.heat-cel.verlies-2 { background: var(--verlies-300); color: #0b0b0b; }
+.heat-cel.verlies-3 { background: var(--verlies-400); color: #fff; }
+
+/* De sleutel bij de kaart: verlies links, winst rechts, nul in het midden. */
+.heat-sleutel {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+  margin: 0 0 8px;
+  font-size: 0.78rem;
+  color: var(--text-muted);
+}
+
+.heat-sleutel i.heat-cel {
+  display: block;
+  width: 22px;
+  min-width: 0;
+  height: 12px;
+  border-radius: 2px;
+}
+
+.heat-sleutel-kop {
+  padding: 0 6px;
+}
 
 /*
  * Er is één, licht thema: de seq-tokens kennen geen donkere variant. Een
@@ -1924,10 +2048,10 @@ details.voetnoot-uitklap .schakel {
   gap: 24px;
   padding: 0 24px;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.14);
-  overflow-x: auto;
 }
 
 .balk-merk {
+  flex: none;
   color: #fff;
   font-weight: 700;
   font-size: 1rem;
@@ -1969,9 +2093,26 @@ details.voetnoot-uitklap .schakel {
   padding: 0;
   list-style: none;
   flex: 1;
+  /* Alleen de tabs scrollen, het merk blijft staan. De randen vervagen waar
+     er nog meer tabs zijn (scroll-schaduw: de dekvlakken schuiven met de
+     inhoud mee en verbergen de schaduw zodra je bij het einde bent). */
+  min-width: 0;
+  overflow-x: auto;
+  overscroll-behavior-x: contain;
+  scrollbar-width: none;
+  background:
+    linear-gradient(to right, var(--ac), var(--ac)) left center / 20px 100% no-repeat local,
+    linear-gradient(to left, var(--ac), var(--ac)) right center / 20px 100% no-repeat local,
+    linear-gradient(to right, rgba(255, 255, 255, 0.28), transparent) left center / 20px 100% no-repeat scroll,
+    linear-gradient(to left, rgba(255, 255, 255, 0.28), transparent) right center / 20px 100% no-repeat scroll;
+}
+
+.tabs::-webkit-scrollbar {
+  display: none;
 }
 
 .tab {
+  flex: none;
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -2603,7 +2744,8 @@ details.uitklap > summary {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 16px;
+  flex-wrap: wrap;
+  gap: 10px 16px;
   padding: 16px 22px;
 }
 
@@ -2629,8 +2771,10 @@ details.uitklap[open] > summary {
 .summary-tekst {
   display: flex;
   align-items: baseline;
-  gap: 12px;
-  flex: 1;
+  flex-wrap: wrap;
+  gap: 2px 12px;
+  flex: 1 1 14rem;
+  min-width: 0;
 }
 
 .summary-tekst h2 {
@@ -3002,34 +3146,13 @@ details.uitklap[open] > summary {
 }
 
 /*
- * De drempelschuif bij het Nederlandse perspectief: één regel met het getal
- * erin, de schuif eronder over de volle breedte. Geen eigen instelling in het
- * paneel Geavanceerd: de keuze hoort bij de figuur die hem uitlegt.
+ * Een figuur in de dialoog "Hoe is dit berekend?", zoals de teruglevering per
+ * klasse emissiefactor onder het Nederlandse perspectief. De drempel die daar
+ * getekend staat, stel je in bij de geavanceerde instellingen: het is een
+ * aanname voor de berekening, geen knop bij de figuur.
  */
-.co2-drempel {
-  display: block;
-  margin: 0 0 12px;
-  font-size: 0.92rem;
-  color: var(--text-secondary);
-}
-
-.co2-drempel > span {
-  display: block;
-  margin-bottom: 6px;
-}
-
-.co2-drempel b {
-  color: var(--text-primary);
-}
-
-.co2-drempel-noot {
-  color: var(--text-muted);
-}
-
-.co2-drempel input[type="range"] {
-  width: 100%;
-  max-width: 520px;
-  accent-color: var(--ac);
+.uitleg-figuur {
+  margin: 10px 0 4px;
 }
 
 /* ── De drie doelen naast elkaar (Sturing) ─────────────────────────────────── */
@@ -3160,4 +3283,215 @@ details.uitklap[open] > summary {
 
 .doeldag-strook.gekozen .doeldag-titel {
   fill: var(--ac);
+}
+
+
+/* ── Mobiel: niets steekt uit, alleen wat scrolt mag scrollen ────────────── */
+
+@media (max-width: 640px) {
+  /* Het merk krijgt de ruimte die het nodig heeft; de tabs nemen de rest. */
+  .balk {
+    gap: 8px;
+  }
+  .balk-merk {
+    font-size: 0.95rem;
+  }
+  .tabs {
+    padding: 0 4px;
+  }
+  /* De knop "Bereken opnieuw" staat onder de titel en niet ernaast. */
+  .bereken-balk {
+    flex: 1 1 100%;
+  }
+  .bereken-balk .bereken-knop {
+    flex: 1 1 auto;
+  }
+}
+
+@media (max-width: 420px) {
+  .balk-merk span {
+    display: none;
+  }
+}
+
+/*
+ * De inhoudsopgave onder de sectiekop is op een telefoon een rij chips die
+ * zijwaarts scrolt in plaats van een blok van drie of vier regels: het eerste
+ * invoerveld komt zo een scherm eerder in beeld.
+ */
+@media (max-width: 640px) {
+  .op-dit-tabblad {
+    flex-wrap: nowrap;
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0;
+    padding: 6px 0 0;
+    border-bottom: 0;
+    margin-right: -14px;
+  }
+  .op-dit-tabblad-kop {
+    font-size: 0.68rem;
+  }
+  .op-dit-tabblad ul {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    gap: 6px;
+    padding: 4px 30px 8px 0;
+    scrollbar-width: none;
+    /* De laatste chips vervagen aan de rand: er staat meer, veeg ernaartoe.
+       De opvulling rechts houdt de laatste chip aan het eind volledig zichtbaar. */
+    -webkit-mask-image: linear-gradient(to right, #000 calc(100% - 30px), transparent);
+    mask-image: linear-gradient(to right, #000 calc(100% - 30px), transparent);
+  }
+  .sectiekop h1,
+  .sectiekop h2 {
+    font-size: 1.35rem;
+  }
+  .sectiekop p {
+    font-size: 0.88rem;
+    margin-top: 6px;
+  }
+  .op-dit-tabblad ul::-webkit-scrollbar {
+    display: none;
+  }
+  .op-dit-tabblad li {
+    flex: none;
+  }
+  .op-dit-tabblad a {
+    display: inline-flex;
+    align-items: center;
+    border: 1px solid var(--border-strong);
+    border-radius: 999px;
+    padding: 0 12px;
+    min-height: 34px;
+    background: var(--surface-1);
+    white-space: nowrap;
+  }
+}
+
+/*
+ * Tikdoelen: op een aanraakscherm minstens 44 bij 44 pixels. Het gebied groeit
+ * met padding (en waar de opmaak dat vraagt met een negatieve marge), zodat
+ * de opmaak op een muisscherm ongewijzigd blijft.
+ */
+@media (max-width: 480px) {
+  /* Zes kolommen passen naast de rijkoppen op een telefoon van 390 breed. */
+  .heat {
+    border-spacing: 1px;
+  }
+  .heat th {
+    padding: 4px 2px;
+  }
+  .heat-cel,
+  .heat-cel.leeg {
+    min-width: 44px;
+  }
+  .heat-cel {
+    font-size: 0.76rem;
+  }
+  .heat th.heat-scheiding,
+  .heat td.heat-scheiding {
+    padding-left: 3px;
+  }
+  /* "kWh \ kW" in de hoek maakt de eerste kolom breder dan nodig; het
+     bijschrift zegt al wat rijen en kolommen zijn. */
+  .heat-hoek {
+    font-size: 0 !important;
+  }
+  .heat-hoek::after {
+    content: "kWh";
+    font-size: 0.66rem;
+  }
+}
+
+@media (pointer: coarse) {
+  .heat-cel,
+  .heat-cel.leeg {
+    height: 44px;
+  }
+  .tab {
+    min-height: 44px;
+    padding: 6px 14px;
+  }
+  .op-dit-tabblad a {
+    min-height: 44px;
+  }
+  .figuur-naam {
+    position: relative;
+    z-index: 1;
+    padding: 14px 0;
+    margin: -14px 0 -10px;
+  }
+  .uitleg-knop {
+    min-height: 44px;
+    padding: 3px 14px 3px 10px;
+  }
+  .uitleg-knop.icoon {
+    min-width: 44px;
+    justify-content: center;
+    padding: 0;
+  }
+  .segment-knop,
+  .bereken-knop,
+  .bewaar-knop {
+    min-height: 44px;
+  }
+  .chart-hint {
+    font-size: 0.82rem;
+  }
+  .knop,
+  .knop.klein {
+    min-height: 44px;
+  }
+  .dagstap {
+    min-width: 44px;
+    min-height: 44px;
+  }
+  .balk-merk {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
+  details.voetnoot-uitklap > summary {
+    padding: 12px 0;
+  }
+}
+
+/* "Jouw CO2" had als enige figuur een grotere titel dan de rest (22 px). */
+.co2-antwoord h2 {
+  font-size: 1.12rem;
+  margin-bottom: 6px;
+}
+
+/* Een melding onder een getalveld ("Het maximum is 30.000; aangepast."):
+   een rand in de waarschuwingskleur, zodat je hem ziet zonder dat hij schreeuwt. */
+.getal-melding {
+  display: block;
+  margin-top: 4px;
+  padding: 4px 0 4px 8px;
+  border-left: 3px solid var(--warning);
+}
+
+/* Tikdoelen van 44 px op een aanraakscherm: invoervelden, keuzelijsten, de
+   vinkjes van de instellingen (het hele label is het tikgebied) en de sprong
+   naar de instellingen. */
+@media (pointer: coarse) {
+  .getal-veld input,
+  .veld select,
+  .instelling select {
+    min-height: 44px;
+  }
+  .schakel {
+    min-height: 44px;
+  }
+  .schakel input {
+    width: 24px;
+    height: 24px;
+    flex-shrink: 0;
+  }
+  .invoer-sprong a {
+    display: inline-flex;
+    align-items: center;
+    min-height: 44px;
+  }
 }

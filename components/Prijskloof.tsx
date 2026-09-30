@@ -25,6 +25,8 @@ export function Prijskloof({
   afnameKwh,
   terugleveringKwh,
   zonnepanelen = true,
+  afregelen = false,
+  omzettingsverlies,
   actie,
 }: {
   gap: PriceGap;
@@ -36,6 +38,13 @@ export function Prijskloof({
    * eronder "je levert 0 kWh terug, dus daar valt wat te halen".
    */
   zonnepanelen?: boolean;
+  /** Regelt de omvormer af bij een negatieve prijs? Standaard niet. */
+  afregelen?: boolean;
+  /**
+   * Het omzettingsverlies van de gekozen batterij als fractie (1 min de
+   * rondgang, dus 0,12 bij 88%). Zonder deze prop noemt de tekst geen getal.
+   */
+  omzettingsverlies?: number;
   /** De knop "Hoe is dit berekend?" in de kop. */
   actie?: ReactNode;
 }) {
@@ -53,11 +62,12 @@ export function Prijskloof({
       titel="Je betaalt veel meer voor stroom dan je ervoor terugkrijgt"
       toelichting={
         <>
-          Dit is waar de besparing vandaan komt: het gat waar een thuisbatterij in
-          stapt. Beide bedragen zijn
-          gewogen naar wanneer je werkelijk afneemt en teruglevert. Niet het
-          gemiddelde over alle uren dus, want dat verhult juist het effect.
-          Allebei inclusief btw: dat is wat er op je afrekening staat.
+          Dit is waar de besparing vandaan komt: het prijsverschil waar een
+          thuisbatterij van profiteert. Beide bedragen zijn gewogen naar wanneer
+          je werkelijk afneemt en teruglevert. Niet het gemiddelde over alle uren
+          dus, want dat verhult juist het effect. Allebei inclusief btw. Bij
+          afname is dat wat er op je afrekening staat; bij teruglevering is het
+          een aanname.
         </>
       }
     >
@@ -103,7 +113,7 @@ export function Prijskloof({
                     width: `${Math.max(0, impBreedte - expBreedte)}%`,
                   }}
                 >
-                  <b>{centPerKwh(verschil)} te winnen</b>
+                  <b>{centPerKwh(verschil)} te besparen</b>
                 </span>
               ) : null}
             </div>
@@ -125,7 +135,7 @@ export function Prijskloof({
                   },
                   { label: "Je levert per jaar terug", waarde: kwh(terugleveringKwh) },
                   {
-                    label: "Uren met een negatieve prijs",
+                    label: "Tijd met een negatieve prijs",
                     waarde: procent(gap.negativePriceShare, 1),
                   },
                 ],
@@ -155,30 +165,34 @@ export function Prijskloof({
         <p className="kloof-conclusie">
           Elke kilowattuur die je zelf gebruikt in plaats van teruglevert, scheelt je
           dus tot zo'n <strong>{centPerKwh(verschil)}</strong>, vóór het
-          omzettingsverlies van de batterij (ongeveer 12%). Je levert{" "}
-          {kwh(terugleveringKwh)} terug en neemt {kwh(afnameKwh)} af, dus daar valt
-          wat te halen.
+          omzettingsverlies van de batterij
+          {omzettingsverlies !== undefined && omzettingsverlies > 0
+            ? ` (ongeveer ${procent(omzettingsverlies)})`
+            : ""}
+          . Je levert {kwh(terugleveringKwh)} terug en neemt {kwh(afnameKwh)} af,
+          dus daar valt te besparen.
         </p>
       ) : (
         <p className="kloof-conclusie">
-          Zonder zonnepanelen lever je niets terug; de batterij verdient alleen aan
-          het verschil tussen goedkope en dure uren. Je neemt {kwh(afnameKwh)} af,
-          gemiddeld tegen <strong>{centPerKwh(gap.weightedImportPrice)}</strong>;
-          hoe meer daarvan de batterij naar goedkope uren verschuift, hoe meer
-          hij oplevert.
+          Zonder zonnepanelen lever je niets terug; de besparing komt alleen uit
+          het prijsverschil tussen goedkope en dure uren. Je neemt {kwh(afnameKwh)}{" "}
+          af, gemiddeld tegen <strong>{centPerKwh(gap.weightedImportPrice)}</strong>.
+          Hoe meer daarvan de batterij naar goedkope uren verschuift, hoe meer
+          hij bespaart.
         </p>
       )}
 
       {zonnepanelen && gap.negativePriceShare > 0.005 ? (
         <p className="kloof-noot">
           In {procent(gap.negativePriceShare, 1)} van de tijd was de prijs
-          negatief: terugleveren kostte dan geld in plaats van dat het iets
-          opbracht. Daar viel {kwh(gap.exportAtNegativePriceKwh)} van jouw
-          jaarlijkse teruglevering in. Veel meer dan dat tijdsaandeel doet vermoeden,
-          want je levert nu eenmaal terug op precies de zonnige uren
-          waarop iedereen dat doet en de prijs onderuit gaat. Het model neemt
-          aan dat je omvormer op die momenten afregelt, zodat terugleveren dan
-          niets kost; dat is instelbaar bij de geavanceerde instellingen.
+          negatief: terugleveren kostte dan geld in plaats van dat je er iets
+          voor kreeg. Van je teruglevering viel {kwh(gap.exportAtNegativePriceKwh)}{" "}
+          per jaar in die tijd. Dat is veel meer dan het tijdsaandeel doet
+          vermoeden, want je levert terug op precies de zonnige uren waarop
+          iedereen dat doet en de prijs onderuit gaat.{" "}
+          {afregelen
+            ? "Je omvormer regelt op die momenten af, zodat terugleveren dan niets kost; dat staat zo bij de geavanceerde instellingen."
+            : "Je betaalt dan om je stroom kwijt te raken, want de meeste omvormers stoppen niet vanzelf. Kan jouw installatie afregelen, zet dat dan aan bij de geavanceerde instellingen."}
         </p>
       ) : null}
     </Figure>

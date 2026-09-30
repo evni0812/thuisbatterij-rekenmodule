@@ -33,13 +33,13 @@ export const STRATEGIEEN: readonly Strategie[] = [
     id: "zuinig",
     naam: "Zuinig",
     deel: 1,
-    kort: "Elke beurt moet zijn eigen slijtage tegen de aanschafprijs terugverdienen. De minste beurten, de langste levensduur, de laagste jaaropbrengst.",
+    kort: "Elke laadbeurt moet zijn eigen slijtage terugverdienen. De minste laadbeurten, de langste levensduur, de laagste jaarbesparing.",
   },
   {
     id: "gebalanceerd",
     naam: "Gebalanceerd",
     deel: 0.5,
-    kort: "Een beurt telt voor de helft van de aanschafprijs. Handelt op de duidelijke prijsverschillen en laat de krappe dagen liggen.",
+    kort: "Een laadbeurt telt voor de helft van zijn slijtage. De aansturing gaat alleen voor duidelijke prijsverschillen aan het werk en laat de krappe dagen liggen.",
   },
   {
     id: "maximaal",
@@ -48,7 +48,7 @@ export const STRATEGIEEN: readonly Strategie[] = [
     // verschillende keuzes zijn.
     naam: "Volop",
     deel: 0.2,
-    kort: "Een beurt telt voor een vijfde (20%) van de slijtageprijs. Veel thuisbatterijen gaan eerder door ouderdom dan door hun laadbeurten achteruit, en dan kost een extra beurt weinig levensduur. De meeste beurten en de hoogste jaaropbrengst.",
+    kort: "Een laadbeurt telt voor een vijfde (20 procent) van zijn slijtage. Veel thuisbatterijen gaan eerder door ouderdom achteruit dan door hun laadbeurten, en dan kost een extra laadbeurt weinig levensduur. De meeste laadbeurten en de hoogste jaarbesparing.",
   },
 ];
 

@@ -37,17 +37,17 @@ export const DOELEN: readonly DoelInfo[] = [
   {
     id: "rendement",
     naam: "Rendement",
-    kort: "Zo weinig mogelijk euro's kwijt: eigen zon opslaan, bijkopen als het net goedkoop is en verkopen als het duur is.",
+    kort: "De laagste stroomkosten: eigen zonnestroom opslaan, van het net halen als stroom goedkoop is en aan het net leveren als hij duur is.",
   },
   {
     id: "zelfconsumptie",
     naam: "Zelfconsumptie",
-    kort: "Alleen je eigen zon opslaan en alleen je eigen verbruik dekken. Nooit laden uit het net, nooit terugleveren uit de batterij.",
+    kort: "Alleen je eigen zonnestroom opslaan en alleen je eigen verbruik dekken. Nooit van het net laden, nooit uit de batterij aan het net leveren.",
   },
   {
     id: "uitstoot",
     naam: "Uitstoot",
-    kort: "Zo weinig mogelijk CO2: de batterij vermijdt de uren waarop de stroom uit het net het vuilst is, ongeacht de prijs.",
+    kort: "Zo min mogelijk CO2: de batterij mijdt de uren waarop de stroom van het net het meeste CO2 uitstoot, ongeacht de prijs.",
   },
 ];
 

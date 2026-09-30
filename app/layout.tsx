@@ -24,8 +24,9 @@ const plexMono = IBM_Plex_Mono({
 export const metadata: Metadata = {
   title: "Wat had een thuisbatterij opgeleverd?",
   description:
-    "Reken door wat een thuisbatterij je had bespaard zonder saldering, " +
-    "op basis van werkelijke kwartierprofielen en werkelijke uurtarieven.",
+    "Wat had een thuisbatterij je bespaard zonder saldering? Reken het door " +
+    "met het gemeten gemiddelde patroon in jouw netgebied en de werkelijke " +
+    "uurprijzen van ANWB Energie.",
 };
 
 export const viewport: Viewport = {

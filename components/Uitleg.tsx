@@ -88,6 +88,13 @@ export function Uitleg({
             ))}
           </ol>
 
+          {blok.figuur ? (
+            <>
+              <h4>{blok.figuur.kop}</h4>
+              {blok.figuur.inhoud}
+            </>
+          ) : null}
+
           {blok.voorbeeld ? (
             <>
               <h4>Jouw getallen</h4>

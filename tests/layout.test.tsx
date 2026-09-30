@@ -119,7 +119,7 @@ describe("kolomindeling van het dagprofiel", () => {
 
     for (const el of labels) {
       // De tijdas staat onderaan en is gecentreerd op de plot; die hoort daar.
-      if ((el.textContent ?? "").includes(":")) continue;
+      if (/\d[:.]\d\d( uur)?$/.test(el.textContent ?? "")) continue;
       const { tot } = bereik(el);
       expect(tot, `as-label "${el.textContent}" steekt de plot in`).toBeLessThanOrEqual(
         AS_BREEDTE,

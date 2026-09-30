@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { Antwoord } from "../components/Antwoord";
 import { BatterijMaat } from "../components/BatterijMaat";
 import { BesparingPerJaar } from "../components/BesparingPerJaar";
@@ -40,10 +40,10 @@ import { Verantwoording } from "../components/Verantwoording";
 import { Verloop } from "../components/Verloop";
 import { Verliezen } from "../components/Verliezen";
 import { Verschuiving } from "../components/Verschuiving";
-import { datum, euro, jarenReeks, periode, procent } from "../lib/format";
+import { datum, euro, jarenReeks, periode } from "../lib/format";
 import { leesLaatste, leesProfielen, type Profiel } from "../lib/opslag";
 import { PRESETS, PRIJSPEILDATUM, geschatteOpwekKwh } from "../lib/presets";
-import { STANDAARD, kiesPreset, maakConfiguratie } from "../lib/configuratie";
+import { STANDAARD, effectieveBatterij, kiesPreset, maakConfiguratie } from "../lib/configuratie";
 import { referentieJaar } from "../lib/model/analysis";
 import { STANDAARD_CO2_DREMPEL_G } from "../lib/model/co2";
 import { ankerVan, kostenVan, kostenregelVan } from "../lib/model/kosten";
@@ -54,7 +54,7 @@ import { overgangsFinance } from "../lib/overgang";
 import { BESPARING_MET_HEFFING_TOEN, heffingToenTekst } from "../lib/nettarief";
 import { useAnalysis } from "../lib/useAnalysis";
 import { leesUrl, schrijfUrl, type Instellingen } from "../lib/url-state";
-import { VELDNAAM } from "../lib/normaliseer";
+import { VELDNAAM, klemOpBeschikbaar } from "../lib/normaliseer";
 import type { Configuration } from "../lib/worker/protocol";
 
 /** "a", "a en b", "a, b en c": een opsomming in lopende tekst. */
@@ -80,6 +80,18 @@ export default function Page() {
   const [inst, setInst] = useState<Instellingen>(STANDAARD);
   const [geladen, setGeladen] = useState(false);
   const [tab, setTab] = useState<TabId>(STANDAARD_TAB);
+  /**
+   * De volgende URL-update hoort bij een tabwissel door de gebruiker en krijgt
+   * een eigen stap in de geschiedenis (de terugknop gaat dan naar het vorige
+   * tabblad). Invoer wijzigen vervangt alleen de huidige stap.
+   */
+  const duwTab = useRef(false);
+  const tabRef = useRef(tab);
+  tabRef.current = tab;
+  const kiesTab = useCallback((id: TabId) => {
+    if (id !== tabRef.current) duwTab.current = true;
+    setTab(id);
+  }, []);
   /**
    * Een anker uit de link (`#per-maand`) waar nog naartoe gescrold moet
    * worden. De figuur bestaat pas als zijn tabblad open is en het antwoord er
@@ -140,8 +152,22 @@ export default function Page() {
       setTab(tabAnker);
       wachtendAnker.current = anker;
     };
+    // De terugknop (of vooruit): het tabblad volgt de URL waar de browser naartoe
+    // gaat. De invoer niet: die wijzigt de huidige stap alleen, en terug naar
+    // een tabblad hoort niet te betekenen dat je invoer terugspringt.
+    const opTerug = () => {
+      const p = new URLSearchParams(window.location.search);
+      const anker = window.location.hash.slice(1);
+      const tabAnker = tabVanAnker(anker);
+      if (tabAnker) wachtendAnker.current = anker;
+      setTab(tabAnker ?? leesTab(p.get("tab")) ?? STANDAARD_TAB);
+    };
     window.addEventListener("hashchange", opHash);
-    return () => window.removeEventListener("hashchange", opHash);
+    window.addEventListener("popstate", opTerug);
+    return () => {
+      window.removeEventListener("hashchange", opHash);
+      window.removeEventListener("popstate", opTerug);
+    };
   }, []);
 
   useEffect(() => {
@@ -150,18 +176,25 @@ export default function Page() {
     // zodat die link direct naar de figuur blijft wijzen. Wie van tabblad
     // wisselt, laat het achter.
     const anker = window.location.hash.slice(1);
+    const modus = duwTab.current ? "duw" : "vervang";
+    duwTab.current = false;
     schrijfUrl(
       inst,
       STANDAARD,
       tab === STANDAARD_TAB ? {} : { tab },
       tabVanAnker(anker) === tab ? anker : undefined,
+      modus,
     );
   }, [inst, geladen, tab]);
 
   const preset = kiesPreset(inst.presetId);
-  const capaciteit = inst.capaciteitKwh ?? preset.capaciteitKwh;
-  const vermogen = inst.vermogenKw ?? preset.vermogenKw;
-  const prijs = inst.prijsEur ?? preset.prijsEur;
+  // Eén bron voor wat er bij de batterij staat en wat er gerekend wordt: de
+  // prijs volgt de kostenregel zodra de maat is aangepast (lib/configuratie.ts).
+  const {
+    capaciteitKwh: capaciteit,
+    vermogenKw: vermogen,
+    prijsEur: prijs,
+  } = effectieveBatterij(inst);
 
   const state = useAnalysis(
     useMemo<Configuration | null>(
@@ -212,6 +245,23 @@ export default function Page() {
     setInst((s) => ({ ...s, domein: STANDAARD.domein }));
     setAangepast((a) => (a.includes("domein") ? a : [...a, "domein"]));
   }, [manifest, inst.domein]);
+
+  // Een periode die buiten de beschikbare data valt (een link met een dag in de
+  // toekomst) gaf een technische foutmelding over ontbrekende profieldata.
+  // Klem hem op de data van het netgebied, en zeg dat.
+  useEffect(() => {
+    if (!manifest) return;
+    const jaren = Object.values(manifest.profielen[inst.domein] ?? {});
+    const vroegste = jaren[0]?.eerste_dag;
+    const laatste = jaren[jaren.length - 1]?.laatste_dag;
+    if (!vroegste || !laatste) return;
+    const klem = klemOpBeschikbaar(inst, { vroegste, laatste });
+    if (klem.veranderd.length === 0) return;
+    setInst((s) => ({ ...s, van: klem.van, tot: klem.tot }));
+    setAangepast((a) => [...a, ...klem.veranderd.filter((k) => !a.includes(k))]);
+    // `inst` zelf niet als dependency: alleen deze drie velden bepalen het.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [manifest, inst.domein, inst.van, inst.tot]);
 
   // Alles wat naast het resultaat wordt getoond, komt uit de configuratie die
   // bij dát resultaat hoort — niet uit de live invoer. Anders staat een verse
@@ -284,22 +334,22 @@ export default function Page() {
   const toonZonnepanelen = toon ? toon.afnametype !== "AZI" : inst.zonnepanelen;
   // De heffing van toen, uit de prijsdata van de jaren waarop het antwoord
   // rust; zonder antwoord de volle profieljaren van het netgebied.
+  const bedragJaren =
+    volledigeJaren.length > 0
+      ? volledigeJaren.map((j) => j.year)
+      : Object.entries(manifest?.profielen[inst.domein] ?? {})
+          .filter(([, p]) => p.volledig_jaar)
+          .map(([j]) => Number(j));
   const heffingZin = manifest
-    ? heffingToenTekst(
-        manifest.prijzen,
-        volledigeJaren.length > 0
-          ? volledigeJaren.map((j) => j.year)
-          : Object.entries(manifest.profielen[inst.domein] ?? {})
-              .filter(([, p]) => p.volledig_jaar)
-              .map(([j]) => Number(j)),
-      )
+    ? heffingToenTekst(manifest.prijzen, bedragJaren) ?? null
     : null;
+  const bedragJarenTekst = bedragJaren.length > 0 ? jarenReeks(bedragJaren) : "de gekozen periode";
   const datadekking = manifest
     ? (() => {
         const jaren = Object.values(manifest.profielen[inst.domein] ?? {});
         const a = jaren[0]?.eerste_dag;
         const b = jaren[jaren.length - 1]?.laatste_dag;
-        return a && b ? `Data ${datum(a)} tot ${datum(b)}` : "";
+        return a && b ? `Gegevens van ${datum(a)} tot en met ${datum(b)}` : "";
       })()
     : "";
 
@@ -341,7 +391,7 @@ export default function Page() {
         <a className="balk-merk" href="/">
           Thuisbatterij <span>Rekentool</span>
         </a>
-        <Tabs actief={tab} onKies={setTab} />
+        <Tabs actief={tab} onKies={kiesTab} />
         {datadekking ? <span className="balk-meta">{datadekking}</span> : null}
       </header>
 
@@ -362,17 +412,13 @@ export default function Page() {
             <TabEyebrow id="uitkomst" />
             <h1>Wat had een thuisbatterij je opgeleverd?</h1>
             <p>
-              Op 1 januari 2027 stopt de salderingsregeling. Met een dynamisch
-              contract krijg je voor teruglevering dan de kale marktprijs van dat
-              uur, min eventuele terugleverkosten. Voor afname betaal je het volle
-              tarief, met belasting. Deze tool rekent door wat een thuisbatterij
-              je in die situatie had bespaard, op de{" "}
-              <strong>werkelijke uurprijzen</strong> van ANWB Energie en het{" "}
-              <strong>gemeten gemiddelde verbruikspatroon</strong> in jouw
-              netgebied, geschaald naar jouw jaartotalen.{" "}
+              Op 1 januari 2027 stopt het salderen: wat je teruglevert wordt dan
+              niet meer afgetrokken van wat je afneemt. Deze tool rekent uit wat
+              een thuisbatterij je met een dynamisch contract had bespaard, op de{" "}
+              <strong>werkelijke uurprijzen</strong> van ANWB Energie.{" "}
               {inst.zonnepanelen
-                ? "Twee getallen van je jaarafrekening zijn genoeg: je afname en je teruglevering."
-                : "Eén getal van je jaarafrekening is genoeg: je afname."}
+                ? "Twee getallen van je jaarafrekening zijn genoeg, want we rekenen met het gemeten gemiddelde verbruik in jouw netgebied."
+                : "Eén getal van je jaarafrekening is genoeg, want we rekenen met het gemeten gemiddelde verbruik in jouw netgebied."}
             </p>
           </div>
           <OpDitTabblad id="uitkomst" />
@@ -403,7 +449,11 @@ export default function Page() {
                 {aangepast.length === 1 ? "Deze instelling stond" : "Deze instellingen stonden"}{" "}
                 er niet goed in en {aangepast.length === 1 ? "is" : "zijn"} vervangen door
                 een geldige waarde: {opsomming(aangepast.map((k) => VELDNAAM[k]))}. De
-                uitkomst hieronder rekent daarmee. Kijk{" "}
+                uitkomst hieronder rekent daarmee.
+                {aangepast.includes("van") || aangepast.includes("tot")
+                  ? " Een periode moet beginnen vóór hij eindigt en binnen de beschikbare data vallen."
+                  : ""}{" "}
+                Kijk{" "}
                 {aangepast.length === 1 ? "hem" : "ze"} na bij de instellingen als je
                 iets anders bedoelde.
               </p>
@@ -418,6 +468,9 @@ export default function Page() {
             terugleveringKwh={inst.terugleveringKwh}
             zonnepanelen={inst.zonnepanelen}
             presetId={inst.presetId}
+            capaciteitKwh={capaciteit}
+            vermogenKw={vermogen}
+            prijsEur={prijs}
             onAfname={(v) => setInst((s) => ({ ...s, afnameKwh: v }))}
             onTeruglevering={(v) => setInst((s) => ({ ...s, terugleveringKwh: v }))}
             onZonnepanelen={(v) => setInst((s) => ({ ...s, zonnepanelen: v }))}
@@ -534,10 +587,10 @@ export default function Page() {
             <TabEyebrow id="besparing" />
             <h2>Waar komt de besparing vandaan?</h2>
             <p>
-              Zonder saldering is het gat tussen wat afname kost en wat
-              teruglevering oplevert het hele verdienmodel van een batterij.
-              Hieronder hoe groot dat gat is, uit welke posten de besparing
-              bestaat en wat er bij laden en ontladen verloren gaat.
+              Zonder salderen loont een batterij door het prijsverschil tussen
+              wat afname kost en wat teruglevering oplevert. Hier zie je hoe groot
+              dat prijsverschil is, uit welke posten de besparing bestaat en wat
+              er bij laden en ontladen verloren gaat.
             </p>
           </div>
           <OpDitTabblad id="besparing" />
@@ -546,13 +599,16 @@ export default function Page() {
             <>
               <Prijskloof
                 gap={result.priceGap}
+                afregelen={toon?.tariff.allowCurtailment ?? inst.curtailment}
                 afnameKwh={toonAfname}
                 terugleveringKwh={toonTeruglevering}
                 zonnepanelen={toonZonnepanelen}
+                omzettingsverlies={1 - (toon?.battery.efficiency ?? preset.spec.efficiency) ** 2}
                 actie={uitleg("prijskloof")}
               />
               <Uitsplitsing
                 breakdown={result.breakdown}
+                afregelen={toon?.tariff.allowCurtailment ?? inst.curtailment}
                 periodeLabel={gemiddeldLabel}
                 actie={uitleg("uitsplitsing")}
               />
@@ -570,11 +626,11 @@ export default function Page() {
         <Paneel id="door-het-jaar" actief={tab}>
           <div className="sectiekop">
             <TabEyebrow id="door-het-jaar" />
-            <h2>Wanneer verdient de batterij zijn geld?</h2>
+            <h2>Wanneer bespaart de batterij het meest?</h2>
             <p>
               Van grof naar fijn: per jaar, per maand, over een gemiddelde
               zomer- en winterdag, en ten slotte één dag of week van dichtbij.
-              Hoe grilliger de prijzen, hoe meer een batterij verdient.
+              Hoe grilliger de prijzen, hoe meer een batterij bespaart.
             </p>
           </div>
           <OpDitTabblad id="door-het-jaar" />
@@ -582,9 +638,14 @@ export default function Page() {
           {result ? (
             <>
               <BesparingPerJaar jaren={result.perYear} actie={uitleg("perJaar")} />
-              <MaandVerloop maanden={result.perMonth} actie={uitleg("maandverloop")} />
+              <MaandVerloop
+                maanden={result.perMonth}
+                zonnepanelen={toonZonnepanelen}
+                actie={uitleg("maandverloop")}
+              />
               <Verschuiving
                 profielen={result.seasonProfiles ?? []}
+                zonnepanelen={toonZonnepanelen}
                 actie={uitleg("verschuiving")}
               />
               <Verloop
@@ -621,10 +682,9 @@ export default function Page() {
             <TabEyebrow id="terugverdienen" />
             <h2>Verdient de batterij zichzelf terug?</h2>
             <p>
-              Wat de batterij over zijn looptijd kost en oplevert, hoe lang de
-              cellen meegaan, en wat het tijdsafhankelijke nettarief doet dat
-              de netbeheerders voorstellen. Daarover beslist de ACM; invoering
-              is naar verwachting 1 januari 2029, mogelijk later.
+              Wat de batterij over zijn looptijd kost en oplevert, hoe lang hij
+              meegaat, en wat het nettarief van 2029 verandert als het voorstel
+              van de netbeheerders doorgaat.
             </p>
           </div>
           <OpDitTabblad id="terugverdienen" />
@@ -671,9 +731,9 @@ export default function Page() {
             <TabEyebrow id="welke-batterij" />
             <h2>Welke batterij past bij jou?</h2>
             <p>
-              Dezelfde doorrekening voor andere maten, een grotere accu, een
-              andere sturing en andere huishoudens. Klik op een maat of een
-              doel, en de hele pagina rekent daarmee door.
+              Dezelfde doorrekening voor andere maten, een ander doel en andere
+              huishoudens. Klik op een maat of een doel, dan rekent de hele
+              pagina daarmee door.
             </p>
           </div>
           <OpDitTabblad id="welke-batterij" />
@@ -728,11 +788,11 @@ export default function Page() {
             <TabEyebrow id="co2" />
             <h2>Wat scheelt de batterij aan CO2?</h2>
             <p>
-              Elke kWh uit het net is op dat uur met een bepaalde uitstoot
-              opgewekt: veel als gascentrales draaien, weinig als de zon
-              schijnt en het waait. Eerst wat de batterij voor jouw eigen
-              voetafdruk doet, dan wanneer stroom schoon is en waar de winst
-              valt, en tot slot wat het voor Nederland als geheel scheelt, want
+              Elke kWh van het net is op dat uur met een bepaalde hoeveelheid CO2
+              opgewekt: veel als gascentrales draaien, weinig als de zon schijnt
+              en het waait. Eerst wat de batterij voor jouw eigen uitstoot doet,
+              dan wanneer stroom schoon is en in welke maanden je het meeste
+              scheelt, en tot slot wat het voor Nederland als geheel scheelt, want
               daar telt je teruglevering ook mee.
             </p>
           </div>
@@ -754,7 +814,6 @@ export default function Page() {
                   co2={result.co2}
                   drempel={toon.co2DrempelG ?? STANDAARD_CO2_DREMPEL_G}
                   zonnepanelen={toonZonnepanelen}
-                  onDrempel={(g) => setInst((s) => ({ ...s, co2Drempel: g }))}
                   actie={uitleg("co2nederland")}
                 />
               </>
@@ -776,10 +835,10 @@ export default function Page() {
             <TabEyebrow id="aannames" />
             <h2>Hoe hard zijn deze cijfers?</h2>
             <p>
-              Geen voorspelling maar een doorrekening op de prijzen zoals ze
-              werkelijk waren en het gemeten gemiddelde verbruikspatroon.
-              Hieronder de data, de aannames die nog kunnen bewegen, en de
-              bronnen.
+              We gebruiken geen prijsvoorspelling: het bedrag is wat de batterij
+              in {bedragJarenTekst} had opgeleverd. De terugverdientijd trekt dat
+              door naar de toekomst; dat is een aanname. Hieronder staan de
+              gegevens, de aannames en de bronnen.
             </p>
           </div>
           <OpDitTabblad id="aannames" />
@@ -794,65 +853,28 @@ export default function Page() {
                 <FiguurNaam anker="wat-we-niet-weten" />
                 <h3>De richting is stevig, de exacte hoogte niet</h3>
                 <p className="figure-uitleg">
-                  Dit zijn de aannames waar het om draait, elk met een label
-                  dat zegt hoe ze de uitkomst raken.
+                  Dit zijn de aannames waar het om draait, gesorteerd op hoeveel
+                  ze de uitkomst kunnen veranderen. Het label zegt hoe.
                 </p>
               </div>
             </div>
             <ul className="methode-lijst">
               <li>
-                <b>Het verbruikspatroon is een gemiddelde.</b> We rekenen met het
-                gemeten gemiddelde kwartierpatroon van alle kleinverbruikers (E1A)
-                met, of zonder, teruglevering in jouw netgebied, geschaald naar
-                jouw jaartotalen. Dat is geen meting van één huishouden: pieken
-                van een waterkoker of een laadpaal zijn uitgemiddeld, en een
-                warmtepomp of elektrische auto zit er niet apart in. Of de
-                uitkomst daardoor te hoog of te laag is, weten we niet. Met de
-                schuif "Pieken in je verbruik" zie je hoe gevoelig hij ervoor is.
-                <span className="badge let-op">richting onzeker</span>
-              </li>
-              <li>
-                <b>Afname en teruglevering binnen een kwartier.</b> We strepen ze
-                per kwartier tegen elkaar weg, want één aansluiting gaat binnen een
-                kwartier meestal maar één kant op. Wisselt jouw huis vaker binnen
-                een kwartier (een wolk, een waterkoker), dan valt de besparing iets
-                hoger uit; bij een kleine stekkerbatterij het meest.
-                <span className="badge goed">eerder voorzichtig</span>
-              </li>
-              <li>
-                <b>De batterij kent de toekomst niet.</b> De strategie plant op de
-                day-ahead-prijzen, die rond 13.00 uur voor de volgende dag bekend
-                worden, en op een eenvoudige verwachting van je verbruik en opwek
-                uit de afgelopen dagen. Alleen het optimum dat ter vergelijking
-                in de figuren staat, rekent met perfecte kennis vooraf.
+                <b>Het verleden staat model voor de toekomst.</b> Voor de
+                terugverdientijd herhalen we de doorgerekende jaren over de hele
+                looptijd, standaard zonder prijsstijging (0 procent per jaar).
+                Wat prijzen en belastingen de komende jaren doen, weet niemand.
+                De looptijd is een aanname voor de beoordeling, geen
+                fabrieksgarantie; die is vaak tien jaar.
                 <span className="badge neutraal">aanname</span>
               </li>
               <li>
-                <b>Het verleden staat model voor de toekomst.</b> Voor de
-                terugverdientijd herhalen we de doorgerekende jaren over de hele
-                looptijd, standaard zonder prijsstijging (0% per jaar). De
-                looptijd is een aanname voor de beoordeling, geen
-                fabrieksgarantie; die is vaak 10 jaar.
-                <span className="badge let-op">aanname</span>
-              </li>
-              <li>
-                <b>Eén leverancier, afgeronde uurprijzen.</b> De prijzen zijn van
-                ANWB Energie. Een andere dynamische leverancier rekent een andere
-                opslag; dat verschuift de kosten, nauwelijks de besparing. Sinds
-                20 juni 2026 geeft de ANWB de prijzen afgerond op hele centen. En
-                sinds 1 oktober 2025 hebben de day-ahead-prijzen een kwartier als
-                eenheid; de tool rekent met het gemiddelde per uur, dus
-                prijsverschillen binnen een uur vallen weg.
-                <span className="badge goed">klein effect</span>
-              </li>
-              <li>
-                <b>Het nettarief van 2029 is een voorstel.</b> De blokken en
-                wegingsfactoren staan in het voorstel van de netbeheerders; het
-                basistarief is een prognose van CE Delft, in opdracht van NVDE,
-                Holland Solar, Energie-Nederland en Energy Storage NL. De ACM
-                heeft nog niet beslist. Invoering is "in beginsel" 1 januari
-                2029, mogelijk later.
-                <span className="badge let-op">te toetsen eind 2026</span>
+                <b>Het stand-byverbruik van de batterij zit er niet in.</b> Een
+                thuisbatterij gebruikt ook stroom als hij niets doet. Fabrikanten
+                en testers noemen 7 tot 25 watt. Dat is 60 tot 220 kWh per jaar.
+                Dat is een indicatie, en we trekken het niet van de besparing af.
+                De besparing valt daardoor lager uit.
+                <span className="badge neutraal">aanname</span>
               </li>
               <li>
                 <b>De belasting van nu.</b> De uurprijzen zijn van toen, de
@@ -861,45 +883,75 @@ export default function Page() {
                 {heffingZin ? (
                   <>
                     {" "}
-                    {heffingZin}. Met die heffing valt de besparing een stuk
-                    minder hoger uit dan de heffing zelf: voor de
+                    {heffingZin}. Met die hogere heffing is de besparing voor de
                     standaardbatterij met zonnepanelen ongeveer{" "}
-                    {procent(BESPARING_MET_HEFFING_TOEN)}.
+                    {Math.round(BESPARING_MET_HEFFING_TOEN * 100)} procent hoger.
                   </>
                 ) : null}{" "}
-                Bij de geavanceerde instellingen kies je "van toen"; het
+                Bij de geavanceerde instellingen kies je de heffing van toen; het
                 nettariefscenario rekent met de belasting van 2029.
-                <span className="badge let-op">kan veranderen</span>
+                <span className="badge neutraal">aanname</span>
               </li>
               <li>
-                <b>Terugleverkosten staan standaard op 0 cent.</b> ANWB Energie
-                rekent ze niet, andere leveranciers vaak wel. Vul je eigen bedrag
-                in bij de geavanceerde instellingen.
+                <b>Het verbruikspatroon is een gemiddelde.</b> We rekenen met het
+                gemeten gemiddelde kwartierpatroon van alle kleinverbruikers in
+                jouw netgebied (E1A), met of zonder teruglevering. We schalen dat
+                naar jouw jaartotalen. Dat is geen meting van één huishouden.
+                Pieken van een waterkoker of laadpaal zijn uitgemiddeld, en een
+                warmtepomp of elektrische auto zit er niet apart in. Of de
+                uitkomst daardoor te hoog of te laag is, weten we niet. Met de
+                schuif ‘Pieken in je verbruik’ zie je hoe gevoelig hij ervoor is.
+                <span className="badge let-op">richting onzeker</span>
+              </li>
+              <li>
+                <b>Het nettarief van 2029 is een voorstel.</b> Het nettarief is
+                wat je betaalt voor het gebruik van het stroomnet. De
+                tijdsblokken en wegingsfactoren komen uit het voorstel van de
+                netbeheerders. Het basistarief is een prognose van CE Delft, in
+                opdracht van NVDE, Holland Solar, Energie-Nederland en Energy
+                Storage NL. De Autoriteit Consument &amp; Markt (ACM) heeft nog
+                niet beslist. Invoering is in beginsel 1 januari 2029, mogelijk
+                later.
+                <span className="badge let-op">richting onzeker</span>
+              </li>
+              <li>
+                <b>Een periode korter dan een jaar.</b> Is je periode korter dan
+                een jaar, of zonder volledig kalenderjaar, dan schalen we de
+                uitkomst naar een jaar. Dat is 365 gedeeld door het aantal dagen.
+                Een periode uit één seizoen geeft daardoor een te hoge of te lage
+                besparing.
+                <span className="badge let-op">richting onzeker</span>
+              </li>
+              <li>
+                <b>Standaard regelt je installatie niet af bij negatieve prijzen.</b>{" "}
+                Je levert dan ook terug als dat geld kost, want de meeste
+                omvormers stoppen niet vanzelf. Sommige omvormers en
+                energiemanagementsystemen kunnen het wel; zet het dan aan bij de
+                geavanceerde instellingen. Zonder batterij kost je dat dan niets
+                meer, en valt de besparing lager uit.
                 <span className="badge neutraal">zelf in te vullen</span>
               </li>
               <li>
-                <b>Afregelen bij negatieve prijzen is een aanname.</b> Het model
-                gaat ervan uit dat je installatie stopt met terugleveren als de
-                prijs negatief is. Sommige omvormers en
-                energiemanagementsystemen kunnen dat; de meeste doen het niet
-                vanzelf. Kan jouw installatie het niet, zet het dan uit bij de
-                geavanceerde instellingen.
-                <span className="badge let-op">aanname</span>
+                <b>De aansturing kent de toekomst niet.</b> De aansturing plant
+                op de prijzen voor morgen, die rond 13.00 uur bekend worden.
+                Daarbij gebruikt ze een eenvoudige verwachting van je verbruik en
+                opwek uit de afgelopen dagen. Alleen het optimum dat ter
+                vergelijking in de figuren staat, rekent met perfecte kennis
+                vooraf.
+                <span className="badge neutraal">aanname</span>
               </li>
               <li>
-                <b>Het eigen verbruik van de batterij zit er niet in.</b> Een
-                thuisbatterij gebruikt ook stroom als hij niets doet.
-                Fabrikanten en testers noemen enkele watts tot zo'n 25 watt; 7
-                tot 25 watt is 60 tot 220 kWh per jaar. Een indicatie, en niet
-                van de besparing afgetrokken.
-                <span className="badge let-op">besparing valt lager uit</span>
+                <b>Terugleverkosten staan standaard op 0 cent.</b> We nemen aan
+                dat ANWB Energie geen terugleverkosten (een bedrag per
+                teruggeleverde kWh) rekent; andere leveranciers vaak wel. Vul je
+                eigen bedrag in bij de geavanceerde instellingen.
+                <span className="badge neutraal">aanname</span>
               </li>
               <li>
-                <b>CO2 is een toerekening.</b> We rekenen met de gemiddelde
-                uitstoot van de Nederlandse opwek per uur, niet met de marginale
-                uitstoot van de centrale die op- of afregelt. De uitstoot van het
-                maken van de batterij is niet meegerekend.
-                <span className="badge neutraal">geen meting</span>
+                <b>Btw op teruglevering.</b> We nemen aan dat je de
+                terugleververgoeding inclusief btw krijgt; ANWB Energie noemt
+                alleen de kale marktprijs.
+                <span className="badge neutraal">aanname</span>
               </li>
               <li>
                 <b>Batterijprijzen bewegen.</b> De richtprijzen zijn van{" "}
@@ -908,19 +960,46 @@ export default function Page() {
                 <span className="badge neutraal">zelf in te vullen</span>
               </li>
               <li>
+                <b>Afname en teruglevering binnen een kwartier.</b> Per kwartier
+                trekken we afname en teruglevering van elkaar af. Eén aansluiting
+                gaat binnen een kwartier meestal maar één kant op. Wisselt jouw
+                huis vaker van kant, bijvoorbeeld door een wolk of een
+                waterkoker, dan is de besparing in werkelijkheid iets hoger. Bij
+                een kleine stekkerbatterij is dat effect het grootst.
+                <span className="badge goed">kleine invloed</span>
+              </li>
+              <li>
+                <b>Eén leverancier, afgeronde uurprijzen.</b> De prijzen zijn van
+                ANWB Energie. Een andere dynamische leverancier rekent een andere
+                opslag; dat verschuift de kosten, nauwelijks de besparing. Sinds
+                20 juni 2026 rondt ANWB Energie de prijzen af op hele centen.
+                Sinds 1 oktober 2025 gelden de prijzen voor morgen per kwartier.
+                De tool rekent met het gemiddelde per uur, dus prijsverschillen
+                binnen een uur vallen weg.
+                <span className="badge goed">kleine invloed</span>
+              </li>
+              <li>
+                <b>CO2 is een toerekening.</b> We rekenen met de gemiddelde
+                uitstoot van de Nederlandse opwek per uur, niet met die van de
+                centrale die bijspringt. De uitstoot van het maken van de
+                batterij is niet meegerekend.
+                <span className="badge let-op">richting onzeker</span>
+              </li>
+              <li>
                 <b>Aanmelden en installeren.</b> Een thuisbatterij meld je aan bij
                 je netbeheerder via energieleveren.nl. Boven 800 W is een vaste
-                aansluiting op een eigen groep door een installateur de norm; de
-                kaart van maten rekent daar een bedrag voor.
-                <span className="badge neutraal">niet in de besparing</span>
+                aansluiting op een eigen groep door een installateur de norm. Dat
+                kost 100 tot 200 euro in een standaardsituatie en 300 tot 600 euro
+                bij een volle meterkast. De tool rekent met 300 euro.
+                <span className="badge neutraal">zelf in te vullen</span>
               </li>
               <li>
                 <b>Wat er verder niet in zit.</b> Vastrecht, belastingvermindering
-                en het vaste deel van de netbeheerkosten: met en zonder batterij
-                gelijk. Terugleverkosten alleen als één instelbaar bedrag per
-                kWh; geen staffels per leverancier. Geen kosten voor slimme
-                sturing.
-                <span className="badge neutraal">bewust buiten beeld</span>
+                en het vaste deel van de netbeheerkosten zijn met en zonder
+                batterij gelijk. Terugleverkosten rekenen we alleen als één
+                instelbaar bedrag per kWh, zonder staffels per leverancier. Kosten
+                voor slimme sturing zitten er niet in.
+                <span className="badge goed">kleine invloed</span>
               </li>
             </ul>
           </section>
@@ -943,8 +1022,8 @@ export default function Page() {
                   anwb.nl/energie/actuele-tarieven
                 </a>
                 ). Sinds 20 juni 2026 afgerond op hele centen. Sinds 1 oktober
-                2025 zijn day-ahead-prijzen per kwartier; de tool rekent met
-                uurgemiddelden.
+                2025 gelden de prijzen voor morgen per kwartier; de tool rekent
+                met uurgemiddelden.
               </li>
               <li>
                 <b>Verbruikspatronen:</b> MFFBAS/EDSN, profielfracties per
@@ -958,10 +1037,11 @@ export default function Page() {
                 <a href="https://ned.nl">ned.nl</a>).
               </li>
               <li>
-                <b>Nettarief:</b> het codewijzigingsvoorstel volume- en
-                tijdsafhankelijke transporttarieven voor kleinverbruikers, dat de
-                netbeheerders op 1 mei 2026 bij de ACM indienden; de ACM beslist
-                erover (BR-2026-2242,{" "}
+                <b>Nettarief:</b> het voorstel voor volume- en
+                tijdsafhankelijke transporttarieven voor kleinverbruikers
+                (codewijziging), dat de netbeheerders op 1 mei 2026 indienden bij
+                de Autoriteit Consument &amp; Markt (ACM); de ACM beslist erover
+                (BR-2026-2242,{" "}
                 <a href="https://www.acm.nl/nl/publicaties/voorstel-codewijziging-volume-en-tijdsafhankelijke-transporttarieven-voor-kleinverbruikers">
                   acm.nl
                 </a>
@@ -1012,22 +1092,23 @@ export default function Page() {
                 {PRESETS.map((p) => `${p.naam} ${euro(p.prijsEur)} (${p.prijsNoot})`).join("; ")}.
               </li>
               <li>
-                <b>Uitbreiding en installatie:</b> prijzen van uitbreidingsaccu's
+                <b>Uitbreiding en installatie:</b> prijzen van uitbreidingsbatterijen
                 (
                 <a href="https://thuisbatterijgids.net/uitbreidingsaccus/">
                   thuisbatterijgids.net
                 </a>
                 : Zendure AB2000X 312, Anker SOLIX BP2700 316 euro per kWh; een
-                extra HomeWizard-unit 442 euro per kWh) en van een eigen groep
+                extra HomeWizard-unit 443 en een Marstek-unit 234 euro per kWh)
+                en van een eigen groep
                 door een installateur (
                 <a href="https://www.powerplugs.nl/pages/eigen-groep">powerplugs.nl</a>
                 : 100 tot 200 euro standaard, 300 tot 600 euro bij een volle
                 meterkast of lange kabel).
               </li>
               <li>
-                <b>Opbrengst zonnepanelen:</b> Milieu Centraal, kosten en
+                <b>Opwek van zonnepanelen:</b> Milieu Centraal, kosten en
                 opbrengst zonnepanelen: 3.000 kWh per jaar voor acht panelen van
-                435 Wp (
+                435 wattpiek (
                 <a href="https://www.milieucentraal.nl/energie-besparen/zonnepanelen/kosten-en-opbrengst-zonnepanelen/">
                   milieucentraal.nl
                 </a>
@@ -1070,17 +1151,17 @@ export default function Page() {
       {/* Verder lezen: de tablist bovenin is om ergens naartoe te springen,
           deze is om door te stappen. Eén keer, na de panelen — alleen het
           actieve paneel is zichtbaar, dus hij staat altijd onder wat je leest. */}
-      <TabStapper actief={tab} onKies={setTab} />
+      <TabStapper actief={tab} onKies={kiesTab} />
 
       <footer className="voet">
         <span>
           Bronnen: MFFBAS/EDSN profielfracties · ANWB Energie uurtarieven · NED
-          · CE Delft en Netbeheer Nederland (nettarief 2029). Deze tool is van de
-          ANWB. De ANWB verkoopt ook energie en thuisbatterijen. De uitkomsten
+          · CE Delft en Netbeheer Nederland (nettarief 2029). Deze tool is van
+          ANWB. ANWB verkoopt ook energie en thuisbatterijen. De uitkomsten
           zijn een doorrekening op historische prijzen, geen persoonlijk advies
           en geen garantie.
         </span>
-        {manifest ? <span>Data gegenereerd {datum(manifest.gegenereerd.slice(0, 10))}</span> : null}
+        {manifest ? <span>Gegevens bijgewerkt op {datum(manifest.gegenereerd.slice(0, 10))}</span> : null}
       </footer>
     </div>
   );

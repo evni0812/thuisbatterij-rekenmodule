@@ -19,7 +19,7 @@
  * rekent, krijgt de installateur er weer af.
  *
  * ── De standaardwaarden, peildatum september 2026 ───────────────────────────
- * PER kWh — uitbreidingsmodules kosten bij vrijwel elk merk hetzelfde:
+ * PER kWh — uitbreidingsmodules kosten per merk 234 tot 443 euro per kWh:
  * Zendure AB2000X 599 euro voor 1,92 kWh (312 €/kWh), Anker SOLIX BP2700
  * 849 euro voor 2,69 kWh (316 €/kWh), HomeWizard een hele unit van 1.195 euro
  * voor 2,7 kWh (443 €/kWh), Marstek 1.199 euro voor 5,12 kWh (234 €/kWh).

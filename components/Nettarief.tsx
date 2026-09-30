@@ -78,24 +78,22 @@ export function Nettarief({
         !scenario
           ? "Wat doet het voorgestelde nettarief met de businesscase?"
           : relatief > 0.25
-            ? "Als het voorstel doorgaat, levert een thuisbatterij fors meer op"
+            ? "Als het voorstel doorgaat, bespaart een thuisbatterij fors meer"
             : relatief < -0.25
-              ? "Als het voorstel doorgaat, levert een thuisbatterij fors minder op"
+              ? "Als het voorstel doorgaat, bespaart een thuisbatterij fors minder"
               : Math.abs(relatief) < 0.03
                 ? "Als het voorstel doorgaat, verandert de besparing nauwelijks"
                 : `Als het voorstel doorgaat, ${relatief > 0 ? "stijgt" : "daalt"} de besparing met ${procent(Math.abs(relatief), 0)}`
       }
       toelichting={
         <>
-          Vandaag betaal je je netkosten als een vast bedrag per jaar: je
-          doorlaatwaarde maal een tarief, hoeveel je ook gebruikt en wanneer ook.
-          Gaat het voorstel van de netbeheerders door (de ACM beslist erover),
-          dan verandert dat naar verwachting vanaf {NETTARIEF_INGANG}, mogelijk
-          later. Twee derde van het
-          transporttarief wordt dan <b>per kilowattuur</b> in rekening gebracht,
-          en die prijs hangt af van <b>het moment</b>: de winteravond wordt duur,
-          de zomermiddag gratis. Precies de uren waarop een batterij levert en
-          laadt.
+          Nu betaal je je netkosten als vast bedrag per jaar, afhankelijk van de
+          grootte van je aansluiting. Volgens het voorstel van de netbeheerders
+          gaat twee derde van de transportkosten straks <b>per kilowattuur</b>. De
+          prijs hangt af van <b>het tijdstip</b>: de winteravond wordt duur, de
+          zomermiddag goedkoop. Dat zijn precies de uren waarop een batterij
+          levert en laadt. De ACM beslist over het voorstel. Gaat het door, dan is
+          dat naar verwachting vanaf {NETTARIEF_INGANG}, mogelijk later.
         </>
       }
     >
@@ -115,6 +113,8 @@ export function Nettarief({
         <div className="stat-grid">
           <Tegel
             label="Besparing per jaar"
+            vanLabel="Nu"
+            naarLabel={`Met nettarief ${NETTARIEF_JAAR}`}
             van={euro(huidig.averageSavingEur)}
             naar={euro(scenario.averageSavingEur)}
             delta={`${verschil > 0 ? "+" : ""}${euro(verschil)} · ${procent(relatief, 0)}`}
@@ -124,6 +124,8 @@ export function Nettarief({
           />
           <Tegel
             label="Terugverdientijd"
+            vanLabel="Nu"
+            naarLabel={`Met nettarief ${NETTARIEF_JAAR}`}
             van={jaren(huidig.finance.paybackYears)}
             naar={jaren((overgang ?? scenario).finance.paybackYears)}
             delta={korter(huidig.finance.paybackYears, (overgang ?? scenario).finance.paybackYears)}
@@ -141,14 +143,18 @@ export function Nettarief({
           />
           <Tegel
             label="Laadbeurten per jaar"
+            vanLabel="Nu"
+            naarLabel={`Met nettarief ${NETTARIEF_JAAR}`}
             van={getal(huidig.stats.cyclesPerYear, 0)}
             naar={getal(scenario.stats.cyclesPerYear, 0)}
             delta={`${scenario.stats.cyclesPerYear > huidig.stats.cyclesPerYear ? "+" : ""}${getal(scenario.stats.cyclesPerYear - huidig.stats.cyclesPerYear, 0)}`}
             accent="var(--series-1)"
-            uitleg="Grotere prijsverschillen over de dag geven de batterij meer momenten waarop laden en leveren loont. Meer beurten kost ook meer slijtage."
+            uitleg="Grotere prijsverschillen over de dag geven de batterij meer momenten waarop laden en leveren loont. Meer laadbeurten geven ook meer slijtage."
           />
           <Tegel
             label="Afname in de piekuren"
+            vanLabel="Nu"
+            naarLabel={`Met nettarief ${NETTARIEF_JAAR}`}
             van={procent(piekAandeel(huidig.stats.peakHourImportBatteryKwh, huidig.stats.gridImportBatteryKwh))}
             naar={procent(piekAandeel(scenario.stats.peakHourImportBatteryKwh, scenario.stats.gridImportBatteryKwh))}
             delta={procentpunt(piekAandeel(huidig.stats.peakHourImportBatteryKwh, huidig.stats.gridImportBatteryKwh), piekAandeel(scenario.stats.peakHourImportBatteryKwh, scenario.stats.gridImportBatteryKwh))}
@@ -172,9 +178,10 @@ export function Nettarief({
           op 1 mei 2026 bij de ACM indienden: vijf tijdsblokken, vijf
           tariefhoogten en hoogstens vier per dag, twee seizoenen, en de
           wegingsfactoren per uur. De ACM besluit naar verwachting voor eind
-          2026; invoering is in beginsel {NETTARIEF_INGANG}, mogelijk later. Het tarief geldt alleen voor wat je van het net haalt: op
-          teruglevering staat geen heffing, en deze doorrekening rekent er dus
-          ook geen.
+          2026. Invoering is in beginsel {NETTARIEF_INGANG}, mogelijk later. Het
+          tarief geldt alleen voor wat je van het net haalt. Voor stroom die je
+          aan het net levert staat geen heffing in het voorstel, en deze
+          doorrekening rekent er dus ook geen.
         </p>
         <p>
           De tool rekent met {NETTARIEF_JAAR}, de beoogde invoeringsdatum. De
@@ -189,10 +196,10 @@ export function Nettarief({
           een prognose van CE Delft in opdracht van NVDE, Holland Solar,
           Energie-Nederland en Energy Storage NL, geijkt op een huishouden van
           3.000 kWh per jaar; het hoogste blok komt
-          daarmee op {centPerKwh(BASISTARIEF[NETTARIEF_JAAR])} uit. Het vaste deel — een
-          capaciteitscomponent van een derde van het transporttarief plus
-          aansluitvergoeding en meetdienst, samen ongeveer € 300 per jaar — valt
-          buiten deze berekening: dat is met en zonder batterij gelijk. De
+          daarmee op {centPerKwh(BASISTARIEF[NETTARIEF_JAAR])} uit. Het vaste deel valt
+          buiten deze berekening: een capaciteitscomponent van een derde van het
+          transporttarief, plus aansluitvergoeding en meetdienst, samen ongeveer
+          € 300 per jaar. Dat is met en zonder batterij gelijk. De
           prognose is gedragsonafhankelijk, en het voorstel herijkt blokken en
           factoren jaarlijks.
         </p>

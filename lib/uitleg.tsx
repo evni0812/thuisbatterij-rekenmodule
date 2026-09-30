@@ -12,7 +12,7 @@
 
 import type { ReactNode } from "react";
 import { netgebiedNaam } from "./data/manifest";
-import { centPerKwh, euro, euroPrecies, getal, jaren, kwh, procent } from "./format";
+import { centPerKwh, euro, euroPrecies, getal, jaren, jarenReeks, kwh, procent } from "./format";
 import { referentieJaar, type AnalysisResult, type ScenarioResult, type YearAnalysis } from "./model/analysis";
 import { usableCapacityKwh } from "./model/battery";
 import { RASTER_CAPACITEITEN, RASTER_VERMOGENS } from "./model/raster";
@@ -37,6 +37,7 @@ import { HUISHOUDENS_TERUGLEVERING } from "./model/huishoudens";
 import { STEKKER_GRENS_KW, kostenregelVan } from "./model/kosten";
 import { CO2_KLASSE_G, STANDAARD_CO2_DREMPEL_G, huishoudPerspectief, nederlandPerspectief } from "./model/co2";
 import { AUTO_G_PER_KM } from "../components/Co2Antwoord";
+import { Co2OverschotStaven } from "../components/Co2Nederland";
 import { DOELEN, GRAM_PER_CENT, doelInfo, stuurZin } from "./model/doel";
 import { doelKaarten, type VergelijkingDelen } from "./model/vergelijking";
 import type { Configuration } from "./worker/protocol";
@@ -47,6 +48,8 @@ export interface UitlegBlok {
   watZieJe: ReactNode;
   bronnen: { naam: string; wat: ReactNode }[];
   stappen: ReactNode[];
+  /** Een figuur die de stappen onderbouwt, met een kop erboven. */
+  figuur?: { kop: string; inhoud: ReactNode };
   voorbeeld?: {
     regels: { wat: ReactNode; waarde: string; uitkomst?: boolean }[];
     toelichting?: ReactNode;
@@ -128,11 +131,12 @@ const PRIJS_BRON = {
   wat: (
     <>
       De marktprijs per uur inclusief btw, zoals ANWB Energie die publiceert
-      (anwb.nl/energie/actuele-tarieven). Daarbovenop de
-      heffing (energiebelasting plus opslag): standaard die van nu, of per uur
-      die van toen als je dat kiest bij de geavanceerde instellingen. Sinds 20
-      juni 2026 geeft de API de prijzen afgerond op hele centen. Elke uurprijs
-      geldt voor de vier kwartieren van dat uur.
+      (anwb.nl/energie/actuele-tarieven). Daarbovenop komt de heffing:
+      energiebelasting plus opslag. Standaard is dat die van nu (
+      {centPerKwh(HEFFING_NU)}), of per uur die van toen als je dat kiest bij de
+      geavanceerde instellingen. Sinds 20 juni 2026 rondt ANWB Energie de
+      prijzen af op hele centen. Elke uurprijs geldt voor de vier kwartieren van
+      dat uur.
     </>
   ),
 };
@@ -140,10 +144,10 @@ const BATTERIJ_BRON = (p: BatteryPreset) => ({
   naam: `Catalogus: ${p.naam}`,
   wat: (
     <>
-      {getal(p.capaciteitKwh, 2)} kWh, {getal(p.vermogenKw, 1)} kW, rendement heen
-      en terug {procent(p.spec.efficiency ** 2)}, bruikbaar deel{" "}
-      {procent(p.spec.depthOfCharge)}. Prijs:{" "}
-      {p.prijsNoot}, richtprijs {PRIJSPEILDATUM}.
+      {getal(p.capaciteitKwh, 2)} kWh, {getal(p.vermogenKw, 1)} kW. Van elke 100
+      kWh die je opslaat, komt er {getal(p.spec.efficiency ** 2 * 100)} terug.
+      Bruikbaar deel: {procent(p.spec.depthOfCharge)}. Prijs: {p.prijsNoot},
+      richtprijs {PRIJSPEILDATUM}.
     </>
   ),
 });
@@ -153,15 +157,16 @@ const KOSTEN_BRON = (c: Configuration) => {
     naam: "Richtprijzen van uitbreiding en installatie",
     wat: (
       <>
-        Uitbreidingsmodules kosten 310 tot 450 euro per kWh (Zendure AB2000X
-        312, Anker SOLIX BP2700 316, HomeWizard 442 euro per kWh;
-        thuisbatterijgids.net), een hybride omvormer van 3 tot 5 kW 1.000 tot
-        2.500 euro, en een eigen groep door een installateur 100 tot 200 euro
-        in een standaardsituatie en 300 tot 600 euro bij een volle meterkast of
-        een lange kabel (powerplugs.nl). Hier gerekend
-        met {euro(k.perKwhEur)} per kWh, {euro(k.perKwEur)} per kW en{" "}
-        {euro(k.installatieEur)} installatie, peildatum {PRIJSPEILDATUM}; instelbaar
-        bij de geavanceerde instellingen.
+        Uitbreiding kost per merk 234 tot 443 euro per kWh. Zendure AB2000X
+        312, Anker SOLIX BP2700 316, HomeWizard 443 en Marstek 234 euro; de
+        laatste twee zijn een hele unit, gedeeld door de capaciteit
+        (thuisbatterijgids.net). Een hybride omvormer van 3 tot 5 kW kost 1.000 tot 2.500 euro. Een eigen
+        groep door een installateur kost 100 tot 200 euro in een
+        standaardsituatie en 300 tot 600 euro bij een volle meterkast
+        (powerplugs.nl). We rekenen met {euro(k.perKwhEur)} per kWh,{" "}
+        {euro(k.perKwEur)} per kW en {euro(k.installatieEur)} voor de
+        installatie, peildatum {PRIJSPEILDATUM}. Je past ze aan bij de
+        geavanceerde instellingen.
       </>
     ),
   };
@@ -182,12 +187,12 @@ const CE_BRON = {
   naam: "CE Delft en Netbeheer Nederland",
   wat: (
     <>
-      De wegingsfactoren per uur uit het codewijzigingsvoorstel dat de
-      netbeheerders op 1 mei 2026 bij de ACM indienden (BR-2026-2242), en het
-      basistarief uit {NETTARIEF_BRON}: een prognose uit het rapport
-      "Beheersbare energiekosten voor huishoudens in 2030" (CE Delft, september
-      2026), in opdracht van NVDE, Holland Solar, Energie-Nederland en Energy
-      Storage NL.
+      De wegingsfactoren per uur komen uit het voorstel dat de netbeheerders op
+      1 mei 2026 indienden bij de Autoriteit Consument & Markt (ACM,
+      BR-2026-2242). Het basistarief komt uit {NETTARIEF_BRON}: een prognose uit
+      het rapport ‘Beheersbare energiekosten voor huishoudens in 2030’ (CE
+      Delft, september 2026), in opdracht van NVDE, Holland Solar,
+      Energie-Nederland en Energy Storage NL.
     </>
   ),
 };
@@ -198,33 +203,32 @@ const GEMIDDELD_LETOP = (
   <>
     Het profiel is het gemiddelde van alle aansluitingen in het netgebied en
     daardoor gladder dan één huishouden. Of dat de uitkomst te hoog of te laag
-    maakt, is niet zeker. Met de schuif "Pieken in je verbruik" zie je hoe
+    maakt, is niet zeker. Met de schuif ‘Pieken in je verbruik’ zie je hoe
     gevoelig de uitkomst ervoor is.
   </>
 );
-const GEEN_VOORSPELLING_LETOP = (
+/** De jaren waarop het bedrag rust, als zinsdeel: "2024 en 2025", of "de gekozen periode". */
+function jarenTekst(r: AnalysisResult): string {
+  const j = r.perYear.filter((y) => y.isFullYear).map((y) => y.year);
+  return j.length > 0 ? jarenReeks(j) : "de gekozen periode";
+}
+/**
+ * Geen prijsvoorspelling, wel een aanname over de toekomst. Dezelfde zin
+ * staat op Aannames en bronnen (app/page.tsx).
+ */
+const geenVoorspellingLetop = (r: AnalysisResult) => (
   <>
-    Dit is geen voorspelling. De vraag is wat de batterij had opgeleverd op de
-    prijzen zoals ze werkelijk waren en het gemeten gemiddelde verbruikspatroon,
-    zonder saldering. Wat prijzen en belastingen de komende jaren doen, is
-    onzeker.
-  </>
-);
-const STANDBY_LETOP = (
-  <>
-    Het eigen stroomverbruik van de batterij zit niet in de besparing. Een
-    thuisbatterij gebruikt ook stroom als hij niets doet; fabrikanten en
-    testers noemen enkele watts tot zo'n 25 watt, en 7 tot 25 watt is 60 tot
-    220 kWh per jaar. Een indicatie, geen meting: trek het er in gedachten
-    van af.
+    We gebruiken geen prijsvoorspelling: het bedrag is wat de batterij in{" "}
+    {jarenTekst(r)} had opgeleverd. De terugverdientijd trekt dat door naar de
+    toekomst; dat is een aanname.
   </>
 );
 const DYNAMISCH_LETOP = (c: Configuration) => (
   <>
     Deze doorrekening gaat uit van een dynamisch energiecontract en een batterij
     die {stuurZin(c.doel)}. Met een vast of variabel contract krijg je tot en
-    met 2030 voor teruglevering minstens 50% van het kale leveringstarief; die
-    situatie rekent de tool niet door.
+    met 2030 voor teruglevering minstens 50 procent van het kale
+    leveringstarief. Die situatie rekent de tool niet door.
   </>
 );
 const MARGINAAL_LETOP = (
@@ -245,19 +249,19 @@ const PRODUCTIE_LETOP = (
     hij verandert aan je netafname en teruglevering.
   </>
 );
-/** Waar de planner op stuurde, voor de CO2-uitleg: CO2-winst als bijeffect of als doel. */
+/** Waar de aansturing op stuurde, voor de CO2-uitleg: minder CO2 als bijeffect of als doel. */
 function co2SturingLetop(c: Configuration): ReactNode {
   return c.doel === "uitstoot" ? (
     <>
-      De batterij stuurt hier in de stand Uitstoot: hij mijdt de vuilste uren,
-      ongeacht de prijs. De CO2-winst is dus het doel, en de besparing in euro's
-      is lager dan bij sturen op rendement.
+      De batterij stuurt hier op uitstoot: hij mijdt de uren met de meeste
+      CO2, ongeacht de prijs. Minder CO2 is dus het doel, en de besparing in
+      euro's is lager dan bij sturen op rendement.
     </>
   ) : (
     <>
-      De batterij stuurt hier op {c.doel === "zelfconsumptie" ? "zelfconsumptie" : "prijs (de stand Rendement)"}:
-      de CO2-winst is een bijeffect, geen doel. In de stand Uitstoot stuurt hij
-      wel op de uitstoot per uur; kies die bij "Waar stuurt de batterij op?" om
+      De batterij stuurt hier op {c.doel === "zelfconsumptie" ? "zelfconsumptie" : "rendement, dus op de prijs"}:
+      minder CO2 is een bijeffect, geen doel. Bij het doel Uitstoot stuurt hij
+      wel op de uitstoot per uur. Kies dat bij ‘Waar stuurt de batterij op?’ om
       het verschil te zien.
     </>
   );
@@ -285,6 +289,13 @@ function volledigeJaren(r: AnalysisResult): number {
 
 const aandeel = (deel: number, geheel: number) => (geheel > 0 ? deel / geheel : 0);
 
+/** "de 2 volledige jaren", "het volledige jaar" of "de gekozen periode, omgerekend naar een jaar". */
+function periodeTekst(n: number): string {
+  if (n > 1) return `de ${n} volledige jaren`;
+  if (n === 1) return "het volledige jaar";
+  return "de gekozen periode, omgerekend naar een jaar";
+}
+
 /** Komt de jaaropwek uit de schatting, of heeft de bezoeker hem zelf ingevuld? */
 function isGeschatteOpwek(c: Configuration): boolean {
   return (
@@ -303,12 +314,12 @@ export const UITLEG: Record<UitlegId, (ctx: UitlegContext) => UitlegBlok> = {
     const n = volledigeJaren(result);
     const overgang = scenario ? overgangsFinance(result, scenario, config) : null;
     return {
-      titel: "De besparing per jaar en de terugverdientijd",
+      titel: "Het antwoord: de besparing per jaar en de terugverdientijd",
       watZieJe: (
         <>
           Wat deze batterij je per jaar had bespaard op je variabele stroomkosten,
-          gemiddeld over de {n > 1 ? `${n} volledige jaren` : "gekozen periode"} in
-          de data, en wanneer de aanschaf daarmee is terugverdiend.
+          gemiddeld over {periodeTekst(n)} in de data, en wanneer de aanschaf
+          daarmee is terugverdiend.
         </>
       ),
       bronnen: [PROFIEL_BRON(config), PRIJS_BRON, BATTERIJ_BRON(preset)],
@@ -316,14 +327,14 @@ export const UITLEG: Record<UitlegId, (ctx: UitlegContext) => UitlegBlok> = {
         zonderPanelen(config) ? (
           <>
             Het gemeten gemiddelde profiel van je netgebied geeft per kwartier
-            hoeveel er van het net kwam. Het wordt zo geschaald dat elk vol jaar
-            exact op jouw meterstand uitkomt: {kwh(config.household.annualGridImportKwh)} afname.
+            hoeveel er van het net kwam. We schalen het zo dat elk volledig jaar
+            op jouw meterstand uitkomt: {kwh(config.household.annualGridImportKwh)} afname.
           </>
         ) : (
           <>
             Het gemeten gemiddelde profiel van je netgebied geeft per kwartier
-            hoeveel er van het net kwam en hoeveel ernaartoe ging. Beide worden zo
-            geschaald dat elk vol jaar exact op jouw meterstanden uitkomt:{" "}
+            hoeveel er van het net kwam en hoeveel ernaartoe ging. We schalen
+            beide zo dat elk volledig jaar op jouw meterstanden uitkomt:{" "}
             {kwh(config.household.annualGridImportKwh)} afname en{" "}
             {kwh(config.household.annualGridExportKwh)} teruglevering.
           </>
@@ -332,32 +343,38 @@ export const UITLEG: Record<UitlegId, (ctx: UitlegContext) => UitlegBlok> = {
           Zonder batterij kost elk kwartier afname de uurprijs plus heffing
           ({config.useHistoricalLevy === false ? "die van nu" : "die van toen"}),
           en levert elk kwartier teruglevering de kale uurprijs op, min
-          eventuele terugleverkosten. Zonder saldering dus: dat is de situatie
-          met een dynamisch contract vanaf 1 januari 2027.
+          eventuele terugleverkosten. We rekenen zonder saldering: wat je
+          teruglevert wordt dan niet meer afgetrokken van wat je afneemt. Dat is
+          de situatie met een dynamisch contract vanaf 1 januari 2027.
         </>,
         <>
-          Met batterij plant een strategie elke dag om 13:00 de komende uren,
-          op de day-ahead-prijzen die dan bekend zijn en een verwachting van je
-          verbruik uit de afgelopen week.{" "}
+          Met batterij plant de aansturing elke dag om 13.00 uur de komende uren.
+          De aansturing is de software die bepaalt wanneer de batterij laadt en
+          levert. Ze gebruikt de prijzen voor morgen, die rond 13.00 uur bekend
+          worden. Daarnaast gebruikt ze een verwachting van je verbruik uit de
+          afgelopen week.{" "}
           {config.doel === "zelfconsumptie"
-            ? "Ze laadt alleen uit eigen zonoverschot en levert alleen aan je eigen huis"
+            ? "Ze laadt alleen met overschot van je eigen panelen en levert alleen aan je eigen huis"
             : config.doel === "uitstoot"
-              ? "Ze laadt op uren waarop de stroom uit het net schoon is en levert op de vuile uren"
+              ? "Ze laadt op uren waarop de stroom van het net schoon is en levert op de uren met veel CO2"
               : zonderPanelen(config)
-                ? "Ze laadt op goedkope uren en levert op dure uren"
-                : "Ze laadt bij zonoverschot of goedkope uren en levert bij dure uren"}
-          , binnen het vermogen en het rendement van de batterij.
+                ? "Ze laadt als stroom goedkoop is en levert als stroom duur is"
+                : "Ze laadt bij zonoverschot of als stroom goedkoop is en levert als stroom duur is"}
+          , binnen het vermogen van de batterij en met het omzettingsverlies erbij.
         </>,
         <>
           De besparing is het verschil tussen de kosten zonder en met batterij,
           per jaar, en dan gemiddeld over de volledige jaren.
+          {n === 0
+            ? " Bevat de gekozen periode geen volledig kalenderjaar, dan tellen we de deelperioden op en schalen we ze naar een jaar: 365 gedeeld door het aantal dagen dat ze samen beslaan."
+            : ""}
         </>,
         <>
           Voor de terugverdientijd loopt de besparing jaar na jaar door, met{" "}
           {procent(config.priceEscalation, 1)} prijsstijging en{" "}
           {procent(config.calendarFadePerYear, 2)} capaciteitsverlies per jaar. Het
           jaar waarin de opgetelde besparing de aanschafprijs inhaalt, is de
-          terugverdientijd.
+          terugverdientijd. Dat is een aanname: het verleden herhaalt zich.
         </>,
         <>
           Het voorgestelde nettarief gaat, als het doorgaat, naar verwachting
@@ -365,8 +382,8 @@ export const UITLEG: Record<UitlegId, (ctx: UitlegContext) => UitlegBlok> = {
           rekent daarom{" "}
           {overgang ? overgangZin(overgang) : "de eerste jaren"} met het
           huidige nettarief en de jaren daarna met het nieuwe, op dezelfde
-          batterij die gewoon doorslijt. Ter vergelijking staat erachter wat het
-          wordt als het nettarief blijft zoals nu.
+          batterij die gewoon doorslijt. Ter vergelijking staat erachter de
+          terugverdientijd als het nettarief blijft zoals nu.
         </>,
       ],
       voorbeeld: {
@@ -383,18 +400,18 @@ export const UITLEG: Record<UitlegId, (ctx: UitlegContext) => UitlegBlok> = {
           ...(overgang
             ? [
                 {
-                  wat: "Terugverdiend na, als het nettarief-voorstel doorgaat",
+                  wat: "Terugverdientijd, als het nettarief-voorstel doorgaat",
                   waarde: jaren(overgang.finance.paybackYears),
                   uitkomst: true,
                 },
                 {
-                  wat: "Ter vergelijking: als het nettarief blijft zoals nu",
+                  wat: "Ter vergelijking, terugverdientijd als het nettarief blijft zoals nu",
                   waarde: jaren(result.finance.paybackYears),
                 },
               ]
             : [
                 {
-                  wat: "Terugverdiend na, als het nettarief blijft zoals nu",
+                  wat: "Terugverdientijd, als het nettarief blijft zoals nu",
                   waarde: jaren(result.finance.paybackYears),
                   uitkomst: true,
                 },
@@ -405,15 +422,19 @@ export const UITLEG: Record<UitlegId, (ctx: UitlegContext) => UitlegBlok> = {
             <>
               Per jaar loopt het van {euro(result.minSavingEur)} tot{" "}
               {euro(result.maxSavingEur)}: hoe grilliger de prijzen dat jaar, hoe
-              meer een batterij verdient.
+              meer een batterij bespaart.
             </>
           ) : undefined,
       },
       letop: [
         config.doel && config.doel !== "rendement" ? (
-          <>De batterij stuurt hier op <b>{doelInfo(config.doel).naam.toLowerCase()}</b>: {doelInfo(config.doel).kort} De besparing in euro's is daardoor lager dan bij sturen op rendement; dat is de prijs van die keuze, en die staat hier eerlijk.</>
+          <>De batterij stuurt hier op <b>{doelInfo(config.doel).naam.toLowerCase()}</b>. {doelInfo(config.doel).kort} De besparing in euro's is daardoor lager dan bij sturen op rendement. Dat is de prijs van die keuze.</>
         ) : null,
-GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP, EEN_LEVERANCIER_LETOP],
+        geenVoorspellingLetop(result),
+        DYNAMISCH_LETOP(config),
+        GEMIDDELD_LETOP,
+        EEN_LEVERANCIER_LETOP,
+      ],
     };
   },
 
@@ -422,10 +443,10 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
     const opwek = config.annualProductionKwh ?? 0;
     const geschat = isGeschatteOpwek(config);
     return {
-      titel: "Eigen verbruik: welk deel van je zon je zelf gebruikt",
+      titel: "Cijfers op een rij: eigen verbruik, het deel van je zonnestroom dat je zelf gebruikt",
       watZieJe: (
         <>
-          Welk deel van wat je panelen opwekken je ook zelf gebruikt, zonder en
+          Welk deel van wat je panelen opwekken je zelf gebruikt, zonder en
           met batterij. De rest gaat naar het net.
         </>
       ),
@@ -452,8 +473,8 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
           omvormer bij een negatieve prijs afregelde. Afgeregelde stroom is
           nooit gebruikt en telt dus niet als eigen verbruik.
         </>,
-        <>Zelfconsumptie is dat deel gedeeld door de opwek. Met batterij gaat een
-          deel van het overschot de batterij in in plaats van het net op, dus
+        <>Het eigen verbruik is dat deel gedeeld door de opwek. Met batterij gaat een
+          deel van het overschot de batterij in in plaats van naar het net, dus
           stijgt het aandeel.</>,
       ],
       voorbeeld: {
@@ -483,8 +504,8 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
       letop: [
         <>
           Ter indicatie voor de opwek: Milieu Centraal rekent met 3.000 kWh
-          per jaar voor acht panelen van 435 Wp, ongeveer 860 kWh per kWp. Een
-          te hoge opwek maakt het aandeel te laag, en andersom.
+          per jaar voor acht panelen van 435 wattpiek, ongeveer 860 kWh per
+          kilowattpiek. Een te hoge opwek maakt het aandeel te laag, en andersom.
         </>,
         ...(geschat
           ? [
@@ -509,11 +530,11 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
     // `metZelfvoorziening` in lib/model/analysis.ts.
     const direct = Math.max(0, opwek - s.gridExportBaselineKwh - s.curtailedBaselineKwh);
     return {
-      titel: "Onafhankelijk van het net: welk deel van je verbruik je zelf dekt",
+      titel: "Cijfers op een rij: zelf gedekt, het deel van je verbruik uit eigen panelen",
       watZieJe: (
         <>
-          Welk deel van je totale stroomverbruik je zelf dekt, uit eigen zon
-          direct of via de batterij. Wat overblijft komt van het net.
+          Welk deel van je totale stroomverbruik uit je eigen panelen komt,
+          direct of via de batterij. De rest haal je van het net.
         </>
       ),
       bronnen: [PROFIEL_BRON(config)],
@@ -553,20 +574,20 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
     const verschil = s.gridImportBaselineKwh - s.gridImportBatteryKwh;
     const stijgt = verschil < -0.5;
     return {
-      titel: stijgt ? "Van het net: wat de batterij aan je afname verandert" : "Van het net: hoeveel minder je afneemt",
+      titel: stijgt ? "Cijfers op een rij: wat de batterij aan je afname van het net verandert" : "Cijfers op een rij: hoeveel minder je van het net haalt",
       watZieJe: <>Je netafname per jaar zonder en met batterij, gemiddeld over de volledige jaren.</>,
       bronnen: [PROFIEL_BRON(config)],
       stappen: [
-        <>Zonder batterij is de afname het geschaalde profiel: precies je meterstand.</>,
+        <>Zonder batterij is de afname het geschaalde profiel, dus gelijk aan je meterstand.</>,
         <>
           Met batterij telt het model per kwartier wat er nog van het net komt:
           je verbruik min wat de batterij levert, plus wat de batterij van het
           net laadt.
         </>,
         zonderPanelen(config) ? (
-          <>Zonder zonnepanelen laadt de batterij alleen van het net. Wat hij later levert, haal je eerder van het net, plus het omzettingsverlies; het verschil is dat verlies, en wat hij in dure uren aan het net verkoopt.</>
+          <>Zonder zonnepanelen laadt de batterij alleen van het net. Wat hij later levert, hoef je dan niet van het net te halen, maar het omzettingsverlies komt erbovenop. Ook wat hij in dure uren aan het net levert, telt mee.</>
         ) : (
-          <>Het verschil is wat de batterij aan eigen zon voor later bewaarde, min wat hij zelf aan het net kocht.</>
+          <>Het verschil is wat de batterij aan eigen zonnestroom voor later bewaarde, min wat hij zelf van het net haalde.</>
         ),
       ],
       voorbeeld: {
@@ -603,11 +624,15 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
     const s = result.stats;
     const verschil = s.gridExportBaselineKwh - s.gridExportBatteryKwh;
     return {
-      titel: "Naar het net: hoeveel minder je teruglevert",
+      titel: "Cijfers op een rij: hoeveel minder je aan het net levert",
       watZieJe: <>Je teruglevering per jaar zonder en met batterij. Wat je minder teruglevert, gaat de batterij in, of wordt bij een negatieve prijs afgeregeld. Afgeregelde stroom telt niet als eigen verbruik.</>,
       bronnen: [PROFIEL_BRON(config)],
       stappen: [
-        <>Zonder batterij gaat elk overschot naar het net, behalve bij een negatieve prijs: dan neemt het model aan dat de omvormer afregelt (instelbaar). Die afgeregelde stroom telt niet als teruglevering en niet als eigen verbruik.</>,
+        config.tariff.allowCurtailment ? (
+          <>Zonder batterij gaat elk overschot naar het net, behalve bij een negatieve prijs: dan regelt de omvormer af, zoals ingesteld. Die afgeregelde stroom telt niet als teruglevering en niet als eigen verbruik.</>
+        ) : (
+          <>Zonder batterij gaat elk overschot naar het net, ook bij een negatieve prijs: afregelen staat uit, zoals bij de meeste installaties. Kan de jouwe het wel, zet het dan aan bij de geavanceerde instellingen.</>
+        ),
         <>Met batterij gaat een deel van het overschot eerst de batterij in; wat niet past of niet loont, gaat alsnog naar het net.</>,
         <>Zonder saldering is teruglevering weinig waard, dus elke bewaarde kilowattuur telt tegen de volle afnameprijs.</>,
       ],
@@ -647,19 +672,19 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
     const met = aandeel(s.peakHourImportBatteryKwh, s.gridImportBatteryKwh);
     const sc = scenario ? aandeel(scenario.stats.peakHourImportBatteryKwh, scenario.stats.gridImportBatteryKwh) : null;
     return {
-      titel: "Afname in de piekuren",
+      titel: "Cijfers op een rij: afname in de piekuren",
       watZieJe: (
         <>
-          Welk deel van wat je van het net haalt, valt op de uren die het
-          voorgestelde nettarief vanaf 2029 het duurst maakt: in de winter van
-          16.00 tot 23.00 uur, in de zomer van 19.00 tot 24.00 uur.
+          Welk deel van wat je van het net haalt, valt op de uren waarop het
+          voorgestelde nettarief vanaf 2029 het duurst is. Dat is in de winter
+          van 16.00 tot 23.00 uur en in de zomer van 19.00 tot 24.00 uur.
         </>
       ),
       bronnen: [PROFIEL_BRON(config), CE_BRON],
       stappen: [
-        <>De piekuren zijn de uren waarop de wegingsfactor van het nettarief op zijn maximum staat: in de winter 16.00–23.00 uur (factor 1,0), in de zomer 19.00–24.00 uur (factor 0,7).</>,
-        <>Per kwartier in die uren tellen we de netafname op, zonder en met batterij, in wandkloktijd.</>,
-        <>Het aandeel is die piekafname gedeeld door de totale netafname. Zo is het te vergelijken met zelfconsumptie: een aandeel, geen kilowatturen.</>,
+        <>De piekuren zijn de uren met de hoogste wegingsfactor van het nettarief: in de winter van 16.00 tot 23.00 uur (factor 1,0), in de zomer van 19.00 tot 24.00 uur (factor 0,7).</>,
+        <>Per kwartier in die uren tellen we de netafname op, zonder en met batterij, op de tijd van je klok.</>,
+        <>Het aandeel is die piekafname gedeeld door de totale netafname. Zo is het te vergelijken met eigen verbruik: een aandeel, geen kilowatturen.</>,
         <>Onder het nettarief van 2029 verandert het gedrag van de batterij: de winteravond wordt duurder, dus levert hij dan liever. Het scenario rekent dat door.</>,
       ],
       voorbeeld: {
@@ -672,7 +697,7 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
         ],
       },
       letop: [
-        <>De definitie hangt niet af van of het nettarief in de prijs zit; zo is het verschil tussen "nu" en "2029" zuiver het gedrag van de batterij.</>,
+        <>Welke uren als piekuur tellen, hangt niet af van het nettarief in de prijs. Het verschil tussen nu en 2029 is dus alleen het gedrag van de batterij.</>,
         GEMIDDELD_LETOP,
       ],
     };
@@ -682,33 +707,33 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
     const s = result.stats;
     const bruikbaar = usableCapacityKwh(config.battery);
     return {
-      titel: "Laadbeurten: hoe hard de batterij werkt",
-      watZieJe: <>Hoe vaak de batterij per jaar volledig vol en leeg gaat, als je alle deelbeurten optelt.</>,
+      titel: "Cijfers op een rij: laadbeurten, hoe hard de batterij werkt",
+      watZieJe: <>Hoe vaak de batterij per jaar volledig vol en leeg gaat, als je alle stukjes laden en ontladen optelt.</>,
       bronnen: [BATTERIJ_BRON(preset)],
       stappen: [
         <>Het model telt alles wat de batterij per jaar aan het huis levert, aan de stekkerkant.</>,
-        <>Dat deelt het door het rendement in één richting en door de bruikbare capaciteit: zoveel keer is de cel gevuld en geleegd.</>,
-        <>Meer beurten kan meer opleveren, maar kost ook slijtage. De planner rekent elke beurt af tegen {procent(config.wearFraction ?? 1)} van de slijtageprijs per geleverde kWh (de gekozen strategie): dekt de marge dat niet, dan blijft de batterij stil.</>,
+        <>Dat delen we door de bruikbare capaciteit, met het omzettingsverlies bij het ontladen erbij: zoveel keer is de batterij gevuld en geleegd.</>,
+        <>Meer laadbeurten kunnen meer besparen, maar kosten ook slijtage. De aansturing rekent elke laadbeurt af tegen {procent(config.wearFraction ?? 1)} van de slijtageprijs per geleverde kWh (de gekozen stand): dekt het prijsverschil dat niet, dan blijft de batterij stil.</>,
       ],
       voorbeeld: {
         regels: [
           { wat: "Geleverd aan het huis per jaar", waarde: kwh(s.throughputPerYearKwh) },
           { wat: `Bruikbare capaciteit: ${getal(config.battery.capacityKwh, 2)} kWh × ${procent(config.battery.depthOfCharge)}`, waarde: `${getal(bruikbaar, 2)} kWh` },
-          { wat: `Beurten: geleverd ÷ ${procent(config.battery.efficiency, 1)} ÷ bruikbaar`, waarde: `${getal(s.cyclesPerYear, 0)} per jaar`, uitkomst: true },
-          { wat: `Levensduur uit de catalogus`, waarde: `${getal(config.cycleLife)} beurten, ${config.calendarLifeYears} jaar` },
+          { wat: `Laadbeurten: geleverd ÷ ${procent(config.battery.efficiency, 1)} (één richting) ÷ bruikbaar`, waarde: `${getal(s.cyclesPerYear, 0)} per jaar`, uitkomst: true },
+          { wat: `Levensduur uit de catalogus`, waarde: `${getal(config.cycleLife)} laadbeurten, ${config.calendarLifeYears} jaar` },
         ],
-        toelichting: <>{getal(s.cyclesPerYear, 0)} beurten per jaar is {getal(s.cyclesPerYear * config.calendarLifeYears, 0)} in {config.calendarLifeYears} jaar: {s.cyclesPerYear * config.calendarLifeYears < config.cycleLife ? "de kalender gaat eerder op dan de cellen." : "de cellen slijten eerder dan de kalender, en dat weegt mee in de terugverdientijd."}</>,
+        toelichting: <>{getal(s.cyclesPerYear, 0)} laadbeurten per jaar is {getal(s.cyclesPerYear * config.calendarLifeYears, 0)} in {config.calendarLifeYears} jaar: {s.cyclesPerYear * config.calendarLifeYears < config.cycleLife ? "de batterij is dan eerder te oud dan versleten." : "de batterij is dan eerder versleten dan te oud, en dat weegt mee in de terugverdientijd."}</>,
       },
     };
   },
 
   doorzet: ({ result, preset }) => ({
-    titel: "Door de batterij: wat hij per jaar levert",
+    titel: "Cijfers op een rij: wat de batterij per jaar levert",
     watZieJe: <>Hoeveel kilowattuur de batterij per jaar aan je huis (of het net) afgeeft, aan de stekkerkant.</>,
     bronnen: [BATTERIJ_BRON(preset)],
     stappen: [
       <>Per kwartier telt het model wat de batterij ontlaadt.</>,
-      <>Dat is minder dan wat erin ging: het rendement heen en terug van {procent(preset.spec.efficiency ** 2)} gaat ervan af. Zie de sectie over verliezen.</>,
+      <>Dat is minder dan wat erin ging: van elke 100 kWh die je opslaat, komt er {getal(preset.spec.efficiency ** 2 * 100)} terug. Zie Verliezen.</>,
     ],
     voorbeeld: {
       regels: [
@@ -723,7 +748,7 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
     const s = result.stats;
     const bruikbaar = usableCapacityKwh(config.battery);
     return {
-      titel: "Slijtage: wat de laadbeurten van de aanschaf opsouperen",
+      titel: "Cijfers op een rij: slijtage, wat de laadbeurten van de aanschafprijs opmaken",
       watZieJe: (
         <>
           Elke geleverde kilowattuur gebruikt een stukje van de levensduur van de
@@ -733,10 +758,10 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
       ),
       bronnen: [BATTERIJ_BRON(preset)],
       stappen: [
-        <>Over zijn levensduur levert de batterij {getal(config.cycleLife)} beurten × {getal(bruikbaar, 2)} kWh bruikbaar × {procent(config.battery.efficiency, 1)} rendement = {kwh(config.cycleLife * bruikbaar * config.battery.efficiency)} aan de stekkerkant.</>,
+        <>Over zijn levensduur levert de batterij {getal(config.cycleLife)} laadbeurten × {getal(bruikbaar, 2)} kWh bruikbaar × {procent(config.battery.efficiency, 1)} (wat er bij het ontladen overblijft) = {kwh(config.cycleLife * bruikbaar * config.battery.efficiency)} aan de stekkerkant.</>,
         <>De aanschafprijs gedeeld door dat totaal is de slijtageprijs per geleverde kWh: {centPerKwh(s.wearCostEurPerKwh)}.</>,
         <>Maal wat de batterij per jaar levert geeft de slijtage per jaar. Dit bedrag zit al in de aanschafprijs die de terugverdientijd rekent; het hier óók van de besparing aftrekken zou het dubbel tellen.</>,
-        <>De planner rekent {procent(config.wearFraction ?? 1)} van deze prijs als drempel, {centPerKwh(s.wearCostEurPerKwh * (config.wearFraction ?? 1))}: een laadbeurt gaat alleen door als de marge na het omzettingsverlies daar bovenuit komt. Dat deel is de strategie-instelling; op 100% handelt de batterij alleen als elke beurt zijn eigen slijtage terugverdient. Op 20% rekent de planner een beurt maar een vijfde van die prijs: de batterij gaat bij veel gebruik eerder door ouderdom dan door zijn beurten achteruit, en een extra beurt kost dan weinig levensduur.</>,
+        <>De aansturing rekent {procent(config.wearFraction ?? 1)} van deze prijs als drempel, {centPerKwh(s.wearCostEurPerKwh * (config.wearFraction ?? 1))}: een laadbeurt gaat alleen door als het prijsverschil na het omzettingsverlies daar bovenuit komt. Dat deel stel je in bij ‘Hoe zuinig met de laadbeurten?’. Op Zuinig (100 procent) loont een laadbeurt alleen als hij zijn eigen slijtage terugverdient. Op Volop (20 procent) telt een laadbeurt voor een vijfde mee. De batterij is bij veel gebruik eerder te oud dan versleten, en een extra laadbeurt kost dan weinig levensduur. Een rekenvoorbeeld staat bij Laadbeurten en levensduur.</>,
       ],
       voorbeeld: {
         regels: [
@@ -750,10 +775,7 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
         toelichting: (
           <>
             Ligt de slijtage per jaar dicht bij de besparing, dan gaat bijna alles
-            wat de batterij bespaart op aan zijn eigen afschrijving. Het eigen
-            stroomverbruik van de batterij (stand-by, volgens fabrikanten
-            ongeveer 60 tot 220 kWh per jaar) zit niet in het model en is ook niet van de besparing
-            afgetrokken.
+            wat de batterij bespaart op aan zijn eigen afschrijving.
           </>
         ),
       },
@@ -763,14 +785,14 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
   prijskloof: ({ result, config }) => {
     const g = result.priceGap;
     return {
-      titel: "De prijskloof: waarom er iets te besparen valt",
-      watZieJe: <>Wat je gemiddeld betaalt op de momenten dat je afneemt, en wat je gemiddeld krijgt op de momenten dat je teruglevert. Het gat daartussen is waar een batterij van leeft.</>,
+      titel: "Prijsverschil: waarom er iets te besparen valt",
+      watZieJe: <>Wat je gemiddeld betaalt op de momenten dat je afneemt, en wat je gemiddeld krijgt op de momenten dat je teruglevert. Dat prijsverschil is waar een batterij van leeft.</>,
       bronnen: [PROFIEL_BRON(config), PRIJS_BRON],
       stappen: [
-        <>Beide gemiddelden zijn gewogen met je volume: elk kwartier telt mee naar hoeveel er op dat moment door de meter ging.</>,
+        <>Beide gemiddelden wegen mee met je volume: een kwartier telt zwaarder als er op dat moment meer door de meter ging.</>,
         <>Een huishouden met panelen neemt af als het duur is (avond, winter) en levert terug als het goedkoop is (middag, zomer). Het simpele uurgemiddelde verbergt dat; het gewogen gemiddelde laat het zien.</>,
-        <>Bij afname telt de heffing mee, bij teruglevering niet: zonder saldering krijg je de kale marktprijs. Dat is het grootste deel van de kloof.</>,
-        <>Beide bedragen zijn <b>inclusief 21% btw</b>. De prijsreeks van ANWB Energie staat al inclusief btw, en je krijgt je terugleververgoeding ook inclusief btw uitbetaald, dus er wordt nergens btw bij- of afgeteld.</>,
+        <>Bij afname telt de heffing mee, bij teruglevering niet: zonder saldering krijg je de kale marktprijs. Dat is het grootste deel van het prijsverschil.</>,
+        <>Beide bedragen zijn <b>inclusief 21% btw</b>. De prijsreeks van ANWB Energie staat al inclusief btw. We nemen aan dat je de terugleververgoeding ook inclusief btw krijgt; ANWB Energie noemt alleen de kale marktprijs. Dat is een aanname.</>,
       ],
       voorbeeld: {
         regels: [
@@ -778,7 +800,7 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
           { wat: "Gewogen terugleverprijs", waarde: centPerKwh(g.weightedExportPrice) },
           { wat: "Diezelfde terugleverprijs exclusief btw, ter controle", waarde: centPerKwh(g.weightedExportPrice / 1.21) },
           { wat: "Ongewogen gemiddelde marktprijs, ter vergelijking", waarde: centPerKwh(g.simpleAveragePrice) },
-          { wat: "Kloof per kWh", waarde: centPerKwh(g.weightedImportPrice - g.weightedExportPrice), uitkomst: true },
+          { wat: "Prijsverschil per kWh", waarde: centPerKwh(g.weightedImportPrice - g.weightedExportPrice), uitkomst: true },
           { wat: "Aandeel kwartieren met een negatieve terugleverprijs", waarde: procent(g.negativePriceShare, 1) },
         ],
       },
@@ -792,31 +814,30 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
     const periode =
       n > 1 ? `een gemiddeld jaar over ${n} volledige jaren` : "het profieljaar";
     return {
-      titel: "Waar de besparing vandaan komt",
+      titel: "Opbouw van de besparing: waar de besparing vandaan komt",
       watZieJe: (
         <>
-          De besparing in {periode}, in drie posten die samen exact het totaal
-          zijn.
+          De besparing in {periode}, in drie posten die samen het totaal vormen.
         </>
       ),
       bronnen: [{ naam: "De doorrekening zelf", wat: <>Per kwartier: wat de batterij laadde, ontlaadde, en tegen welke prijs.</> }],
       stappen: [
-        <>Elk volledig profieljaar wordt apart uitgesplitst; de posten zijn optelbaar, dus het gemiddelde ervan telt op tot de gemiddelde besparing die bovenaan staat.</>,
-        <><b>Negatieve prijzen ontlopen</b>: op kwartieren met een negatieve terugleverprijs kost terugleveren geld. Wat de batterij dan opvangt, hoef je niet weg te geven. Staat afregelen aan (de standaard), dan kost teruglevering op die momenten al niets, want de omvormer stopt dan; deze post is dan nul en staat niet in de figuur.</>,
-        <><b>Slim in- en verkopen</b>: wat de batterij van het net kocht, naar rato van zijn aandeel in de lading, tegen wat het ontladen opbracht. Kan negatief zijn als een inkoop tegenviel.</>,
-        <><b>Zelf verbruiken</b>: de rest. Zo sluit de optelling per definitie op het totaal, en het omzettingsverlies zit er al in verwerkt.</>,
+        <>We splitsen elk volledig jaar apart uit. De posten tellen op tot de gemiddelde besparing die bovenaan staat.</>,
+        <><b>Negatieve prijzen ontlopen</b>: op kwartieren met een negatieve terugleverprijs kost terugleveren geld. Wat de batterij dan opvangt, hoef je niet weg te geven. Staat afregelen aan (je omvormer stopt dan met terugleveren bij een negatieve prijs; standaard staat het uit), dan kost teruglevering op die momenten al niets. Deze post is dan nul en staat niet in de figuur.</>,
+        <><b>Slim laden en leveren</b>: wat het ontladen opbracht, min wat de batterij ervoor van het net haalde (naar rato van dat deel van de lading). Kan negatief zijn als het laden achteraf toch duur bleek.</>,
+        <><b>Zelf gebruiken</b>: de rest, zodat de optelling altijd op het totaal uitkomt. Het omzettingsverlies zit er al in verwerkt.</>,
       ],
       voorbeeld: {
         regels: [
-          { wat: "Zelf verbruiken", waarde: euroPrecies(b.selfConsumptionEur) },
-          { wat: "Slim in- en verkopen", waarde: euroPrecies(b.arbitrageEur) },
+          { wat: "Zelf gebruiken", waarde: euroPrecies(b.selfConsumptionEur) },
+          { wat: "Slim laden en leveren", waarde: euroPrecies(b.arbitrageEur) },
           { wat: "Negatieve prijzen ontlopen", waarde: euroPrecies(b.avoidedNegativeExportEur) },
           { wat: `Samen: de besparing in ${periode}`, waarde: euroPrecies(b.totalEur), uitkomst: true },
           { wat: "Ter info: omzettingsverlies, al verwerkt in de eerste post", waarde: `${euroPrecies(b.conversionLossEur)} (${kwh(b.conversionLossKwh)})` },
         ],
       },
       letop: [
-        <>Het omzettingsverlies staat er niet als vierde post bij: het zit al in "zelf verbruiken". Apart aftrekken zou het twee keer tellen.</>,
+        <>Het omzettingsverlies staat er niet als vierde post bij: het zit al in ‘zelf gebruiken’. Apart aftrekken zou het twee keer tellen.</>,
       ],
     };
   },
@@ -824,12 +845,12 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
   verliezen: ({ result, preset }) => {
     const l = result.losses;
     return {
-      titel: "Wat er onderweg verloren gaat",
+      titel: "Verliezen: wat er onderweg verloren gaat",
       watZieJe: <>Hoeveel kilowattuur er per jaar verdwijnt bij laden en ontladen, en wat dat kost.</>,
       bronnen: [BATTERIJ_BRON(preset)],
       stappen: [
         <>Laadverlies is evenredig met wat erin gaat: {procent(1 - preset.spec.efficiency, 1)} van elke geladen kilowattuur.</>,
-        <>Ontlaadverlies is evenredig met wat eruit komt, tegen hetzelfde eenrichtingsrendement.</>,
+        <>Ontlaadverlies is evenredig met wat eruit komt, tegen hetzelfde percentage.</>,
         <>De euro's zijn wat die kilowatturen hadden opgeleverd als ze er nog waren: uit eigen overschot de terugleverprijs, van het net de afnameprijs.</>,
       ],
       voorbeeld: {
@@ -837,40 +858,49 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
           { wat: "Laadverlies", waarde: `${kwh(l.chargeLossKwh)} · ${euroPrecies(l.chargeLossEur)}` },
           { wat: "Ontlaadverlies", waarde: `${kwh(l.dischargeLossKwh)} · ${euroPrecies(l.dischargeLossEur)}` },
           { wat: "Samen per jaar", waarde: `${kwh(l.totalKwh)} · ${euroPrecies(l.totalEur)}`, uitkomst: true },
-          { wat: "Gemeten rendement heen en terug", waarde: procent(l.roundtrip, 1) },
+          { wat: "Van elke 100 kWh die je opslaat, komt er terug", waarde: `${getal(l.roundtrip * 100, 1)} kWh` },
         ],
-        toelichting: <>Het gemeten rendement ligt iets onder het rendement uit de catalogus ({procent(preset.spec.efficiency ** 2)}): aan het eind van het jaar zit er nog lading in die niet meer geleverd is.</>,
+        toelichting: (() => {
+          const catalogus = preset.spec.efficiency ** 2;
+          const verschil = l.roundtrip - catalogus;
+          if (verschil < -0.0005) {
+            return <>Het gemeten getal ligt iets onder wat de catalogus opgeeft ({getal(catalogus * 100)} van de 100). Aan het eind van het jaar zit er nog lading in de batterij die niet meer is geleverd.</>;
+          }
+          if (verschil > 0.0005) {
+            return <>Het gemeten getal ligt iets boven wat de catalogus opgeeft ({getal(catalogus * 100)} van de 100).</>;
+          }
+          return <>Dat komt overeen met wat de catalogus opgeeft ({getal(catalogus * 100)} van de 100).</>;
+        })(),
       },
-      letop: [STANDBY_LETOP],
     };
   },
 
   perJaar: ({ result }) => {
     const j = referentie(result);
     return {
-      titel: "Van jaar tot jaar",
-      watZieJe: <>De besparing per profieljaar, en daarnaast wat er met perfecte kennis vooraf maximaal in had gezeten.</>,
+      titel: "Per jaar: de besparing van jaar tot jaar",
+      watZieJe: <>De besparing per kalenderjaar, en daarnaast wat er met perfecte kennis vooraf maximaal in had gezeten.</>,
       bronnen: [PRIJS_BRON],
       stappen: [
         <>Elk kalenderjaar in de gekozen periode wordt apart doorgerekend, met de prijzen en het profiel van dat jaar.</>,
-        <>De donkere staaf is de realistische strategie: plannen op day-ahead-prijzen en een verwachting van het verbruik.</>,
+        <>De donkere staaf is de aansturing zoals een echte batterij plant. Ze gebruikt de prijzen voor morgen, die rond 13.00 uur bekend worden, en een verwachting van het verbruik.</>,
         <>De lichte staaf is het optimum met perfecte kennis van alle prijzen en al het verbruik vooraf. Dat bestaat niet in het echt, maar het laat zien hoeveel er nog te winnen zou zijn met betere voorspellingen.</>,
-        <>Een deeljaar (bijvoorbeeld een periode die op 1 april begint) is per definitie lager en telt niet mee in het gemiddelde.</>,
+        <>Een deeljaar (bijvoorbeeld een periode die op 1 april begint) is lager, omdat er maanden ontbreken. Het telt niet mee in het gemiddelde zolang er een volledig jaar is. Zonder volledig kalenderjaar tellen we de deelperioden op en schalen we ze naar een jaar.</>,
       ],
       voorbeeld: {
         regels: [
           { wat: `Realistisch, ${j.year}`, waarde: euroPrecies(j.realisticSavingEur) },
           { wat: `Met perfecte kennis, ${j.year}`, waarde: euroPrecies(j.optimalSavingEur) },
-          { wat: "Aandeel van het optimum dat de strategie haalt", waarde: procent(j.captureRate), uitkomst: true },
+          { wat: "Aandeel van het optimum dat de aansturing haalt", waarde: procent(j.captureRate), uitkomst: true },
           ...(result.gap
             ? [
                 { wat: "Verlies doordat zon en verbruik van morgen een verwachting zijn", waarde: euroPrecies(result.gap.forecastCostEur) },
-                { wat: "Verlies doordat de prijzen van morgen pas om 13:00 bekend zijn", waarde: euroPrecies(result.gap.horizonCostEur) },
+                { wat: "Verlies doordat de prijzen van morgen pas om 13.00 uur bekend zijn", waarde: euroPrecies(result.gap.horizonCostEur) },
               ]
             : []),
         ],
       },
-      letop: [GEEN_VOORSPELLING_LETOP],
+      letop: [geenVoorspellingLetop(result)],
     };
   },
 
@@ -879,12 +909,16 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
     const slechtste = [...result.perMonth].sort((a, b) => a.savingEur - b.savingEur)[0];
     const MAANDEN = ["januari", "februari", "maart", "april", "mei", "juni", "juli", "augustus", "september", "oktober", "november", "december"];
     return {
-      titel: "Door het jaar heen",
-      watZieJe: <>De besparing per kalendermaand, gemiddeld over de volledige jaren. Zomer en winter zijn wezenlijk anders voor een batterij.</>,
+      titel: "Per maand: hoe de besparing over het jaar verdeeld is",
+      watZieJe: <>De besparing per kalendermaand, gemiddeld over de volledige jaren. Voor een batterij is een zomermaand heel anders dan een wintermaand.</>,
       bronnen: [PROFIEL_BRON(config), PRIJS_BRON],
       stappen: [
         <>Per kwartier wordt het verschil in kosten zonder en met batterij aan de kalendermaand toegerekend, in lokale tijd.</>,
-        <>In de zomer vangt de batterij zonoverschot op dat anders bijna niets opbracht; in de winter leeft hij van het prijsverschil tussen nacht en avond.</>,
+        zonderPanelen(config) ? (
+          <>Zonder zonnepanelen leeft de batterij het hele jaar van het prijsverschil tussen nacht en avond.</>
+        ) : (
+          <>In de zomer vangt de batterij zonoverschot op dat anders bijna niets opbracht; in de winter leeft hij van het prijsverschil tussen nacht en avond.</>
+        ),
         <>Maanden die in meer jaren voorkomen worden gemiddeld; een maand die maar één keer in de data zit telt één keer.</>,
       ],
       voorbeeld: beste && slechtste
@@ -921,7 +955,7 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
     const w = piek(winter);
     const z = piek(zomer);
     return {
-      titel: "Hoe de batterij je dagprofiel verschuift",
+      titel: "Zomer- en winterdag: hoe de batterij je dagprofiel verschuift",
       watZieJe: (
         <>
           Wat er op een gemiddelde dag per uur door je meter gaat, in de winter
@@ -934,12 +968,12 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
         <>Elk kwartier van de doorrekening wordt toegerekend aan het uur van de dag waarin het valt, in lokale tijd, en aan het seizoen: zomer is april tot en met september.</>,
         <>De sommen worden gedeeld door het aantal dagen, zodat er een gemiddelde dag uit komt. Winter en zomer staan op dezelfde schaal; anders lijkt een winterdag net zo extreem als een zomerdag.</>,
         <>De getekende waarde is de netto uitwisseling: afname min teruglevering. Eén lijn per situatie dus, geen twee.</>,
-        <>De gekleurde kolom per uur is het verschil tussen beide situaties. Groen betekent dat de batterij je van het net af houdt, oker dat hij er juist extra van afneemt om te laden.</>,
+        <>De gekleurde kolom per uur is het verschil tussen beide situaties. Groen betekent dat de batterij je van het net af houdt, oker dat hij er juist extra van haalt om te laden.</>,
       ],
       voorbeeld: {
         regels: [
-          { wat: `Winter: grootste verschuiving, om ${w.uur}:00`, waarde: `${getal(w.kwh, 2)} kWh` },
-          { wat: `Zomer: grootste verschuiving, om ${z.uur}:00`, waarde: `${getal(z.kwh, 2)} kWh` },
+          { wat: `Winter: grootste verschuiving, om ${w.uur}.00 uur`, waarde: `${getal(w.kwh, 2)} kWh` },
+          { wat: `Zomer: grootste verschuiving, om ${z.uur}.00 uur`, waarde: `${getal(z.kwh, 2)} kWh` },
           ...(zomer
             ? [
                 {
@@ -956,8 +990,8 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
         ],
         toelichting: (
           <>
-            Het verschil in teruglevering blijft in huis: dat is precies de
-            stroom waarop je het gat tussen afname- en terugleverprijs bespaart.
+            Het verschil in teruglevering blijft in huis: dat is de stroom
+            waarop je het prijsverschil tussen afname en teruglevering bespaart.
           </>
         ),
       },
@@ -966,30 +1000,27 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
   },
 
   verloop: ({ result }) => ({
-    titel: "Het resultaat over een week, een maand of een jaar",
-    watZieJe: <>Dezelfde doorrekening als het dagprofiel, opgeteld per uur (week), per dag (maand) of per week (jaar): wat de batterij opleverde, en wat de laadbeurten aan slijtage kostten.</>,
+    titel: "Verloop over tijd: het resultaat over een maand of een jaar",
+    watZieJe: <>Dezelfde doorrekening als het dagprofiel, opgeteld per dag (maand) of per week (jaar): wat de batterij bespaarde, en wat de laadbeurten aan slijtage kostten.</>,
     bronnen: [PRIJS_BRON],
     stappen: [
       <>Per kwartier is de besparing het verschil tussen de kosten zonder en met batterij: afname maal afnameprijs, min teruglevering maal terugleverprijs.</>,
-      <>Die kwartieren worden opgeteld in vakken van een uur, een dag of een week, in wandkloktijd: een dag loopt van middernacht tot middernacht in Amsterdam, een week van maandag tot en met zondag.</>,
+      <>Die kwartieren tellen we op in vakken van een dag of een week, op de tijd van je klok. Een dag loopt van middernacht tot middernacht in Amsterdam, een week van maandag tot en met zondag.</>,
       <>De slijtage per vak is wat de batterij in dat vak leverde maal de volle slijtageprijs per kWh ({centPerKwh(result.stats.wearCostEurPerKwh)}). Die post zit al in de aanschafprijs en wordt daarom niet van de besparing afgetrokken, maar staat er wel naast.</>,
-      <>Een vak kan negatief zijn zonder dat er iets mis is: lading die 's nachts is ingekocht wordt de volgende dag geleverd, dus de kosten vallen in het ene vak en de opbrengst in het volgende.</>,
+      <>Een dag of week kan negatief zijn zonder dat er iets misgaat: kosten en besparing vallen op verschillende dagen. De batterij laadt 's nachts en levert de volgende dag, dus de kosten staan in het ene vak en de besparing in het volgende.</>,
     ],
-    letop: [
-      <>Het eigen verbruik van de omvormer (standby) zit niet in het model. Het loopt door of de batterij handelt of niet en hoort bij het bezit, niet bij de handel.</>,
-      GEEN_VOORSPELLING_LETOP,
-    ],
+    letop: [geenVoorspellingLetop(result)],
   }),
 
   dagprofiel: ({ result }) => ({
-    titel: "Eén dag van dichtbij",
-    watZieJe: <>Wat de batterij op één dag doet: de prijs per kwartier, laden en ontladen, de lading, en wat de dag tot dan toe kostte zonder en met batterij.</>,
+    titel: "Een dag of week van dichtbij: wat de batterij op één dag doet",
+    watZieJe: <>Wat de batterij op één dag (of in één week) doet: de prijs per kwartier, laden en ontladen, de lading, en wat de dag tot dan toe kostte zonder en met batterij.</>,
     bronnen: [PRIJS_BRON],
     stappen: [
-      <>De twee voorbeelddagen zijn de dag met de <b>mediane</b> prijsspreiding in de zomer en in de winter van het meest recente volledige jaar. Niet de beste dag, niet de slechtste: een doorsnee dag.</>,
+      <>De twee voorbeelddagen zijn de dag met de <b>middelste</b> prijsspreiding (de mediaan) in de zomer en in de winter van het meest recente volledige jaar. Niet de beste dag, niet de slechtste: een doorsnee dag.</>,
       <>Een dag loopt van middernacht tot middernacht in Amsterdam en heeft 92, 96 of 100 kwartieren, afhankelijk van de zomertijd.</>,
-      <>De batterij houdt zich niet aan de kalender: lading die 's nachts is ingekocht wordt de volgende dag geleverd. Een dag kan daardoor negatief afsluiten terwijl de twee dagen samen positief zijn. De begin- en eindstand van de lading staan er daarom bij.</>,
-      <>Met de datumkiezer haal je elke andere dag uit de periode op; die wordt dan uit de al berekende jaardispatch gesneden.</>,
+      <>De batterij houdt zich niet aan de kalender: lading die 's nachts van het net is gehaald wordt de volgende dag geleverd. Een dag kan daardoor negatief afsluiten terwijl de twee dagen samen positief zijn. De begin- en eindstand van de lading staan er daarom bij.</>,
+      <>Met de datumkiezer haal je elke andere dag uit de periode op. Die halen we uit de al doorgerekende jaren, dus je hoeft niet op een nieuwe berekening te wachten.</>,
     ],
     voorbeeld: result.sampleDays[0]
       ? {
@@ -1007,21 +1038,21 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
   nettarief: ({ result, scenario, config, scenarioJaar }) => {
     const jaar = scenarioJaar ?? NETTARIEF_JAAR;
     return {
-      titel: "Het voorgestelde nettarief en wat het met de businesscase doet",
-      watZieJe: <>Dezelfde doorrekening nog een keer, nu met het tijdsafhankelijke nettarief bovenop de afnameprijs. Gaat het voorstel van de netbeheerders door (de ACM beslist erover), dan geldt dat tarief naar verwachting vanaf 1 januari 2029, mogelijk later.</>,
+      titel: "Nettarief van 2029: het voorstel en wat het voor de terugverdientijd betekent",
+      watZieJe: <>Dezelfde doorrekening nog een keer, nu met het tijdsafhankelijke nettarief bovenop de afnameprijs. Gaat het voorstel van de netbeheerders door, dan geldt dat tarief naar verwachting vanaf 1 januari 2029, mogelijk later. De Autoriteit Consument &amp; Markt (ACM) beslist erover.</>,
       bronnen: [CE_BRON, PRIJS_BRON],
       stappen: [
-        <>Het voorstel geeft per uur en per seizoen een wegingsfactor: 0, 0,3, 0,5, 0,7 of 1,0. Die staan vast. Het basistarief niet; dat is de prognose van CE Delft, in opdracht van NVDE, Holland Solar, Energie-Nederland en Energy Storage NL: {centPerKwh(BASISTARIEF[2030])} in 2030, en {centPerKwh(BASISTARIEF[2029])} in 2029 (ongeveer 7% lager: één jaar tariefstijging van 7,5% eraf).</>,
+        <>Het voorstel geeft per uur en per seizoen een wegingsfactor: 0, 0,3, 0,5, 0,7 of 1,0. Die staan vast. Het basistarief niet. Dat is een prognose van CE Delft, in opdracht van NVDE, Holland Solar, Energie-Nederland en Energy Storage NL: {centPerKwh(BASISTARIEF[2030])} in 2030 en {centPerKwh(BASISTARIEF[2029])} in 2029 (ongeveer 7% lager: één jaar tariefstijging van 7,5% eraf).</>,
         <>Per kwartier komt factor × basistarief bovenop de afnameprijs. Alleen op afname: het voorstel beprijst geen invoeding.</>,
         <>De heffing wordt in dit scenario die van het scenariojaar: {centPerKwh(scenarioHeffing(jaar))} inclusief opslag, in plaats van {config.useHistoricalLevy ? "die van toen, per uur zoals hij in de prijsdata zat" : `die van nu (${centPerKwh(HEFFING_NU)})`}. Het nettarief van straks hoort bij de belasting van straks.</>,
         <>De batterij plant opnieuw op de nieuwe prijzen: de winteravond wordt duurder, dus levert hij dan liever; de zomermiddag wordt gratis, dus laadt hij dan liever.</>,
-        <>De bedragen hieronder zijn de doorrekening alsof dit tarief er de hele periode al was — zo zijn de twee werelden zuiver te vergelijken. Voor de terugverdientijd telt dat niet: die staat elders op de pagina mét de ingangsdatum erin, dus de eerste jaren op het huidige nettarief.</>,
+        <>De bedragen hieronder zijn de doorrekening alsof dit tarief er de hele periode al was. Zo zijn de twee situaties goed te vergelijken. Voor de terugverdientijd telt dat niet: die staat elders op de pagina mét de ingangsdatum erin, dus de eerste jaren op het huidige nettarief.</>,
       ],
       voorbeeld: scenario
         ? {
             regels: [
-              { wat: "Besparing per jaar op de prijzen van toen", waarde: euro(result.averageSavingEur) },
-              { wat: "Besparing per jaar met het nettarief", waarde: euro(scenario.averageSavingEur), uitkomst: true },
+              { wat: "Besparing per jaar, met het huidige nettarief", waarde: euro(result.averageSavingEur) },
+              { wat: "Besparing per jaar, met het nettarief van 2029", waarde: euro(scenario.averageSavingEur), uitkomst: true },
               { wat: "Terugverdientijd als het nettarief blijft zoals nu", waarde: jaren(result.finance.paybackYears) },
               { wat: "Terugverdientijd als het voorstel doorgaat (eerst het huidige tarief, dan het nieuwe)", waarde: jaren(overgangsFinance(result, scenario, config).finance.paybackYears), uitkomst: true },
               { wat: "Laadbeurten per jaar", waarde: `${getal(result.stats.cyclesPerYear, 0)} → ${getal(scenario.stats.cyclesPerYear, 0)}` },
@@ -1029,8 +1060,8 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
           }
         : undefined,
       letop: [
-        <>Scenario, geen tariefblad. De ACM beslist naar verwachting eind 2026; invoering is "in beginsel" 1 januari 2029, mogelijk later.</>,
-        <>De prognose is gedragsonafhankelijk. Als veel huishoudens de piek gaan mijden, herijken de netbeheerders blokken en factoren jaarlijks.</>,
+        <>Dit is een scenario, geen vastgesteld tarief. De ACM beslist naar verwachting eind 2026. Invoering is in beginsel 1 januari 2029, mogelijk later.</>,
+        <>De prognose houdt geen rekening met gedrag. Gaan veel huishoudens de piek mijden, dan passen de netbeheerders de tijdsblokken en factoren jaarlijks aan.</>,
         <>Het vaste deel van de netkosten (capaciteitscomponent, aansluitvergoeding, meetdienst) blijft buiten beeld: dat is met en zonder batterij gelijk.</>,
       ],
     };
@@ -1047,16 +1078,16 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
     const voorbeeldPrijs =
       config.investmentEur + k.perKwhEur * (voorbeeldCap - cap) + k.perKwEur * (voorbeeldKw - kw) + k.installatieEur * stap;
     return {
-      titel: "Welke maat loont",
-      watZieJe: <>Dezelfde doorrekening voor {RASTER_CAPACITEITEN.length * RASTER_VERMOGENS.length} combinaties van capaciteit en vermogen, elk met zijn eigen prijs, zodat je ziet welke maat netto het meest oplevert en waar meer batterij niets meer toevoegt.</>,
+      titel: "Maat en vermogen: welke maat loont",
+      watZieJe: <>Dezelfde doorrekening voor {RASTER_CAPACITEITEN.length * RASTER_VERMOGENS.length} combinaties van capaciteit en vermogen, elk met zijn eigen prijs, zodat je ziet welke maat het meeste netto resultaat geeft en waar meer batterij niets meer toevoegt.</>,
       bronnen: [PROFIEL_BRON(config), PRIJS_BRON, KOSTEN_BRON(config)],
       stappen: [
-        <>Elke cel is een volledige doorrekening van de realistische strategie voor die maat, op het meest recente volledige jaar ({j.year}). Het optimum blijft weg; dat zou de kaart minutenlang laten rekenen zonder de vraag te veranderen.</>,
+        <>Elke cel is een volledige doorrekening van de aansturing voor die maat, op het meest recente volledige jaar ({j.year}). Het optimum blijft weg; dat zou de kaart minutenlang laten rekenen zonder de vraag te veranderen.</>,
         <>Daarna gaat elke cel naar het niveau van het gemiddelde over de volle jaren: maal de verhouding tussen het gemiddelde en {j.year} bij jouw batterij. Het jaar geeft de verhouding tussen de maten, het gemiddelde het niveau; alle jaren voor elke maat doorrekenen zou de kaart verdubbelen.</>,
-        <><b>De prijs per maat</b> volgt één regel, verankerd aan jouw batterij: die kost {euro(config.investmentEur)}, elke kilowattuur erbij {euro(k.perKwhEur)}, elke kilowatt erbij {euro(k.perKwEur)}, en wie de grens van {getal(STEKKER_GRENS_KW, 1)} kW oversteekt betaalt eenmalig {euro(k.installatieEur)} voor een eigen groep door een installateur (boven 800 W is een vaste aansluiting op een eigen groep de norm). Terug naar een stekkerbatterij gaat de installateur er weer af.</>,
+        <><b>De prijs per maat</b> volgt één regel, verankerd aan jouw batterij. Jouw batterij kost {euro(config.investmentEur)}, elke kilowattuur erbij {euro(k.perKwhEur)} en elke kilowatt erbij {euro(k.perKwEur)}. Wie de grens van {getal(STEKKER_GRENS_KW, 1)} kW oversteekt, betaalt eenmalig {euro(k.installatieEur)} voor een eigen groep door een installateur. Dat kost 100 tot 200 euro in een standaardsituatie en 300 tot 600 euro bij een volle meterkast. Boven 800 W is een eigen groep de norm. Terug naar een stekkerbatterij gaat de installateur er weer af.</>,
         <>Geen uitbreidingspakketten per merk: die verschillen per model en bij de meeste hubs groeit het vermogen niet mee. Eén regel voor alle maten houdt de kaart vergelijkbaar; de drie getallen zijn instelbaar voor wie een offerte heeft.</>,
-        <><b>Netto resultaat</b> is dezelfde financiële doorrekening als bovenaan de pagina, maar zonder de overgang naar het nettarief: de jaarbesparing herhaald over {config.analysisYears} jaar, met {procent(config.priceEscalation, 1)} prijsstijging, {procent(config.discountRate, 1)} rente die je misloopt en de slijtage van de laadbeurten, min de prijs van die maat. Hoe de besparing terugloopt bij slijtage is alleen voor jouw batterij gemeten; de andere maten lenen die vorm.</>,
-        <>De hoogste uitkomst is de cel met de hoogste netto contante waarde in deze doorrekening; geen persoonlijk advies. Terugverdientijd en jaarbesparing staan er als schakelaar naast; op besparing wint de grootste altijd, en dat is precies waarom de kaart met netto begint.</>,
+        <><b>Netto resultaat</b> is wat de batterij over de looptijd oplevert, na aftrek van de aanschaf en de rente die je misloopt. Het is dezelfde doorrekening als bovenaan de pagina, maar zonder de overgang naar het nettarief. Het telt de jaarbesparing over {config.analysisYears} jaar, met {procent(config.priceEscalation, 1)} prijsstijging, {procent(config.discountRate, 1)} rente en de slijtage van de laadbeurten, min de prijs van die maat. Hoe de besparing terugloopt bij slijtage, is alleen voor jouw batterij gemeten. De andere maten lenen die vorm.</>,
+        <>De hoogste uitkomst is de cel met het hoogste netto resultaat in deze doorrekening. Dat is geen persoonlijk advies. Terugverdientijd en jaarbesparing staan er als schakelaar naast. Op jaarbesparing wint de grootste batterij altijd, daarom begint de kaart met netto resultaat.</>,
       ],
       voorbeeld: {
         regels: [
@@ -1068,7 +1099,7 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
         ],
       },
       letop: [
-        <>Staat jouw batterij in het raster, dan bespaart zijn cel per jaar precies wat het antwoord bovenaan zegt. Netto resultaat en terugverdientijd wijken toch af: {rasterGrondslag(config).replace(/^Gerekend/, "de kaart rekent").replace(/\.$/, "")}.</>,
+        <>Staat jouw batterij in het raster, dan bespaart zijn cel per jaar wat het antwoord bovenaan zegt. Netto resultaat en terugverdientijd wijken toch af: {rasterGrondslag(config).replace(/^Gerekend/, "de kaart rekent").replace(/\.$/, "")}.</>,
         <>Meer vermogen levert soms niets op: als de batterij toch al vol raakt of leeg is, helpt sneller laden niet. Meer capaciteit helpt alleen zolang je hem ook vol krijgt.</>,
       ],
     };
@@ -1077,7 +1108,7 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
   uitbreiden: ({ result, config }) => {
     const j = referentie(result);
     return {
-      titel: "Tot welke maat loont uitbreiden",
+      titel: "Uitbreiden: tot welke maat het loont",
       watZieJe: <>Eén kolom uit de kaart van maten als lijn: het netto resultaat per capaciteit bij het vermogen van jouw batterij, en bij het beste vermogen uit de kaart als dat een ander is.</>,
       bronnen: [PROFIEL_BRON(config), PRIJS_BRON, KOSTEN_BRON(config)],
       stappen: [
@@ -1095,14 +1126,14 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
   voorwie: ({ result, config }) => {
     const j = referentie(result);
     return {
-      titel: "Voor wie deze batterij loont",
+      titel: "Voor wie: voor welke huishoudens deze batterij loont",
       watZieJe: <>Jouw batterij doorgerekend voor huishoudens met jouw afname maar een andere teruglevering ({HUISHOUDENS_TERUGLEVERING.map((t) => getal(t)).join(", ")} kWh per jaar), en voor een huishouden zonder zonnepanelen.</>,
       bronnen: [PROFIEL_BRON(config), PRIJS_BRON],
       stappen: [
-        <>Per huishouden één jaarsimulatie met de realistische strategie op {j.year}, met dezelfde batterij, dezelfde prijs ({euro(config.investmentEur)}) en dezelfde slijtagedrempel als jouw doorrekening. Alleen de teruglevering verschuift; het profiel wordt zo geschaald dat het jaartotaal klopt. Daarna gaat elk punt naar het niveau van het gemiddelde jaar, net als de kaart van maten.</>,
+        <>Per huishouden één jaarsimulatie op {j.year}, met dezelfde batterij, dezelfde prijs ({euro(config.investmentEur)}) en dezelfde slijtagedrempel als jouw doorrekening. Alleen de teruglevering verschuift; het profiel wordt zo geschaald dat het jaartotaal klopt. Daarna gaat elk punt naar het niveau van het gemiddelde jaar, net als de kaart van maten.</>,
         <>Het huishouden zonder zonnepanelen rekent met het gemeten profiel van aansluitingen zonder invoeding (MFFBAS, afnametype AZI): het gemeten gemiddelde van alle aansluitingen zonder teruglevering in het netgebied, geen bewerking van het profiel met panelen.</>,
         <>Het netto resultaat per punt is dezelfde financiële doorrekening als bovenaan, over {config.analysisYears} jaar. Waar de lijn de nullijn kruist, komt de batterij uit de kosten; dat punt staat in de titel, lineair tussen de twee dichtstbijzijnde huishoudens.</>,
-        <>Jouw eigen huishouden staat erbij uit het hoofdresultaat, op hetzelfde niveau: zijn jaarbesparing is die van het antwoord bovenaan, zodat de lijn daaraan te ijken is. {rasterGrondslag(config)}</>,
+        <>Jouw eigen huishouden staat erbij uit het hoofdresultaat, op hetzelfde niveau: zijn jaarbesparing is die van het antwoord bovenaan, zodat de lijn daaraan te ijken is. Hoort jouw teruglevering bij één van de zes niveaus, zoals bij de standaardinvoer (2.000 kWh), dan valt jouw punt over dat huishouden heen. {rasterGrondslag(config)}</>,
       ],
       letop: [
         <>Alle huishoudens delen jouw afname. Wie meer of minder verbruikt, zit op een andere lijn; verander de afname en reken opnieuw om die te zien.</>,
@@ -1117,7 +1148,14 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
     const regels = DOELEN.flatMap(({ id, naam }) => {
       const k = kaarten[id];
       if (!k) return [];
-      const co2 = k.co2WinstKg === null ? "" : `, ${getal(k.co2WinstKg)} kg CO2 minder`;
+      // Het teken bepaalt het woord: een doel dat meer uitstoot geeft "meer",
+      // niet "-x kg minder".
+      const co2 =
+        k.co2WinstKg === null
+          ? ""
+          : Math.round(Math.abs(k.co2WinstKg)) === 0
+            ? ", CO2 ongeveer gelijk"
+            : `, ${getal(Math.abs(k.co2WinstKg))} kg CO2 ${k.co2WinstKg > 0 ? "minder" : "meer"}`;
       return [{
         wat: `${naam}${id === gekozen ? " (gekozen)" : ""}`,
         waarde: `${euro(k.besparingEur)} per jaar${co2}`,
@@ -1125,11 +1163,11 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
       }];
     });
     return {
-      titel: "Drie doelen: waar de batterij op stuurt",
+      titel: "Sturing: de drie doelen waar de batterij op stuurt",
       watZieJe: (
         <>
           Dezelfde batterij en hetzelfde huishouden, drie keer doorgerekend.
-          Alleen waar de planner op stuurt verschilt; de uurprijzen, het profiel
+          Alleen het doel van de aansturing verschilt; de uurprijzen, het profiel
           en de batterij zijn dezelfde.
         </>
       ),
@@ -1138,23 +1176,24 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
         <>
           <b>Rendement</b> stuurt op prijs: laden als stroom goedkoop is of als
           er eigen zon over is, leveren als hij duur is, ook aan het net. Dit is
-          de stand van het antwoord bovenaan. De CO2-winst die je erbij ziet is
-          een bijeffect: goedkope uren zijn vaak schone uren, maar niet altijd.
+          het doel waarmee de tool standaard rekent. De vermindering van CO2 die
+          je erbij ziet is een bijeffect: goedkope uren zijn vaak schone uren,
+          maar niet altijd.
         </>,
         <>
           <b>Zelfconsumptie</b> gebruikt dezelfde prijzen, maar met de handen op
           de rug: laden mag alleen uit eigen overschot, leveren alleen aan het
           eigen huis. Nooit laden uit het net, nooit terugleveren uit de
-          batterij. Binnen die grenzen kiest de planner nog wel het beste
+          batterij. Binnen die grenzen kiest de aansturing nog wel het beste
           moment.
         </>,
         <>
-          <b>Uitstoot</b> geeft de planner de emissiefactor van elk uur in plaats
-          van de prijs: de gemiddelde uitstoot van de Nederlandse opwek op dat
-          uur (NED), niet de marginale van de centrale die bijspringt. De
-          batterij mijdt dan de vuilste uren, ongeacht de prijs. Teruglevering
-          telt voor jouw voetafdruk niet mee. Om de slijtage mee te wegen staat
-          één cent gelijk aan {GRAM_PER_CENT} gram.
+          <b>Uitstoot</b> geeft de aansturing de emissiefactor van elk uur in
+          plaats van de prijs: de gemiddelde uitstoot van de Nederlandse opwek
+          op dat uur (NED), niet de marginale van de centrale die bijspringt. De
+          batterij mijdt dan de uren met de meeste CO2, ongeacht de prijs. Wat
+          je teruglevert telt voor jouw eigen uitstoot niet mee. Om de slijtage
+          mee te wegen staat één cent gelijk aan {GRAM_PER_CENT} gram.
         </>,
         <>
           De afrekening gaat altijd in echte euro&apos;s: elke stand wordt
@@ -1166,8 +1205,8 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
         <>
           De terugverdientijd rekent voor elk doel zoals het antwoord bovenaan:
           eerst de tarieven van nu, daarna het voorgestelde nettarief. De
-          voorbeelddag is voor alle drie dezelfde: de doorsnee zomerdag van het
-          tabblad Door het jaar.
+          voorbeelddag is voor alle drie dezelfde: de gewone zomerdag (juni tot
+          en met augustus) van het tabblad Door het jaar.
         </>,
       ],
       ...(regels.length > 0 ? { voorbeeld: { regels } } : {}),
@@ -1187,7 +1226,7 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
     const n = volledigeJaren(result);
     if (!c) {
       return {
-        titel: "De CO2-balans",
+        titel: "Jouw CO2: de CO2-balans",
         watZieJe: <>Voor deze periode zijn er geen emissiefactoren in de data.</>,
         bronnen: [NED_BRON],
         stappen: [<>De reeks van NED loopt van 2023 tot nu; kies een periode daarbinnen.</>],
@@ -1195,16 +1234,16 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
     }
     const h = huishoudPerspectief(c);
     return {
-      titel: "Wat de batterij jouw voetafdruk scheelt",
+      titel: "Jouw CO2: wat de batterij scheelt aan de uitstoot van jouw stroom",
       watZieJe: <>De uitstoot van de stroom die je van het net haalt, zonder en met batterij, gemiddeld per jaar over de {n > 1 ? `${n} volledige jaren` : "gekozen periode"}.</>,
       bronnen: [NED_BRON, PROFIEL_BRON(config)],
       stappen: [
         <>Per kwartier: wat je van het net afnam (uit de doorrekening, zonder en met batterij) maal de emissiefactor van dat uur. Opgeteld over het jaar is dat de uitstoot van je netafname.</>,
-        <>Alleen afname telt. Wat je teruglevert gebruikt iemand anders; dat is zijn voetafdruk. Het perspectief van Nederland, waar teruglevering wél meetelt, staat onderaan het tabblad.</>,
+        <>Alleen afname telt. Wat je teruglevert gebruikt iemand anders; dat telt bij hem mee. Het perspectief van Nederland, waar teruglevering wél meetelt, staat onderaan het tabblad.</>,
         zonderPanelen(config) ? (
-          <>Zonder zonnepanelen laadt de batterij alleen van het net. CO2-winst ontstaat als hij laadt op uren waarop de mix schoner is dan op de uren waarop hij levert. Omdat er bij laden en ontladen stroom verloren gaat, haal je in totaal meer van het net; dat telt mee met de factor van het laaduur.</>
+          <>Zonder zonnepanelen laadt de batterij alleen van het net. Minder CO2 ontstaat als hij laadt op uren waarop de mix schoner is dan op de uren waarop hij levert. Omdat er bij laden en ontladen stroom verloren gaat, haal je in totaal meer van het net; dat telt mee met de factor van het laaduur.</>
         ) : (
-          <>De batterij kan op twee manieren winst geven: hij bewaart je eigen zonnestroom voor de avond, zodat je dan minder van het net haalt terwijl gascentrales draaien, en als hij van het net laadt, kan hij dat doen op uren waarop de mix schoner is dan wanneer hij levert.</>
+          <>De batterij kan op twee manieren voor minder CO2 zorgen. Hij bewaart je eigen zonnestroom voor de avond, zodat je dan minder van het net haalt terwijl gascentrales draaien. En als hij van het net laadt, kan hij dat doen op uren waarop de mix schoner is dan wanneer hij levert.</>
         ),
         <>De gewogen factor is de uitstoot gedeeld door de afname: hoger dan het jaargemiddelde van de mix als je vooral 's avonds afneemt, lager als de batterij je afname naar schone uren schuift.</>,
       ],
@@ -1216,7 +1255,7 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
           { wat: "Uitstoot daarvan", waarde: `${getal(h.metKg)} kg` },
           { wat: h.winstKg >= 0 ? "Minder uitstoot per jaar" : "Meer uitstoot per jaar", waarde: `${getal(Math.abs(h.winstKg))} kg`, uitkomst: true },
           ...(h.winstKg > 0.5
-            ? [{ wat: `Zoveel als autorijden (${AUTO_G_PER_KM} g/km)`, waarde: `${getal(Math.round((h.winstKg * 1000) / AUTO_G_PER_KM / 10) * 10)} km` }]
+            ? [{ wat: `Evenveel als autorijden (${AUTO_G_PER_KM} g/km)`, waarde: `${getal(Math.round((h.winstKg * 1000) / AUTO_G_PER_KM / 10) * 10)} km` }]
             : []),
         ],
       },
@@ -1231,13 +1270,13 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
   },
 
   co2uren: ({ result }) => ({
-    titel: "Wanneer stroom schoon is",
+    titel: "CO2 per uur: wanneer stroom schoon is",
     watZieJe: <>De gemiddelde emissiefactor per uur van de dag in winter en zomer, en per uur hoeveel afname de batterij van het net weghaalt.</>,
     bronnen: [NED_BRON],
     stappen: [
       <>De lijn is het gemiddelde van de emissiefactor over alle dagen van het seizoen, per uur van de dag, over de volledige jaren. Zomer is april tot en met september, dezelfde grens als het nettarief.</>,
       <>De staven eronder komen uit de seizoensprofielen op het tabblad Door het jaar: de gemiddelde afname per uur zonder batterij min die met batterij. Boven de lijn haalt de batterij afname weg, eronder laadt hij van het net.</>,
-      <>Vallen de staven boven de lijn samen met de hoge uren van de curve, dan komt de CO2-winst uit de avond; vallen de staven onder de lijn samen met de lage uren, dan laadt de batterij schoon.</>,
+      <>Vallen de staven boven de lijn samen met de hoge uren van de curve, dan komt de vermindering van CO2 uit de avond; vallen de staven onder de lijn samen met de lage uren, dan laadt de batterij schoon.</>,
     ],
     letop: [
       <>Een gemiddeld dagprofiel vlakt uit: op één dag is de middagfactor lager en de avondpiek hoger dan hier. De optelling per kwartier in de balans gebruikt de echte uren, niet dit gemiddelde.</>,
@@ -1248,19 +1287,19 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
   }),
 
   co2maanden: ({ config }) => ({
-    titel: "De CO2-winst per maand",
+    titel: "CO2 per seizoen: hoeveel minder CO2 per maand",
     watZieJe: <>Hoeveel minder CO2 je netafname per maand kost met batterij, gemiddeld over de volledige jaren.</>,
     bronnen: [NED_BRON],
     stappen: [
       <>Per maand: de uitstoot van de afname zonder batterij min die met batterij, opgeteld uit de kwartieren van die maand en gemiddeld over de jaren waarin de maand voorkomt.</>,
       zonderPanelen(config) ? (
-        <>Zonder zonnepanelen verschuift de batterij alleen afname: hij laadt van het net en levert later. Dat geeft winst in maanden waarin de laaduren schoner zijn dan de leveruren, en verlies waar het andersom is.</>
+        <>Zonder zonnepanelen verschuift de batterij alleen afname: hij laadt van het net en levert later. Dat geeft minder CO2 in maanden waarin de laaduren schoner zijn dan de leveruren, en meer waar het andersom is.</>
       ) : (
-        <>In de zomer kan de batterij zonnestroom bewaren voor de avond, als er anders stroom van gascentrales nodig was: veel winst per kWh. In de winter verschuift hij afname van de avondpiek naar de nacht, en die nacht is niet altijd schoner: soms draait er dan meer kolen of minder wind.</>
+        <>In de zomer kan de batterij zonnestroom bewaren voor de avond, als er anders stroom van gascentrales nodig was: dat scheelt veel CO2 per kWh. In de winter verschuift hij afname van de avondpiek naar de nacht, en die nacht is niet altijd schoner: soms draait er dan meer kolen of minder wind.</>
       ),
     ],
     letop: [
-      <>Een maand kan negatief uitvallen: dan laadde de batterij op uren die vuiler waren dan de uren waarop hij leverde. Financieel kan dat nog steeds lonen, want de prijs volgt de mix niet één op één.</>,
+      <>In een maand kan de batterij juist meer CO2 geven: dan laadde hij op uren die vuiler waren dan de uren waarop hij leverde. Financieel kan dat nog steeds lonen, want de prijs volgt de mix niet één op één.</>,
       co2SturingLetop(config),
       MARGINAAL_LETOP,
     ],
@@ -1271,13 +1310,13 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
     const drempel = config.co2DrempelG ?? STANDAARD_CO2_DREMPEL_G;
     const nl = c ? nederlandPerspectief(c, drempel) : null;
     return {
-      titel: "Het perspectief van Nederland",
-      watZieJe: <>Wat de batterij Nederland als geheel scheelt, met je teruglevering erbij: vanaf welke emissiefactor jouw zonnestroom elders nog iets verdringt, en hoeveel ervan in overschot-uren viel.</>,
+      titel: "CO2 voor Nederland: het perspectief van Nederland",
+      watZieJe: <>Wat de batterij Nederland als geheel scheelt, met je teruglevering erbij. De figuur telt twee stappen op: wat hij scheelt aan je afname, en wat er verandert aan teruglevering die elders gas vervangt.</>,
       bronnen: [NED_BRON, PROFIEL_BRON(config)],
       stappen: [
         <>Vanuit Nederland is jouw teruglevering geen verlies: een buur gebruikt die kWh en er hoeft minder uit een centrale te komen. Die vermeden uitstoot is de teruglevering maal de factor van dat uur, en gaat van de uitstoot van je afname af.</>,
         <>Behalve op uren waarop de mix al onder de drempel zit ({getal(drempel)} g/kWh): dan is er vaak, maar niet altijd, meer aanbod dan vraag in Nederland, en gaat de kWh de grens over of wordt hij afgeschakeld. Die teruglevering telt hier niet mee. De drempel is een benadering van overschot, geen meting.</>,
-        <>De balans bewaart afname en teruglevering per klasse van {CO2_KLASSE_G} g/kWh. Daardoor kun je de drempel verschuiven zonder opnieuw te rekenen; hij rondt af op de klassegrens.</>,
+        <>De balans bewaart afname en teruglevering per klasse van {CO2_KLASSE_G} g/kWh. De drempel stel je in bij de geavanceerde instellingen, onder "Hoe je ernaar kijkt"; hij rondt af op de klassegrens en rekent zonder wachten.</>,
         zonderPanelen(config) ? (
           c && c.exportBatKwh > 0.5 ? (
             <>Zonder zonnepanelen lever je zelf niets terug. Alleen wat de batterij in dure uren aan het net verkoopt ({kwh(c.exportBatKwh)} per jaar) telt voor Nederland extra mee; daardoor wijkt het perspectief van Nederland een fractie af van dat van je eigen afname.</>
@@ -1288,6 +1327,22 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
           <>De batterij kan Nederland op twee manieren helpen: hij kan afname weghalen uit vuile uren (net als voor jou), en wat hij opslaat, kan uit overschot-uren komen, waar het toch weinig verdrong. Wat hij opslaat uit de andere uren gaat er juist van af: die buur moet dan toch naar de centrale.</>
         ),
       ],
+      figuur: c && !zonderPanelen(config)
+        ? {
+            kop: "Op welke uren je teruglevert",
+            inhoud: (
+              <>
+                <p className="uitleg-noot">
+                  Je teruglevering per klasse van {CO2_KLASSE_G} g/kWh: hoe schoon de stroom was op
+                  het uur dat je terugleverde. Links van de stippellijn ({getal(drempel)} g/kWh) telt
+                  ze als overschot, rechts vervangt ze opwek elders. Wat de batterij rechts van de
+                  lijn opslaat, is de tweede stap in de figuur.
+                </p>
+                <Co2OverschotStaven co2={c} drempel={drempel} />
+              </>
+            ),
+          }
+        : undefined,
       voorbeeld: nl && c
         ? {
             regels: [
@@ -1321,12 +1376,12 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
     const inKalender = s.cyclesPerYear * config.calendarLifeYears;
     const jarenTotOp = s.cyclesPerYear > 0 ? config.cycleLife / s.cyclesPerYear : null;
     return {
-      titel: "De slijtagedrempel: wanneer een laadbeurt de moeite waard is",
+      titel: "Laadbeurten en levensduur: wanneer een laadbeurt de moeite waard is",
       watZieJe: (
         <>
           Hoe de batterij zijn laadbeurten opmaakt tegenover wat de cellen
-          aankunnen en hoe oud hij mag worden, en welke drempel de planner
-          gebruikt om te beslissen of een beurt doorgaat.
+          aankunnen en hoe oud hij mag worden, en welke drempel de aansturing
+          gebruikt om te beslissen of een laadbeurt doorgaat.
         </>
       ),
       bronnen: [
@@ -1338,8 +1393,8 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
               B. Xu e.a., <i>Factoring the cycle aging cost of batteries participating in
               electricity markets</i> (2018); C. Schade en R. Egging-Bratseth, <i>Battery
               degradation: impact on economic dispatch</i> (2024). Beide concluderen dat een batterij alleen
-              moet handelen als de marge boven de marginale slijtage ligt: wat één
-              beurt extra werkelijk aan levensduur kost.
+              moet handelen als het prijsverschil boven de marginale slijtage ligt:
+              wat één laadbeurt extra werkelijk aan levensduur kost.
             </>
           ),
         },
@@ -1347,59 +1402,67 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
       stappen: [
         <>
           <b>Wat de drempel is.</b> Elke kWh die de batterij levert, gebruikt een
-          stukje van zijn levensduur. De planner rekent daar een prijs voor: de
+          stukje van zijn levensduur. De aansturing, de software die bepaalt
+          wanneer de batterij laadt en levert, rekent daar een prijs voor: de
           slijtageprijs per geleverde kWh, {centPerKwh(s.wearCostEurPerKwh)} bij deze
-          batterij (aanschaf ÷ beurten × bruikbaar × rendement), maal het deel dat
-          de strategie meerekent ({procent(deel)}). Dat is {centPerKwh(drempel)}.
+          batterij (aanschaf ÷ laadbeurten × bruikbaar × wat er bij het ontladen
+          overblijft), maal het deel dat de gekozen stand meerekent ({procent(deel)}).
+          Dat is {centPerKwh(drempel)}.
         </>,
         <>
-          <b>Hoe hij werkt.</b> De planner telt die prijs bij de kosten van elke
-          kWh ontladen. Een beurt gaat alleen door als wat hij oplevert groter is
-          dan wat hij kost aan inkoop, omzettingsverlies én drempel. Om 1 kWh te
-          leveren koop je 1 ÷ {procent(rondgang, 1)} = {getal(1 / rondgang, 2)} kWh in, dus
-          bij een inkoopprijs van {centPerKwh(inkoop)} moet de verkoopprijs minstens{" "}
-          {centPerKwh(inkoop + verlies + drempel)} zijn: {centPerKwh(verlies)} voor het
-          verlies en {centPerKwh(drempel)} voor de slijtage.
+          <b>Een rekenvoorbeeld.</b> De aansturing telt die prijs bij de kosten
+          van elke kWh die de batterij levert. Een laadbeurt gaat alleen door
+          als wat hij oplevert groter is dan wat hij kost aan inkoop,
+          omzettingsverlies én drempel. Om 1 kWh te leveren haal je 1 ÷{" "}
+          {procent(rondgang, 1)} = {getal(1 / rondgang, 2)} kWh van het net, dus
+          bij een inkoopprijs van {centPerKwh(inkoop)} moet de verkoopprijs
+          minstens {centPerKwh(inkoop + verlies + drempel)} zijn:{" "}
+          {centPerKwh(verlies)} voor het omzettingsverlies en{" "}
+          {centPerKwh(drempel)} voor de slijtage. Op andere standen is dat{" "}
+          {STRATEGIEEN.filter((st) => Math.abs(st.deel - deel) > 1e-9)
+            .map((st) => `${centPerKwh(inkoop + verlies + s.wearCostEurPerKwh * st.deel)} bij ${st.naam} (${procent(st.deel)})`)
+            .join(" en ")}.
         </>,
         <>
           <b>Waarom je hem gebruikt.</b> Zonder drempel handelt de batterij op elk
           prijsverschil dat het omzettingsverlies dekt, ook voor een paar cent, en
-          verbruikt hij zijn beurten voor bijna niets. Met de volle prijs als drempel
-          verdient elke beurt zijn eigen slijtage tegen de aanschafprijs terug, maar
-          laat de batterij ook beurten liggen die per saldo wél iets hadden
-          opgeleverd als hij toch aan ouderdom sterft.
+          verbruikt hij zijn laadbeurten voor bijna niets. Met de volle prijs als
+          drempel (Zuinig) verdient elke laadbeurt zijn eigen slijtage terug,
+          maar laat de batterij ook laadbeurten liggen die per saldo wél iets
+          hadden opgeleverd als hij toch aan ouderdom aan zijn einde komt.
         </>,
         <>
-          <b>Waarom het een keuze is.</b> Een batterij gaat kapot aan het eerste van
-          twee dingen: zijn beurten raken op, of hij wordt te oud. Raken de beurten
-          niet op vóór de kalender, dan kost een extra beurt in werkelijkheid minder
-          dan de volle prijs, want de cellen waren toch al afgeschreven op leeftijd.
-          Wat een beurt écht kost, hangt dus af van hoe vaak je handelt, en dat is
-          precies wat de drempel bepaalt. De drie standen ({STRATEGIEEN.map((st) => `${st.naam} ${procent(st.deel)}`).join(", ")})
+          <b>Waarom het een keuze is.</b> Een batterij is aan het einde van zijn
+          levensduur zodra het eerste van twee dingen gebeurt: zijn laadbeurten
+          raken op, of hij wordt te oud. Raken de laadbeurten niet op vóór de
+          kalender, dan kost een extra laadbeurt in werkelijkheid minder dan de
+          volle prijs, want de cellen waren toch al afgeschreven op leeftijd. Wat
+          een laadbeurt echt kost, hangt dus af van hoe vaak je handelt, en dat
+          bepaalt de drempel. De drie standen ({STRATEGIEEN.map((st) => `${st.naam} ${procent(st.deel)}`).join(", ")})
           zijn drie antwoorden op die vraag.
         </>,
       ],
       voorbeeld: {
         regels: [
           { wat: "Slijtageprijs per geleverde kWh", waarde: centPerKwh(s.wearCostEurPerKwh) },
-          { wat: `Strategie: ${strategie ? strategie.naam : "eigen stand"}, ${procent(deel)} daarvan`, waarde: centPerKwh(drempel), uitkomst: true },
+          { wat: `Stand: ${strategie ? strategie.naam : "eigen stand"}, ${procent(deel)} daarvan`, waarde: centPerKwh(drempel), uitkomst: true },
           { wat: `Minimaal prijsverschil bij inkoop tegen ${centPerKwh(inkoop)}`, waarde: centPerKwh(verlies + drempel) },
           { wat: "Laadbeurten per jaar met deze drempel", waarde: getal(s.cyclesPerYear, 0) },
           { wat: `In ${config.calendarLifeYears} jaar kalenderlevensduur`, waarde: `${getal(inKalender)} van ${getal(config.cycleLife)}` },
-          ...(jarenTotOp !== null ? [{ wat: "Beurten op na", waarde: jaren(jarenTotOp), uitkomst: true }] : []),
+          ...(jarenTotOp !== null ? [{ wat: "Laadbeurten op na", waarde: jaren(jarenTotOp), uitkomst: true }] : []),
         ],
         toelichting:
           jarenTotOp !== null && jarenTotOp < config.calendarLifeYears ? (
-            <>De beurten zijn eerder op dan de kalender: elke beurt kost hier echt levensduur, en een strenge drempel is op zijn plaats.</>
+            <>De laadbeurten zijn eerder op dan de kalender: elke laadbeurt kost hier echt levensduur, en een strenge drempel is op zijn plaats.</>
           ) : deel > 0.2 ? (
-            <>De kalender is eerder op dan de beurten. Een lagere stand kan dan meer beurten en meer opbrengst geven, zolang de beurten niet opraken vóór de kalender. Kies een andere stand en reken opnieuw om het te zien.</>
+            <>De batterij is eerder te oud dan versleten. Een lagere stand kan dan meer laadbeurten en een hogere besparing geven, zolang de laadbeurten niet opraken vóór de kalender. Kies een andere stand en reken opnieuw om het te zien.</>
           ) : (
-            <>De kalender is eerder op dan de beurten: de batterij gaat eerder door ouderdom dan door zijn laadbeurten achteruit.</>
+            <>De batterij is eerder te oud dan versleten: hij gaat eerder door ouderdom achteruit dan door zijn laadbeurten.</>
           ),
       },
       letop: [
-        <>De zichtbare slijtagepost bij de cijfers rekent altijd met de volle prijs, ongeacht de strategie: dat is wat een kWh van de aanschaf opsoupeert. De strategie verandert alleen de beslissing van de planner.</>,
-        <>Het model rekent met een vaste slijtageprijs per kWh. In werkelijkheid slijt een cel meer bij diepe beurten en bij een hoge laadtoestand; dat verfijnt de prijs, maar verandert de regel niet.</>,
+        <>De zichtbare slijtagepost bij de cijfers rekent altijd met de volle prijs, ongeacht de stand: dat is wat een kWh van de aanschaf opmaakt. De stand verandert alleen wat de aansturing beslist.</>,
+        <>Het model rekent met een vaste slijtageprijs per kWh. In werkelijkheid slijt een cel meer bij diepe laadbeurten en bij een hoge laadtoestand; dat verfijnt de prijs, maar verandert de regel niet.</>,
       ],
     };
   },
@@ -1413,8 +1476,8 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
     const f = overgang?.finance ?? result.finance;
     const laatste = f.cashflows[f.cashflows.length - 1];
     return {
-      titel: "Over de looptijd: terugverdientijd en contante waarde",
-      watZieJe: <>De opgetelde besparing jaar na jaar tegenover de aanschafprijs, en wat dat vandaag waard is.</>,
+      titel: "Over de looptijd: terugverdientijd en netto resultaat",
+      watZieJe: <>De opgetelde besparing jaar na jaar tegenover de aanschafprijs, en wat de batterij over de looptijd oplevert na aftrek van de aanschaf en de rente die je misloopt.</>,
       bronnen: [{ naam: "Jouw aannames", wat: <>Looptijd {config.analysisYears} jaar, prijsstijging {procent(config.priceEscalation, 1)} per jaar, rente die je misloopt {procent(config.discountRate, 1)}, capaciteitsverlies {procent(config.calendarFadePerYear, 2)} per jaar, levensduur {getal(config.cycleLife)} laadbeurten.</> }],
       stappen: [
         <>Elk jaar verliest de batterij capaciteit: door ouderdom, en door laadbeurten zodra de levensduur in zicht komt. De besparing bij minder capaciteit wordt afgelezen van een curve die op 70%, 85% en 100% capaciteit is doorgerekend.</>,
@@ -1424,8 +1487,8 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
           <>Het nettariefscenario is nog niet doorgerekend; tot dan rekent de lijn met het huidige nettarief over de hele looptijd.</>
         ),
         <>Die besparing stijgt mee met de prijsstijging die je hebt ingesteld.</>,
-        <>De terugverdientijd is het moment waarop de opgetelde nominale besparing de aanschafprijs inhaalt, lineair binnen het jaar.</>,
-        <>De contante waarde rekent elk jaar terug met de rente die je misloopt en trekt de aanschaf ervan af. Positief betekent: beter dan het geld laten staan.</>,
+        <>De terugverdientijd is het moment waarop de opgetelde besparing, zonder rente, de aanschafprijs inhaalt. Binnen het jaar rekenen we lineair.</>,
+        <>Het netto resultaat telt de besparing van elk jaar mee tegen de rente die je misloopt, en trekt de aanschaf ervan af. Is het positief, dan is de batterij beter dan het geld laten staan.</>,
       ],
       voorbeeld: {
         regels: [
@@ -1433,34 +1496,34 @@ GEEN_VOORSPELLING_LETOP, DYNAMISCH_LETOP(config), STANDBY_LETOP, GEMIDDELD_LETOP
           { wat: "Besparing in het eerste jaar", waarde: euro(f.cashflows[0]?.savingNominalEur ?? 0) },
           ...(laatste
             ? [
-                { wat: `Opgeteld na ${config.analysisYears} jaar, netto na aftrek van de aanschaf (nominaal)`, waarde: euro(laatste.cumulativeNominalEur) },
+                { wat: `Opgeteld na ${config.analysisYears} jaar, min de aanschaf (zonder rente)`, waarde: euro(laatste.cumulativeNominalEur) },
                 { wat: `Resterende capaciteit na ${config.analysisYears} jaar`, waarde: procent(laatste.capacityFraction) },
               ]
             : []),
-          { wat: overgang ? "Terugverdiend na, als het nettarief-voorstel doorgaat" : "Terugverdiend na", waarde: jaren(f.paybackYears), uitkomst: true },
-          { wat: "Netto contante waarde", waarde: euro(f.npvEur), uitkomst: true },
-          ...(f.irr !== null ? [{ wat: "Intern rendement", waarde: procent(f.irr, 1) }] : []),
+          { wat: overgang ? "Terugverdientijd, als het nettarief-voorstel doorgaat" : "Terugverdientijd", waarde: jaren(f.paybackYears), uitkomst: true },
+          { wat: "Netto resultaat", waarde: euro(f.npvEur), uitkomst: true },
+          ...(f.irr !== null ? [{ wat: "Rendement op je aankoop", waarde: procent(f.irr, 1) }] : []),
           ...(f.endOfLifeYear !== null ? [{ wat: "Laadbeurten van de cellen op in jaar", waarde: String(f.endOfLifeYear) }] : []),
           ...(overgang
             ? [
                 {
-                  wat: "Ter vergelijking, als het nettarief blijft zoals nu: terugverdiend na",
+                  wat: "Ter vergelijking, als het nettarief blijft zoals nu: terugverdientijd",
                   waarde: jaren(result.finance.paybackYears),
                 },
                 {
-                  wat: "Ter vergelijking, als het nettarief blijft zoals nu: netto contante waarde",
+                  wat: "Ter vergelijking, als het nettarief blijft zoals nu: netto resultaat",
                   waarde: euro(result.finance.npvEur),
                 },
                 ...(result.finance.irr !== null
-                  ? [{ wat: "Ter vergelijking, als het nettarief blijft zoals nu: intern rendement", waarde: procent(result.finance.irr, 1) }]
+                  ? [{ wat: "Ter vergelijking, als het nettarief blijft zoals nu: rendement op je aankoop", waarde: procent(result.finance.irr, 1) }]
                   : []),
               ]
             : []),
         ],
       },
       letop: [
-        <>De looptijd is een keuze van jou over de beoordeling, geen eigenschap van de accu. Rente verandert alleen de contante waarde; prijsstijging ook de terugverdientijd. Geen van beide verandert de jaaropbrengst.</>,
-        GEEN_VOORSPELLING_LETOP,
+        <>De looptijd is jouw keuze voor de beoordeling, geen eigenschap van de batterij. Rente verandert alleen het netto resultaat; prijsstijging ook de terugverdientijd. Geen van beide verandert de jaarbesparing.</>,
+        geenVoorspellingLetop(result),
       ],
     };
   },

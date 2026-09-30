@@ -229,7 +229,8 @@ export class Invoerbron {
    * oplossen zou de jaartotalen in een deel van het jaar proppen.
    *
    * Gebufferd, want de oplossing kost een tiental passes over een jaar en het
-   * antwoord verandert alleen als netgebied, jaar of meterstanden veranderen.
+   * antwoord verandert alleen als netgebied, jaar, meterstanden of spreiding
+   * veranderen.
    */
   private schaling(config: Configuration, year: number): Promise<NettingScale> {
     const m = this.gegevens;
@@ -243,10 +244,10 @@ export class Invoerbron {
     // reeks ongeschaald en komen de volumes onder de meterstanden uit.
     if (volleJaren.length === 0) return Promise.resolve(GEEN_SCHALING);
     const bron = volleJaren.includes(year) ? year : volleJaren[0]!;
-    const key = `${config.domain}:${type}:${bron}:${hh.annualGridImportKwh}:${hh.annualGridExportKwh}`;
+    const key = `${config.domain}:${type}:${bron}:${hh.annualGridImportKwh}:${hh.annualGridExportKwh}:${hh.spreadFactor}`;
     return Invoerbron.eenmalig(this.schalingen, key, async () => {
       const prof = await this.profiel(config.domain, bron, type);
-      return solveNettingScale(prof.importFraction, prof.exportFraction, hh);
+      return solveNettingScale(prof.importFraction, prof.exportFraction, hh, prof.startMs);
     });
   }
 

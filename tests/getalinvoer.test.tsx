@@ -159,7 +159,8 @@ describe("leesGetal", () => {
     expect(leesGetal(" 2,5 ")).toBe(2.5);
     expect(leesGetal("-0.5")).toBe(-0.5);
     expect(leesGetal("")).toBeNull();
-    expect(Number.isNaN(leesGetal("1.500,25"))).toBe(true);
+    // Punt als duizendtal met een komma als decimaal: 1.500,25 is 1500,25.
+    expect(leesGetal("1.500,25")).toBe(1500.25);
     expect(Number.isNaN(leesGetal("-"))).toBe(true);
     expect(Number.isNaN(leesGetal("1e5"))).toBe(true);
   });

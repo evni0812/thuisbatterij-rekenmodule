@@ -6,7 +6,7 @@
  * meerjarige businesscase opbouwt.
  */
 
-import { co2Jaar, gemiddeldCo2, type Co2Jaar } from "./co2";
+import { co2Jaar, gemiddeldCo2, somCo2, type Co2Jaar } from "./co2";
 import { LocalTimeIndex } from "../data/timeaxis";
 import { isPiekuur } from "../nettarief";
 import { equivalentCycles, usableCapacityKwh, wearCostPerKwh } from "./battery";
@@ -1035,7 +1035,9 @@ function computePriceGap(
 ): PriceGap {
   const volledig = windows.filter((w) => w.isFullYear);
   const basis = volledig.length > 0 ? volledig : windows;
-  const jaren = Math.max(1, basis.length);
+  // Per jaar: gedeeld door het aantal volle jaren, of zonder volledig jaar de
+  // deelvensters samen geschaald naar 365 dagen (`jaarSchaal`).
+  const schaal = volledig.length > 0 ? 1 / volledig.length : jaarSchaal(windows);
   let impVolume = 0;
   let impWaarde = 0;
   let expVolume = 0;
@@ -1073,7 +1075,7 @@ function computePriceGap(
     weightedExportPrice: expVolume > 0 ? expWaarde / expVolume : 0,
     simpleAveragePrice: stappen > 0 ? prijsSom / stappen : 0,
     negativePriceShare: stappen > 0 ? negatief / stappen : 0,
-    exportAtNegativePriceKwh: expNegatief / jaren,
+    exportAtNegativePriceKwh: expNegatief * schaal,
   };
 }
 
@@ -1371,8 +1373,8 @@ function pickSampleDays(
   };
 
   return [
-    kies([6, 7, 8], "Een doorsnee zomerdag"),
-    kies([12, 1, 2], "Een doorsnee winterdag"),
+    kies([6, 7, 8], "Een gewone zomerdag"),
+    kies([12, 1, 2], "Een gewone winterdag"),
   ].filter((d): d is SampleDay => d !== null);
 }
 
@@ -1616,6 +1618,88 @@ export function pasAfleidingToe<R extends ScenarioResult>(r: R, a: Afleiding): R
   };
 }
 
+/** Aantal kalenderdagen van een venster, eerste en laatste dag inbegrepen. */
+function dagenInVenster(v: { firstDay: string; lastDay: string }): number {
+  const d = (Date.parse(`${v.lastDay}T00:00:00Z`) - Date.parse(`${v.firstDay}T00:00:00Z`)) / 86_400_000;
+  return Math.round(d) + 1;
+}
+
+/**
+ * De schaal waarmee het totaal over deze vensters een jaar wordt: 365 gedeeld
+ * door het aantal dagen dat ze samen beslaan. Voor een aaneengesloten periode
+ * van precies twaalf maanden is dat 1 (exact); voor een kortere periode is het
+ * een extrapolatie, en de pagina waarschuwt daar al voor. Onleesbare datums
+ * geven 1: dan is er niets om op te schalen.
+ */
+export function jaarSchaal(vensters: readonly { firstDay: string; lastDay: string }[]): number {
+  let dagen = 0;
+  for (const v of vensters) dagen += dagenInVenster(v);
+  return Number.isFinite(dagen) && dagen > 0 ? 365 / dagen : 1;
+}
+
+/**
+ * Eén jaar uit een periode zonder volledig kalenderjaar: de deelvensters bij
+ * elkaar opgeteld en geschaald naar 365 dagen (`jaarSchaal`).
+ *
+ * Elk deelvenster als een jaar middelen, zoals eerder, gaf voor juni 2025 tot
+ * en met mei 2026 de helft van de besparing (€ 52,70 in plaats van ± € 105) en
+ * een terugverdientijd van 14,5 in plaats van 6,9 jaar: twee deeljaren die
+ * samen precies één jaar zijn, telden als twee jaren van elk een half.
+ *
+ * Alleen wat optelbaar is wordt opgeteld; de maanden blijven weg, want die
+ * middelt de aanroeper per kalendermaand (een maand die in twee vensters
+ * voorkomt, wordt gemiddeld en niet geschaald).
+ */
+function somTotJaar(kernen: readonly YearKern[]): YearKern {
+  const eerste = kernen[0]!;
+  const laatste = kernen[kernen.length - 1]!;
+  const f = jaarSchaal(kernen);
+  const som = (kies: (y: YearKern) => number) => kernen.reduce((a, y) => a + kies(y), 0) * f;
+  const geladen = som((y) => y.losses.chargedKwh);
+  const geleverd = som((y) => y.losses.deliveredKwh);
+  return {
+    year: laatste.year,
+    firstDay: eerste.firstDay,
+    lastDay: laatste.lastDay,
+    isFullYear: false,
+    gridImportKwh: som((y) => y.gridImportKwh),
+    gridExportKwh: som((y) => y.gridExportKwh),
+    curtailedKwh: som((y) => y.curtailedKwh),
+    curtailedWithBatteryKwh: som((y) => y.curtailedWithBatteryKwh),
+    baselineCostEur: som((y) => y.baselineCostEur),
+    realisticCostEur: som((y) => y.realisticCostEur),
+    realisticSavingEur: som((y) => y.realisticSavingEur),
+    breakdown: {
+      selfConsumptionEur: som((y) => y.breakdown.selfConsumptionEur),
+      arbitrageEur: som((y) => y.breakdown.arbitrageEur),
+      avoidedNegativeExportEur: som((y) => y.breakdown.avoidedNegativeExportEur),
+      conversionLossEur: som((y) => y.breakdown.conversionLossEur),
+      conversionLossKwh: som((y) => y.breakdown.conversionLossKwh),
+      totalEur: som((y) => y.breakdown.totalEur),
+    },
+    cyclesPerYear: som((y) => y.cyclesPerYear),
+    gridImportWithBatteryKwh: som((y) => y.gridImportWithBatteryKwh),
+    gridExportWithBatteryKwh: som((y) => y.gridExportWithBatteryKwh),
+    throughputKwh: som((y) => y.throughputKwh),
+    losses: {
+      chargedKwh: geladen,
+      deliveredKwh: geleverd,
+      chargeLossKwh: som((y) => y.losses.chargeLossKwh),
+      dischargeLossKwh: som((y) => y.losses.dischargeLossKwh),
+      totalKwh: som((y) => y.losses.totalKwh),
+      chargeLossEur: som((y) => y.losses.chargeLossEur),
+      dischargeLossEur: som((y) => y.losses.dischargeLossEur),
+      totalEur: som((y) => y.losses.totalEur),
+      roundtrip: geladen > 0 ? geleverd / geladen : 0,
+    },
+    months: [],
+    peakHourImportKwh: som((y) => y.peakHourImportKwh),
+    peakHourImportWithBatteryKwh: som((y) => y.peakHourImportWithBatteryKwh),
+    wearCostEur: som((y) => y.wearCostEur),
+    co2: kernen.every((y) => y.co2 !== null) ? somCo2(kernen.map((y) => y.co2!), f) : null,
+  };
+}
+
 /**
  * Voeg de vensters samen tot het scenario-deel van het resultaat: de
  * middelingen over de volledige jaren, de curve, de financiën en de kerncijfers.
@@ -1637,8 +1721,13 @@ export function voegSamenScenario(
 
   // Alleen volledige jaren tellen mee voor het gemiddelde en de bandbreedte:
   // een deelperiode is per definitie lager en zou de uitkomst vertekenen.
+  // Zonder volledig jaar tellen de deelvensters op tot één periode die naar een
+  // jaar wordt geschaald (`somTotJaar`); de bandbreedte valt dan samen met dat
+  // ene getal. `basis` blijft de vensterlijst voor wat per maand of seizoen
+  // wordt gemiddeld, `jaren` is wat per jaar wordt uitgedrukt.
   const volledig = perYear.filter((y) => y.isFullYear);
   const basis = volledig.length > 0 ? volledig : perYear;
+  const jaren = volledig.length > 0 ? volledig : [somTotJaar(perYear)];
   // Maandgemiddelde over dezelfde volledige jaren. Een maand telt alleen mee in
   // de jaren waarin hij ook echt voorkomt; anders zou een venster dat halverwege
   // begint de eerste maanden verwateren.
@@ -1693,7 +1782,7 @@ export function voegSamenScenario(
     naarSeizoensprofiel("zomer", seizoenSom.zomer),
   ];
 
-  const besparingen = basis.map((y) => y.realisticSavingEur);
+  const besparingen = jaren.map((y) => y.realisticSavingEur);
   const gemiddeld =
     besparingen.reduce((a, b) => a + b, 0) / Math.max(1, besparingen.length);
 
@@ -1706,8 +1795,9 @@ export function voegSamenScenario(
   const referentieJaar = perYear[referentieIndexVan(perYear)]!;
   const fracties = input.curveFractions ?? STANDAARD_CURVE_FRACTIES;
   const volleBesparing = referentieJaar.realisticSavingEur;
+  const volleCycli = referentieJaar.cyclesPerYear;
   const gemiddeldeCycli =
-    basis.reduce((a, y) => a + y.cyclesPerYear, 0) / Math.max(1, basis.length);
+    jaren.reduce((a, y) => a + y.cyclesPerYear, 0) / Math.max(1, jaren.length);
 
   const curve: SavingCurvePoint[] = fracties.map((f) => {
     if (f === 1) {
@@ -1720,19 +1810,23 @@ export function voegSamenScenario(
     const q = metingen.find((m) => m.fraction === f);
     if (!q) throw new Error(`curvemeting voor fractie ${f} ontbreekt`);
     const verhouding = volleBesparing > 0 ? q.savingEur / volleBesparing : 1;
+    // De cycli volgen hun eigen meting: een kleinere batterij bespaart minder,
+    // maar draait per kWh capaciteit juist méér cycli. Met de verhouding van de
+    // besparing zakten ze mee, en ging de slijtage in de financiën te gunstig.
+    const cycliVerhouding = volleCycli > 0 ? q.cyclesPerYear / volleCycli : 1;
     return {
       capacityFraction: f,
       savingEur: gemiddeld * verhouding,
-      cyclesPerYear: gemiddeldeCycli * verhouding,
+      cyclesPerYear: gemiddeldeCycli * cycliVerhouding,
     };
   });
 
   const afleiding = afleidingVanInvoer(input);
   const finance = financeVoor(curve, afleiding);
 
-  // Kerncijfers over de volledige jaren, per jaar gemiddeld.
+  // Kerncijfers over de volledige jaren (of de geschaalde periode), per jaar gemiddeld.
   const gem = (f: (y: YearKern) => number) =>
-    basis.reduce((a, y) => a + f(y), 0) / Math.max(1, basis.length);
+    jaren.reduce((a, y) => a + f(y), 0) / Math.max(1, jaren.length);
 
   const cycli = gem((y) => y.cyclesPerYear);
   const stats: KeyStats = metZelfvoorziening(
@@ -1796,7 +1890,7 @@ export function voegSamenScenario(
     finance,
     curve,
     priceGap: computePriceGap(input.windows, input.tariff),
-    co2: basis.every((y) => y.co2 !== null) ? gemiddeldCo2(basis.map((y) => y.co2!)) : null,
+    co2: jaren.every((y) => y.co2 !== null) ? gemiddeldCo2(jaren.map((y) => y.co2!)) : null,
   };
 }
 

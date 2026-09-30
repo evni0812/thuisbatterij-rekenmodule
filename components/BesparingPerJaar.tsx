@@ -1,11 +1,11 @@
 "use client";
 
 /**
- * Besparing per profieljaar — de kernvraag: hoe gevoelig is de uitkomst voor
- * welk jaar je pakt?
+ * Besparing per jaar, de kernvraag: hoe gevoelig is de uitkomst voor welk jaar
+ * je pakt?
  *
- * Twee marks per jaar: wat de batterij werkelijk haalt, en wat er bij perfecte
- * kennis in had gezeten. Het verschil is zelf een resultaat.
+ * Twee marks per jaar: wat de batterij haalt, en het ideale geval met perfecte
+ * kennis van morgen. Het verschil is zelf een resultaat.
  */
 
 import type { ReactNode } from "react";
@@ -15,14 +15,27 @@ import { euro, euroAs, getal, periode, procent } from "../lib/format";
 import { Figure, Grafiek, Legenda, Raster, Trefvlak, kiesTicks, useTip } from "./chart-parts";
 
 const H = 260;
-const MARGE = { boven: 16, rechts: 16, onder: 40, links: 56 };
+
+/** "apr tot dec" voor een deeljaar binnen één kalenderjaar; anders null. */
+function kortDeel(j: YearAnalysis): { deel: string; jaar: string } | null {
+  const [y1, m1] = j.firstDay.split("-").map(Number);
+  const [y2, m2] = j.lastDay.split("-").map(Number);
+  if (!y1 || !m1 || !y2 || !m2 || y1 !== y2) return null;
+  const kort = (m: number) => MAANDEN_KORT[m - 1] ?? "";
+  return { deel: `${kort(m1)} tot ${kort(m2)}`, jaar: String(y1) };
+}
+const MAANDEN_KORT = ["jan", "feb", "mrt", "apr", "mei", "jun", "jul", "aug", "sep", "okt", "nov", "dec"];
 
 export function BesparingPerJaar({ jaren, actie }: { jaren: YearAnalysis[]; actie?: ReactNode }) {
   const [actief, setActief] = useState<number | null>(null);
-  const { kader, tip, toon, wis } = useTip();
+  const { kader, tip, toon, wis, breedte: gemeten } = useTip();
   if (jaren.length === 0) return null;
 
-  const breedte = Math.max(320, jaren.length * 130);
+  // De viewBox is zo breed als het kader, dus de letters zijn op elk scherm
+  // even groot en op een telefoon past alles zonder zijwaarts te scrollen.
+  const breedte = gemeten ?? Math.max(320, jaren.length * 130);
+  const smal = breedte < 560;
+  const MARGE = { boven: 16, rechts: smal ? 8 : 16, onder: smal ? 44 : 40, links: smal ? 46 : 56 };
   const plotB = breedte - MARGE.links - MARGE.rechts;
   const plotH = H - MARGE.boven - MARGE.onder;
 
@@ -32,18 +45,22 @@ export function BesparingPerJaar({ jaren, actie }: { jaren: YearAnalysis[]; acti
   const y = (v: number) => MARGE.boven + plotH - (v / bovengrens) * plotH;
 
   const groepB = plotB / jaren.length;
-  const staafB = Math.min(38, groepB * 0.3);
+  const staafB = Math.min(48, groepB * (smal ? 0.34 : 0.3));
 
   return (
     <Figure
       anker="per-jaar"
       actie={actie}
-      titel="Van jaar tot jaar: elk jaar levert iets op, maar niet evenveel"
+      titel={
+        jaren.every((j) => j.realisticSavingEur > 0)
+          ? "Elk jaar bespaart de batterij iets, maar niet evenveel"
+          : "Van jaar tot jaar verschilt wat de batterij bespaart"
+      }
       toelichting={
         <>
-          Hoeveel een batterij oplevert hangt af van hoe grillig de prijzen dat
-          jaar waren. De lichte staaf laat zien wat er met perfecte kennis
-          vooraf in had gezeten.
+          Hoeveel een batterij bespaart hangt af van hoe grillig de prijzen dat
+          jaar waren. De lichte staaf is het ideale geval: wat er te besparen viel
+          met perfecte kennis van morgen.
         </>
       }
     >
@@ -54,13 +71,13 @@ export function BesparingPerJaar({ jaren, actie }: { jaren: YearAnalysis[]; acti
           setActief(null);
           wis();
         }}
-        label="Besparing per profieljaar"
+        label="Besparing per jaar"
       >
         <svg
           viewBox={`0 0 ${breedte} ${H}`}
-          className="chart"
+          className="chart chart-fluid"
           role="img"
-          aria-label="Besparing per profieljaar, werkelijk haalbaar naast het theoretisch maximum"
+          aria-label="Besparing per jaar, wat de batterij haalt naast het ideale geval met perfecte kennis van morgen"
         >
           <Raster
             ticks={ticks}
@@ -117,24 +134,32 @@ export function BesparingPerJaar({ jaren, actie }: { jaren: YearAnalysis[]; acti
                 >
                   {euro(j.realisticSavingEur)}
                 </text>
-                <text
-                  x={midden}
-                  y={H - 22}
-                  textAnchor="middle"
-                  className="as-label"
-                >
-                  {periode(j.firstDay, j.lastDay)}
-                </text>
-                {!j.isFullYear ? (
-                  <text
-                    x={midden}
-                    y={H - 8}
-                    textAnchor="middle"
-                    className="as-label zwak"
-                  >
-                    deel van het jaar
-                  </text>
-                ) : null}
+                {smal ? (
+                  (() => {
+                    const kort = j.isFullYear ? null : kortDeel(j);
+                    return kort ? (
+                      <text x={midden} y={H - 26} textAnchor="middle" className="as-label">
+                        <tspan x={midden}>{kort.deel}</tspan>
+                        <tspan x={midden} dy={15}>{kort.jaar}</tspan>
+                      </text>
+                    ) : (
+                      <text x={midden} y={H - 22} textAnchor="middle" className="as-label">
+                        {periode(j.firstDay, j.lastDay)}
+                      </text>
+                    );
+                  })()
+                ) : (
+                  <>
+                    <text x={midden} y={H - 22} textAnchor="middle" className="as-label">
+                      {periode(j.firstDay, j.lastDay)}
+                    </text>
+                    {!j.isFullYear ? (
+                      <text x={midden} y={H - 8} textAnchor="middle" className="as-label zwak">
+                        deel van het jaar
+                      </text>
+                    ) : null}
+                  </>
+                )}
               </g>
             );
           })}
@@ -154,16 +179,16 @@ export function BesparingPerJaar({ jaren, actie }: { jaren: YearAnalysis[]; acti
                   regels: [
                     {
                       kleur: "var(--series-3)",
-                      label: "Werkelijk haalbaar",
+                      label: "Wat de batterij haalt",
                       waarde: euro(j.realisticSavingEur),
                       uitkomst: true,
                     },
                     {
                       kleur: "color-mix(in srgb, var(--series-3) 35%, transparent)",
-                      label: "Met perfecte kennis",
+                      label: "Ideaal geval (perfecte kennis van morgen)",
                       waarde: euro(j.optimalSavingEur),
                     },
-                    { label: "Daarvan gehaald", waarde: procent(j.captureRate) },
+                    { label: "Deel van het ideale geval", waarde: procent(j.captureRate) },
                     { label: "Laadbeurten", waarde: getal(j.cyclesPerYear, 0) },
                   ],
                   noot: j.isFullYear
@@ -182,10 +207,10 @@ export function BesparingPerJaar({ jaren, actie }: { jaren: YearAnalysis[]; acti
 
       <Legenda
         items={[
-          { kleur: "var(--series-3)", label: "wat de batterij werkelijk haalt" },
+          { kleur: "var(--series-3)", label: "wat de batterij haalt" },
           {
             kleur: "color-mix(in srgb, var(--series-3) 35%, transparent)",
-            label: "maximaal haalbaar met perfecte kennis vooraf",
+            label: "ideaal geval (perfecte kennis van morgen)",
           },
         ]}
       />

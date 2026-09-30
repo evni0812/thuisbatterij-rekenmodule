@@ -8,9 +8,10 @@
  * maken de lijst alleen langer.
  *
  * PRIJZEN — richtprijs van een wérkende set, peildatum september 2026. Bij de
- * stekkerbatterijen zit de P1-meter erbij: zonder die meter kan het ding niet
- * op uurtarieven sturen, en dan is deze hele rekentool niet van toepassing.
- * Waar de meter niet in de doos zit, is hij opgeteld (circa 25 tot 35 euro).
+ * stekkerbatterijen zit de uitlezer van de slimme-meterpoort (P1) erbij: zonder
+ * die uitlezer kan het ding niet op uurtarieven sturen, en dan is deze hele
+ * rekentool niet van toepassing. Waar de uitlezer niet in de doos zit, is hij
+ * opgeteld (circa 25 tot 35 euro).
  * Bij de twee generieke thuisaccu's is het een geïnstalleerde prijs inclusief
  * omvormer en montage; dat is wat zo'n systeem in de praktijk kost, en de oude
  * waarden hier (2.500 en 4.500 euro) waren kale hardwareprijzen die de
@@ -20,7 +21,9 @@
  * aan het stopcontact levert een Marstek of een Zendure 2400 dan ook maar
  * 800 W. Voor het volle vermogen legt een installateur een eigen groep aan, en
  * die zit bij de modellen boven 0,8 kW in de prijs: 300 euro, wat een enkele
- * extra groep gangbaar kost (300 tot 1.200 euro afhankelijk van de meterkast).
+ * extra groep gangbaar kost (powerplugs.nl: 100 tot 200 euro in een
+ * standaardsituatie, 300 tot 600 euro bij een volle meterkast; de tool rekent
+ * met 300 euro).
  * Dezelfde post zit in de kostenregel voor andere maten (lib/model/kosten.ts).
  *
  * RENDEMENT — het rondgangsrendement is waar mogelijk een gemeten waarde uit
@@ -104,7 +107,7 @@ export const PRESETS: BatteryPreset[] = [
     // Adviesprijs 789 euro; 699 is de actieprijs in de ANWB-webwinkel
     // (marktcheck 24-09-2026). De standaardconfiguratie rekent met de prijs
     // waarvoor hij nu te koop is.
-    prijsNoot: "actieprijs in de ANWB-webwinkel, compleet met de P1-meter (adviesprijs 789 euro)",
+    prijsNoot: "actieprijs in de ANWB-webwinkel, compleet met de uitlezer van de slimme-meterpoort (P1); adviesprijs 789 euro",
     bron: "https://www.zendure.nl/products/solarflow-800-pro2",
     peildatum: "2026-09-24",
     spec: spec(1.92, 0.8, 0.88, 0.9),
@@ -118,7 +121,7 @@ export const PRESETS: BatteryPreset[] = [
     capaciteitKwh: 2.7,
     vermogenKw: 0.8,
     prijsEur: 1220,
-    prijsNoot: "1.195 euro plus de P1-meter van 25",
+    prijsNoot: "1.195 euro plus 25 euro voor de uitlezer van de slimme-meterpoort (P1)",
     bron: "https://www.homewizard.com/shop/plug-in-battery/",
     peildatum: "2026-09-24",
     // HomeWizard noemt zelf een rendement in de praktijk van 70 tot 85%;
@@ -136,7 +139,7 @@ export const PRESETS: BatteryPreset[] = [
     capaciteitKwh: 2.69,
     vermogenKw: 0.8,
     prijsEur: 1134,
-    prijsNoot: "1.099 euro plus de P1-meter van 35",
+    prijsNoot: "1.099 euro plus 35 euro voor de uitlezer van de slimme-meterpoort (P1)",
     bron: "https://www.ankersolix.com/nl/products/a17c5",
     peildatum: "2026-09-24",
     // Laadt én levert tot 1.200 W, maar alleen aan een eigen groep; aan een
@@ -159,7 +162,7 @@ export const PRESETS: BatteryPreset[] = [
     capaciteitKwh: 1.92,
     vermogenKw: 1.4,
     prijsEur: 1119,
-    prijsNoot: "789 euro adviesprijs bij Zendure plus de P1-meter van 30 en 300 euro voor een eigen groep door een installateur, want aan het stopcontact levert hij maar 800 W",
+    prijsNoot: "789 euro adviesprijs bij Zendure, plus 30 euro voor de uitlezer van de slimme-meterpoort (P1) en 300 euro voor een eigen groep door een installateur, want aan het stopcontact levert hij maar 800 W",
     bron: "https://www.zendure.nl/products/zendure-solarflow-1600-ac",
     peildatum: "2026-09-24",
     spec: spec(1.92, 1.4, 0.88, 0.9),
@@ -173,7 +176,7 @@ export const PRESETS: BatteryPreset[] = [
     capaciteitKwh: 2.4,
     vermogenKw: 2.4,
     prijsEur: 1179,
-    prijsNoot: "849 euro plus de P1-meter van 30 en 300 euro voor een eigen groep door een installateur, want aan het stopcontact levert hij maar 800 W",
+    prijsNoot: "849 euro, plus 30 euro voor de uitlezer van de slimme-meterpoort (P1) en 300 euro voor een eigen groep door een installateur, want aan het stopcontact levert hij maar 800 W",
     bron: "https://www.zendure.nl/collections/solarflow-series",
     peildatum: "2026-09-24",
     spec: spec(2.4, 2.4, 0.88, 0.9),
@@ -187,7 +190,7 @@ export const PRESETS: BatteryPreset[] = [
     capaciteitKwh: 5.12,
     vermogenKw: 2.5,
     prijsEur: 1499,
-    prijsNoot: "1.199 euro met de P1-meter erbij, plus 300 euro voor een eigen groep door een installateur, want aan het stopcontact levert hij maar 800 W",
+    prijsNoot: "1.199 euro inclusief de uitlezer van de slimme-meterpoort (P1), plus 300 euro voor een eigen groep door een installateur, want aan het stopcontact levert hij maar 800 W",
     bron: "https://www.marstek.nl/product/marstek-venus-e-3-0-plug-charge-thuisbatterij-5-12-kwh-incl-p1-meter/",
     peildatum: "2026-09-24",
     spec: spec(5.12, 2.5, 0.83, 0.9),
@@ -201,7 +204,7 @@ export const PRESETS: BatteryPreset[] = [
     capaciteitKwh: 7,
     vermogenKw: 3.5,
     prijsEur: 2434,
-    prijsNoot: "2.099 euro plus de P1-meter van 35 en 300 euro voor een eigen groep door een installateur, want aan het stopcontact levert hij maar 800 W",
+    prijsNoot: "2.099 euro, plus 35 euro voor de uitlezer van de slimme-meterpoort (P1) en 300 euro voor een eigen groep door een installateur, want aan het stopcontact levert hij maar 800 W",
     bron: "https://www.ankersolix.com/nl",
     peildatum: "2026-09-24",
     spec: spec(7, 3.5, 0.85, 0.9),

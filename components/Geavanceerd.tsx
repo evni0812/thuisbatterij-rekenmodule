@@ -12,16 +12,19 @@
  * een gevoel ("meer pieken") en geen getal dat je kent.
  */
 
+import { useEffect, useState } from "react";
 import type { Manifest } from "../lib/data/manifest";
 import { netgebiedNaam } from "../lib/data/manifest";
-import { centPerKwh, getal, procent } from "../lib/format";
+import { datum, getal, procent } from "../lib/format";
 import { PRIJSPEILDATUM, type BatteryPreset } from "../lib/presets";
 import { wearCostPerKwh } from "../lib/model/battery";
 import { STANDAARD } from "../lib/configuratie";
 import { STRATEGIEEN, strategieVoor } from "../lib/strategie";
+import { slijtageHint, slijtageVoorbeeld } from "./Invoer";
+import { FiguurNaam } from "./chart-parts";
 import { BESPARING_MET_HEFFING_TOEN, heffingToenTekst } from "../lib/nettarief";
 import type { Instellingen } from "../lib/url-state";
-import { GRENZEN, MAG_LEEG, klem, type GetalVeld } from "../lib/normaliseer";
+import { GRENZEN, MAG_LEEG, klem, klemPeriode, type GetalVeld } from "../lib/normaliseer";
 import { GetalInvoer } from "./GetalInvoer";
 
 /**
@@ -54,6 +57,9 @@ function heffingToenUit(manifest: Manifest | null, domein: string): string | nul
     .map(([j]) => Number(j));
   return heffingToenTekst(manifest.prijzen, jaren);
 }
+
+/** Een bedrag per kWh in gewone woorden: "9 cent per kWh". */
+const centPer = (eur: number) => `${getal(eur * 100, 1)} cent per kWh`;
 
 function id(label: string): string {
   return `inst-${label.replace(/[^a-z0-9]+/gi, "-").toLowerCase()}`;
@@ -95,19 +101,18 @@ function Getal({
   return (
     <div className="instelling">
       <label htmlFor={veldId}>{label}</label>
-      <div className={eenheidVoor ? "getal-veld klein eenheid-voor" : "getal-veld klein"}>
-        {eenheidVoor ? <span className="eenheid">{eenheid}</span> : null}
-        <GetalInvoer
-          id={veldId}
-          waarde={waarde === null ? null : waarde * schaal}
-          min={g.min * schaal}
-          max={g.max * schaal}
-          decimalen={decimalen}
-          magLeeg={MAG_LEEG.has(veld)}
-          onWaarde={(v) => onChange(v === null ? null : klem(veld, v / schaal))}
-        />
-        {!eenheidVoor ? <span className="eenheid">{eenheid}</span> : null}
-      </div>
+      <GetalInvoer
+        id={veldId}
+        klein
+        eenheid={eenheid}
+        eenheidVoor={eenheidVoor}
+        waarde={waarde === null ? null : waarde * schaal}
+        min={g.min * schaal}
+        max={g.max * schaal}
+        decimalen={decimalen}
+        magLeeg={MAG_LEEG.has(veld)}
+        onWaarde={(v) => onChange(v === null ? null : klem(veld, v / schaal))}
+      />
       <p className="instelling-uitleg">{uitleg}</p>
     </div>
   );
@@ -214,8 +219,24 @@ export function Geavanceerd({
   const laatste = jaren[jaren.length - 1]?.laatste_dag ?? "2026-12-31";
   const afwijkingen = telAfwijkingen(inst);
 
+  // Uitgeklapt zodra er afwijkingen zijn, en dan blijft het open tot de
+  // gebruiker het zelf sluit. Eerder klapte het dicht op het moment dat je de
+  // laatste afwijking terugzette, midden in wat je aan het doen was.
+  const [uitgeklapt, setUitgeklapt] = useState(open);
+  const heeftAfwijkingen = afwijkingen > 0;
+  useEffect(() => {
+    if (heeftAfwijkingen) setUitgeklapt(true);
+  }, [heeftAfwijkingen]);
+
+  // De periode is een paar: het andere veld volgt met min en max, en typ je
+  // een begin na het einde (of andersom), dan schuift het andere mee.
+  const vanEffectief = inst.van || vroegste;
+  const totEffectief = inst.tot || laatste;
+  const zetPeriode = (welke: "van" | "tot", waarde: string) =>
+    onChange(klemPeriode(welke, waarde, { van: inst.van, tot: inst.tot }, { vroegste, laatste }));
+
   // De volle slijtageprijs van de batterij zoals hij nu is ingesteld, zodat de
-  // strategie in centen kan zeggen wat de planner per geleverde kWh rekent.
+  // aansturing in centen kan zeggen wat er per geleverde kWh wordt meegerekend.
   const volleSlijtage = wearCostPerKwh(prijs, preset.cycleLife, {
     ...preset.spec,
     capacityKwh: capaciteit,
@@ -225,9 +246,14 @@ export function Geavanceerd({
 
   return (
     <section className="geavanceerd" id="instellingen">
-      <details className="uitklap" open={open || afwijkingen > 0}>
+      <details
+        className="uitklap"
+        open={uitgeklapt}
+        onToggle={(e) => setUitgeklapt(e.currentTarget.open)}
+      >
         <summary>
           <div className="summary-tekst">
+            <FiguurNaam anker="instellingen" />
             <h2>Geavanceerde instellingen</h2>
             <span>
               {afwijkingen === 0
@@ -249,7 +275,7 @@ export function Geavanceerd({
               }}
               disabled={bezig}
             >
-              {bezig ? "Bezig met rekenen…" : "Bereken opnieuw"}
+              {bezig ? "Bezig met rekenen…" : "Reken door"}
             </button>
           </div>
         </summary>
@@ -268,7 +294,7 @@ export function Geavanceerd({
           <section>
             <h3>Jouw situatie</h3>
             <p className="groep-uitleg">
-              Bepaalt hoeveel er te halen valt. Verandert de jaaropbrengst.
+              Bepaalt hoeveel er te besparen valt. Verandert de jaarbesparing.
             </p>
             <div className="instelling-grid">
               <div className="instelling">
@@ -285,8 +311,10 @@ export function Geavanceerd({
                   ))}
                 </select>
                 <p className="instelling-uitleg">
-                  De gemeten profielen verschillen per regio, vooral in hoeveel zon
-                  er op het net staat.
+                  Je netgebied hangt af van je netbeheerder (bijvoorbeeld Liander,
+                  Stedin of Enexis); die staat op je jaarafrekening. De gemeten
+                  profielen verschillen per regio, vooral in hoeveel zon er op het
+                  net staat.
                 </p>
               </div>
 
@@ -297,52 +325,54 @@ export function Geavanceerd({
                     id="van"
                     type="date"
                     min={vroegste}
-                    max={laatste}
-                    value={inst.van || vroegste}
-                    onChange={(e) => onChange({ van: e.target.value })}
+                    max={totEffectief}
+                    value={vanEffectief}
+                    onChange={(e) => zetPeriode("van", e.target.value)}
                   />
                   <span>tot</span>
                   <input
                     type="date"
-                    min={vroegste}
+                    min={vanEffectief}
                     max={laatste}
-                    value={inst.tot || laatste}
-                    onChange={(e) => onChange({ tot: e.target.value })}
+                    value={totEffectief}
+                    onChange={(e) => zetPeriode("tot", e.target.value)}
                   />
                 </div>
                 <p className="instelling-uitleg">
-                  Beschikbaar van {vroegste} tot {laatste}. Een periode korter dan
-                  een jaar laat vooral het seizoen zien, niet of de batterij zich
-                  terugverdient.
+                  Beschikbaar van {datum(vroegste)} tot {datum(laatste)}. Kies je
+                  een periode zonder volledig kalenderjaar, dan rekent de tool de
+                  uitkomst om naar een jaar (365 gedeeld door het aantal dagen). Een
+                  periode korter dan een jaar laat vooral het seizoen zien, niet of
+                  de batterij zich terugverdient.
                 </p>
               </div>
 
               <div className="instelling">
                 <label htmlFor="opwek">Opwek van je panelen</label>
-                <div className="getal-veld klein">
-                  <GetalInvoer
-                    id="opwek"
-                    waarde={inst.opwekKwh}
-                    min={GRENZEN.opwekKwh.min}
-                    max={GRENZEN.opwekKwh.max}
-                    decimalen={GRENZEN.opwekKwh.decimalen}
-                    magLeeg
-                    placeholder="bijvoorbeeld 3500"
-                    onWaarde={(v) => onChange({ opwekKwh: v })}
-                  />
-                  <span className="eenheid">kWh per jaar</span>
-                </div>
+                <GetalInvoer
+                  id="opwek"
+                  klein
+                  eenheid="kWh per jaar"
+                  waarde={inst.opwekKwh}
+                  min={GRENZEN.opwekKwh.min}
+                  max={GRENZEN.opwekKwh.max}
+                  decimalen={GRENZEN.opwekKwh.decimalen}
+                  magLeeg
+                  placeholder="bijvoorbeeld 3500"
+                  onWaarde={(v) => onChange({ opwekKwh: v })}
+                />
                 <p className="instelling-uitleg">
-                  Optioneel, en het enige veld hier dat de uitkomst niet verandert:
-                  het zet alleen zelfconsumptie en autarkie aan. Ter indicatie:
-                  Milieu Centraal rekent met 3.000 kWh per jaar voor acht
-                  panelen van 435 Wp, ongeveer 860 kWh per kWp.
+                  Optioneel. Vul je dit in, dan rekent de tool eigen verbruik en zelf
+                  gedekt uit met jouw opwek in plaats van een schatting. Je besparing
+                  in euro's verandert er niet door. Ter indicatie: Milieu Centraal
+                  rekent met 3.000 kWh per jaar voor acht panelen van 435 Wp, ongeveer
+                  860 kWh per kWp.
                 </p>
               </div>
 
               <Schuif
                 label="Pieken in je verbruik"
-                uitleg="Het gemeten patroon is een gemiddelde over veel huishoudens en daardoor vlakker dan één huis. Hoger zet de pieken en dalen aan. Je jaarverbruik blijft gelijk."
+                uitleg="Het gemeten patroon is een gemiddelde over veel huishoudens en daardoor vlakker dan één huis. Zet je dit hoger, dan krijgt je dag meer pieken en dalen. Je jaarverbruik blijft gelijk."
                 waarde={inst.spreiding}
                 min={GRENZEN.spreiding.min}
                 max={GRENZEN.spreiding.max}
@@ -356,7 +386,9 @@ export function Geavanceerd({
           <section>
             <h3>De batterij</h3>
             <p className="groep-uitleg">
-              Bepaalt wat de accu ermee kan. Verandert de jaaropbrengst.
+              Wat de batterij kan en kost. Maat, vermogen en de keuze voor de
+              laadbeurten veranderen de jaarbesparing; prijs en veroudering alleen de
+              terugverdientijd.
             </p>
             <div className="instelling-grid">
               <Getal
@@ -378,7 +410,7 @@ export function Geavanceerd({
               <Getal
                 veld="prijsEur"
                 label="Aanschafprijs"
-                uitleg="Inclusief installatie. Bepaalt de terugverdientijd, en via de slijtageprijs per laadbeurt ook hoe zuinig de accu met zijn beurten omgaat."
+                uitleg="Inclusief installatie. Bepaalt de terugverdientijd. Een duurdere batterij kost per laadbeurt ook meer slijtage."
                 waarde={prijs}
                 eenheid="€"
                 eenheidVoor
@@ -390,7 +422,7 @@ export function Geavanceerd({
               <Getal
                 veld="kostenPerKwh"
                 label="Meerprijs per kWh"
-                uitleg="Wat elke kilowattuur extra capaciteit kost in de kaart van maten. Uitbreidingsmodules kosten bij vrijwel elk merk 310 tot 450 euro per kWh (peildatum september 2026)."
+                uitleg="Wat elke kilowattuur extra capaciteit kost in de kaart van maten. Uitbreidingsmodules kosten 234 tot 443 euro per kWh, afhankelijk van het merk (peildatum september 2026)."
                 waarde={inst.kostenPerKwh}
                 eenheid="€"
                 eenheidVoor
@@ -408,20 +440,20 @@ export function Geavanceerd({
               <Getal
                 veld="installatieEur"
                 label="Eigen groep door installateur"
-                uitleg="Boven 800 W is een vaste aansluiting op een eigen groep de norm; dit is wat een installateur daarvoor rekent. Gangbaar 300 euro, tot 1.200 als de meterkast op de schop moet."
+                uitleg="Boven 800 W is een vaste aansluiting op een eigen groep de norm. Een installateur rekent daarvoor 100 tot 200 euro in een standaardsituatie en 300 tot 600 euro bij een volle meterkast. De tool rekent met 300 euro."
                 waarde={inst.installatieEur}
                 eenheid="€"
                 eenheidVoor
                 onChange={(v) => v !== null && onChange({ installatieEur: v })}
               />
-              {/* De strategie is een keuze, geen eigenschap van de accu, maar hij
-                  hoort hier omdat hij bepaalt hoe de accu met zijn beurten omgaat.
-                  Drie standen met een naam, en een schuif voor wie er tussenin
-                  wil zitten: de knoppen lichten op als de schuif op hun waarde
-                  staat. */}
+              {/* Hoe zuinig de batterij met zijn laadbeurten omgaat is een keuze, geen
+                  eigenschap van de batterij, maar hij hoort hier omdat hij bepaalt
+                  hoe de aansturing met de slijtage rekent. Drie standen met een
+                  naam, en een schuif voor wie er tussenin wil zitten: de knoppen
+                  lichten op als de schuif op hun waarde staat. */}
               <div className="instelling instelling-breed">
-                <label>Strategie voor de laadbeurten</label>
-                <div className="segment" role="group" aria-label="Strategie voor de laadbeurten">
+                <label>Hoe zuinig met de laadbeurten?</label>
+                <div className="segment" role="group" aria-label="Hoe zuinig met de laadbeurten">
                   {STRATEGIEEN.map((st) => (
                     <button
                       key={st.id}
@@ -435,20 +467,18 @@ export function Geavanceerd({
                   ))}
                 </div>
                 <p className="instelling-uitleg">
-                  {strategie
-                    ? strategie.kort
-                    : `Eigen waarde: de planner rekent ${procent(inst.slijtageDeel)} van de slijtageprijs mee.`}{" "}
-                  Een geleverde kWh kost {centPerKwh(volleSlijtage)} aan slijtage tegen de
-                  aanschafprijs; de planner rekent daarvan{" "}
-                  <strong>{centPerKwh(volleSlijtage * inst.slijtageDeel)}</strong> en
-                  handelt alleen als de marge daar bovenuit komt. Minder meerekenen
-                  geeft meer beurten en een hogere jaaropbrengst, maar de batterij is
-                  eerder op als zijn beurten opraken vóór de kalender.
+                  {slijtageHint(inst.slijtageDeel)} Een geleverde kWh kost{" "}
+                  {centPer(volleSlijtage)} aan slijtage: de aanschafprijs, verdeeld over
+                  alle laadbeurten die de batterij aankan. Bij deze stand telt daarvan{" "}
+                  {centPer(volleSlijtage * inst.slijtageDeel)} mee.{" "}
+                  {slijtageVoorbeeld(inst.slijtageDeel, volleSlijtage, preset.spec.efficiency ** 2)}{" "}
+                  Minder meetellen geeft meer laadbeurten en een hogere besparing, maar
+                  de batterij is eerder op als zijn laadbeurten opraken voor de kalender.
                 </p>
               </div>
               <Schuif
-                label="Slijtage die de planner meerekent"
-                uitleg="Als deel van de volle slijtageprijs per geleverde kWh. De drie knoppen hierboven zijn vaste standen van deze schuif."
+                label="Slijtage die de aansturing meerekent"
+                uitleg="Welk deel van de slijtage meetelt bij de keuze om te laden of te leveren; 100% is de volle slijtage. De drie knoppen hierboven zijn vaste standen van deze schuif."
                 waarde={inst.slijtageDeel}
                 min={0}
                 max={1}
@@ -467,8 +497,8 @@ export function Geavanceerd({
               />
             </div>
             <p className="instelling-noot">
-              Vast overgenomen van {preset.naam}: rendement{" "}
-              {procent(preset.spec.efficiency ** 2)} heen en terug, bruikbaar deel{" "}
+              Vast overgenomen van {preset.naam}: van elke 100 kWh die je opslaat,
+              komt er {getal(preset.spec.efficiency ** 2 * 100)} terug. Bruikbaar deel{" "}
               {procent(preset.spec.depthOfCharge)}, levensduur {getal(preset.cycleLife)} laadbeurten en{" "}
               {preset.kalenderLevensduurJaren} jaar. Prijs: {preset.prijsNoot},
               richtprijs {PRIJSPEILDATUM}.
@@ -478,13 +508,13 @@ export function Geavanceerd({
           <section>
             <h3>Je contract</h3>
             <p className="groep-uitleg">
-              Bepaalt waartegen alles wordt afgerekend. Verandert de jaaropbrengst.
+              Bepaalt waartegen alles wordt afgerekend. Verandert de jaarbesparing.
             </p>
             <div className="instelling-grid">
               <Getal
                 veld="terugleverkostenCt"
                 label="Terugleverkosten"
-                uitleg="Wat je leverancier per teruggeleverde kilowattuur rekent. ANWB Energie rekent geen terugleverkosten, daarom staat dit standaard op 0; andere leveranciers doen het vaak wel."
+                uitleg="Wat je leverancier per teruggeleverde kilowattuur rekent. De tool neemt aan dat ANWB Energie geen terugleverkosten rekent, daarom staat dit standaard op 0. Andere leveranciers doen het vaak wel. Voor teruglevering rekent de tool met de marktprijs inclusief btw; ook dat is een aanname."
                 waarde={inst.terugleverkostenCt}
                 eenheid="ct/kWh"
                 onChange={(v) => v !== null && onChange({ terugleverkostenCt: v })}
@@ -512,22 +542,22 @@ export function Geavanceerd({
                   >
                     Van nu
                     {actueleHeffingUit(manifest) !== null
-                      ? ` (${centPerKwh(actueleHeffingUit(manifest)!)})`
+                      ? ` (${centPer(actueleHeffingUit(manifest)!)})`
                       : ""}
                   </button>
                 </div>
                 <p className="instelling-uitleg">
                   Standaard rekent de tool de uurprijzen van toen met de
                   energiebelasting en opslag van nu: dat past bij een batterij die
-                  je vandaag koopt. Kies "van toen" om per uur de heffing te
+                  je vandaag koopt. Kies 'van toen' om per uur de heffing te
                   gebruiken die toen gold.
                   {heffingToenUit(manifest, inst.domein) ? (
                     <>
                       {" "}
-                      {heffingToenUit(manifest, inst.domein)}. De besparing
-                      groeit veel minder hard mee: voor de standaardbatterij met
-                      zonnepanelen valt hij ongeveer{" "}
-                      {procent(BESPARING_MET_HEFFING_TOEN)} hoger uit.
+                      {heffingToenUit(manifest, inst.domein)}
+                      . Met die hogere heffing is de besparing voor de
+                      standaardbatterij met zonnepanelen ongeveer{" "}
+                      {procent(BESPARING_MET_HEFFING_TOEN)} hoger.
                     </>
                   ) : null}
                 </p>
@@ -543,11 +573,12 @@ export function Geavanceerd({
                   <span>Afregelen bij negatieve prijzen</span>
                 </label>
                 <p className="instelling-uitleg">
-                  Stopt je installatie met terugleveren als de prijs negatief is?
-                  Sommige omvormers en energiemanagementsystemen kunnen dat; de
-                  meeste doen het niet vanzelf. Zet dit uit als jouw installatie
-                  het niet kan; dan betaal je op die momenten om je stroom kwijt
-                  te raken.
+                  Regelt je installatie zijn teruglevering terug als de prijs
+                  negatief is? Dan lever je op die momenten niets terug en betaal je
+                  er niets voor. Sommige omvormers kunnen dat, de meeste doen het
+                  niet vanzelf. Daarom staat dit standaard uit: je betaalt dan om je
+                  stroom kwijt te raken. Zet het aan als jouw installatie het wel
+                  kan.
                 </p>
               </div>
             </div>
@@ -556,16 +587,16 @@ export function Geavanceerd({
           <section>
             <h3>Hoe je ernaar kijkt</h3>
             <p className="groep-uitleg">
-              Verandert de terugverdientijd en de contante waarde.{" "}
-              <strong>Niet de jaaropbrengst</strong>: wat de batterij fysiek doet
-              hangt af van prijzen en verbruik, niet van hoe je de investering
-              beoordeelt.
+              Verandert de terugverdientijd, het netto resultaat en hoeveel minder
+              CO2 de batterij voor Nederland betekent.{" "}
+              <strong>Niet de jaarbesparing</strong>: wat de batterij doet hangt af
+              van prijzen en verbruik, niet van hoe je het beoordeelt.
             </p>
             <div className="instelling-grid">
               <Getal
                 veld="analysejaren"
                 label="Looptijd"
-                uitleg="Over hoeveel jaar je de investering beoordeelt. De accu zelf gaat door tot zijn eigen levensduur op is."
+                uitleg="Over hoeveel jaar je de investering beoordeelt. De batterij zelf gaat door tot zijn eigen levensduur op is."
                 waarde={inst.analysejaren}
                 eenheid="jaar"
                 onChange={(v) => v !== null && onChange({ analysejaren: v })}
@@ -573,7 +604,7 @@ export function Geavanceerd({
               <Percentage
                 veld="prijsstijging"
                 label="Prijsstijging per jaar"
-                uitleg="Hoe hard je verwacht dat het gat tussen afname en teruglevering groeit. Standaard 0%: de energiebelasting op stroom daalde de afgelopen jaren (2026: 11,1 ct inclusief btw; het tarief voor 2027 wordt pas eind 2026 vastgesteld) en het PBL geeft voor de groothandelsprijs van stroom in 2030 een brede bandbreedte, 53 tot 90 euro per MWh (Klimaat- en Energieverkenning 2026). Zet hem hoger als je anders verwacht."
+                uitleg="Hoe hard je verwacht dat het prijsverschil tussen afname en teruglevering groeit. Standaard 0%. De energiebelasting op stroom daalde de afgelopen jaren en is in 2026 11,1 cent per kWh inclusief btw. Het tarief voor 2027 wordt pas eind 2026 vastgesteld. Voor de groothandelsprijs van stroom in 2030 geeft het Planbureau voor de Leefomgeving (PBL) een brede bandbreedte: 53 tot 90 euro per MWh (Klimaat- en Energieverkenning 2026). Zet hem hoger als je anders verwacht."
                 fractie={inst.prijsstijging}
                 onChange={(v) => onChange({ prijsstijging: v })}
               />
@@ -583,6 +614,14 @@ export function Geavanceerd({
                 uitleg="Wat je geld elders had opgebracht. Hiermee worden toekomstige besparingen teruggerekend naar vandaag."
                 fractie={inst.discontovoet}
                 onChange={(v) => onChange({ discontovoet: v })}
+              />
+              <Getal
+                veld="co2Drempel"
+                label="Wanneer telt teruglevering als overschot?"
+                uitleg="Op uren waarop de stroom schoner is dan dit, is er vaak meer aanbod dan vraag, en vervangt jouw teruglevering weinig. Die uren tellen niet mee in hoeveel minder CO2 de batterij voor Nederland betekent. Standaard 100 g/kWh; lager telt meer teruglevering als nuttig. Rondt af op stappen van 20."
+                waarde={inst.co2Drempel}
+                eenheid="g/kWh"
+                onChange={(v) => v !== null && onChange({ co2Drempel: v })}
               />
             </div>
           </section>

@@ -11,8 +11,8 @@
  * Het bedrag is doorgerekend: dit hád een batterij opgeleverd op de uurprijzen
  * zoals ze werkelijk waren. De terugverdientijd is dat bedrag doorgetrokken
  * naar de toekomst, en dat is iets anders — een aanname, geen meting. Die
- * overgang staat daarom in de zin zelf ("blijven de komende jaren hierop
- * lijken…") en niet alleen in de dialoog erachter.
+ * overgang staat daarom in de zin zelf ("we nemen aan dat de prijzen de
+ * komende jaren zijn zoals in…") en niet alleen in de dialoog erachter.
  *
  * ── Eén hoofdgetal ──────────────────────────────────────────────────────────
  * Er is één vetgedrukte terugverdientijd: die mét de overgang naar het
@@ -29,10 +29,16 @@ import { overgangZin, type Overgang } from "../lib/overgang";
 import { euro, jaren, jarenReeks } from "../lib/format";
 import { stuurZin } from "../lib/model/doel";
 import type { Doel } from "../lib/model/types";
+import { FiguurNaam } from "./chart-parts";
 
-/** De terugverdientijd als zinsdeel: "terugverdiend na 7 jaar" of "niet terugverdiend". */
+/** De terugverdientijd als zinsdeel: "terugverdiend na 7 jaar" of "niet terugverdiend binnen de looptijd". */
 function terugverdiend(payback: number | null): string {
-  return payback !== null ? `terugverdiend na ${jaren(payback)}` : "niet terugverdiend";
+  return payback !== null ? `terugverdiend na ${jaren(payback)}` : "niet terugverdiend binnen de looptijd";
+}
+
+/** Hetzelfde zonder het werkwoord, voor een tweede getal in dezelfde zin: "na 5 jaar". */
+function terugverdiendKort(payback: number | null): string {
+  return payback !== null ? `na ${jaren(payback)}` : "niet binnen de looptijd";
 }
 
 export function Antwoord({
@@ -86,7 +92,10 @@ export function Antwoord({
   return (
     <section id="antwoord" className={bezig ? "antwoord bezig" : "antwoord"} aria-live="polite">
       <div className="antwoord-kop">
-        <p className="antwoord-aanhef">Zonder saldering had deze batterij je</p>
+        <div>
+          <FiguurNaam anker="antwoord" />
+          <p className="antwoord-aanhef">Zonder saldering had deze batterij je</p>
+        </div>
         {actie}
       </div>
       <p className="antwoord-bedrag">
@@ -97,30 +106,31 @@ export function Antwoord({
         bespaard
         {spreiding && jaarBereik > 1 ? (
           <>
-            {" "}
-            — tussen {euro(minSavingEur)} en {euro(maxSavingEur)}, afhankelijk van
+, tussen {euro(minSavingEur)} en {euro(maxSavingEur)}, afhankelijk van
             welk jaar je pakt
           </>
         ) : null}
         .{" "}
         {overgang ? (
           <>
-            Blijven de komende jaren hierop lijken en gaat het voorstel voor het
-            nieuwe nettarief door, dan is de aanschaf van {euro(investeringEur)}{" "}
+            We nemen aan dat de prijzen de komende jaren zijn zoals in {jaartallen}.
+            Gaat het voorstel voor het nieuwe nettarief door, dan is de aanschaf
+            van {euro(investeringEur)}{" "}
             <strong>{terugverdiend(overgang.finance.paybackYears)}</strong>. Blijft
-            het nettarief zoals nu: {terugverdiend(finance.paybackYears)}.
+            het nettarief zoals nu, dan {terugverdiendKort(finance.paybackYears)}.
           </>
         ) : finance.paybackYears !== null ? (
           <>
-            Blijven de komende jaren hierop lijken en blijft het nettarief zoals
-            nu, dan is de aanschaf van {euro(investeringEur)}{" "}
+            We nemen aan dat de prijzen de komende jaren zijn zoals in {jaartallen}.
+            Blijft het nettarief zoals nu, dan is de aanschaf van{" "}
+            {euro(investeringEur)}{" "}
             <strong>terugverdiend na {jaren(finance.paybackYears)}</strong>.
           </>
         ) : (
           <>
-            Zelfs als de komende jaren hierop blijven lijken, verdient de
-            aanschaf van {euro(investeringEur)} zichzelf binnen de looptijd{" "}
-            <strong>niet terug</strong> zolang het nettarief blijft zoals nu.
+            Ook als de prijzen de komende jaren zijn zoals in {jaartallen} en het
+            nettarief blijft zoals nu, is de aanschaf van {euro(investeringEur)}{" "}
+            <strong>niet terugverdiend binnen de looptijd</strong>.
           </>
         )}
       </p>
@@ -128,24 +138,31 @@ export function Antwoord({
         Doorgerekend op de uurprijzen van {jaartallen} met de belasting en
         opslag van {heffingVanNu ? "nu" : "toen"}. De terugverdientijd trekt dat
         door naar de toekomst; dat is een aanname, geen voorspelling. Het
-        eigen stroomverbruik van de batterij (volgens fabrikanten ongeveer 60
-        tot 220 kWh per jaar) is er niet van afgetrokken.
+        stand-byverbruik van de batterij (60 tot 220 kWh per jaar) zit er niet
+        in.
       </p>
       {/* De contractvoorwaarde staat op Start één keer, hier bij het antwoord
           waar hij bij hoort; de invoer verwijst ernaar. */}
       <p className="antwoord-grondslag">
         Deze doorrekening gaat uit van een dynamisch energiecontract en een
-        batterij die {stuurZin(doel)}. Heb je een vast of variabel contract?
-        Dan krijg je tot en met 2030 voor teruglevering minstens 50% van het
-        kale leveringstarief; die situatie rekent deze tool niet door.
+        batterij die {stuurZin(doel)}. Bij zo'n contract betaal je per uur de
+        marktprijs. Saldering, waarbij je teruggeleverde stroom verrekent met
+        wat je afneemt, stopt op 1 januari 2027. Daarna krijg je voor
+        teruglevering alleen de kale marktprijs. De tool rekent die inclusief
+        btw, en dat is een aanname.
+      </p>
+      <p className="antwoord-grondslag">
+        Heb je een vast of variabel contract, dan krijg je tot en met 2030 voor
+        teruglevering minstens 50% van het kale leveringstarief. Die situatie
+        rekent deze tool niet door.
       </p>
       <p className={scenario ? "antwoord-scenario" : "antwoord-scenario plaatshouder"}>
         {scenario ? (
           <>
-            Gaat het voorstel van de netbeheerders door (de ACM beslist
-            erover), dan geldt naar verwachting vanaf 1 januari{" "}
-            {overgang?.ingangsjaar ?? 2029} (mogelijk later) een
-            tijdsafhankelijk nettarief. Met dat tarief was de besparing{" "}
+            Gaat het voorstel van de netbeheerders door, dan geldt naar
+            verwachting vanaf 1 januari {overgang?.ingangsjaar ?? 2029}{" "}
+            (mogelijk later) een tijdsafhankelijk nettarief. De ACM (Autoriteit
+            Consument &amp; Markt) beslist daarover. Met dat tarief was de besparing{" "}
             <strong>{euro(scenario.averageSavingEur)} per jaar</strong> geweest.
             {overgang && overgang.jarenOpHuidigTarief > 0 ? (
               <>

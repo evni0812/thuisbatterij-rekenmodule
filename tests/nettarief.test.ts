@@ -259,7 +259,7 @@ describe("de heffing van toen, in woorden", () => {
      */
     const manifest = JSON.parse(readFileSync("public/data/manifest.json", "utf8")) as Manifest;
     expect(heffingToenTekst(manifest.prijzen, [2024, 2025])).toMatch(
-      /^In 2024 en 2025 lag de heffing ruim een derde hoger \(17,1 à 18 cent tegen 12,9 cent nu\)$/,
+      /^In 2024 en 2025 lag de heffing ruim een derde hoger \(17,1 tot 18 cent tegen 12,9 cent nu\)$/,
     );
     expect(heffingToenTekst(manifest.prijzen, [1999])).toBeNull();
   });

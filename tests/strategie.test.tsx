@@ -75,7 +75,7 @@ describe("de knoppen in de instellingen", () => {
     for (const s of STRATEGIEEN) {
       expect(screen.getByRole("button", { name: s.naam }).getAttribute("aria-pressed")).toBe("false");
     }
-    expect(screen.getByText(/Eigen waarde: de planner rekent 70%/)).toBeDefined();
+    expect(screen.getByText(/Eigen stand \(70%\)/)).toBeDefined();
   });
 });
 
@@ -106,17 +106,17 @@ describe("de laadbeurten over de levensduur", () => {
     return { config, finance };
   }
 
-  it("zegt dat de batterij aan zijn leeftijd sterft als de beurten niet opraken", () => {
+  it("zegt dat leeftijd de batterij eerder vervangt als de beurten niet opraken", () => {
     const { config } = toon(300);
     expect(300 * config.calendarLifeYears).toBeLessThan(config.cycleLife);
-    expect(screen.getByRole("heading", { level: 3 }).textContent).toMatch(/aan zijn leeftijd/);
-    expect(screen.getByText(/beurten raken niet op vóór de kalender/)).toBeDefined();
+    expect(screen.getByRole("heading", { level: 3 }).textContent).toMatch(/door leeftijd dan door gebruik/);
+    expect(screen.getAllByText(/laadbeurten zijn niet op voordat de batterij te oud is/)[0]).toBeDefined();
   });
 
-  it("zegt dat de cellen eerder op zijn als er te veel beurten zijn", () => {
+  it("zegt dat gebruik de batterij eerder vervangt als er te veel beurten zijn", () => {
     const { config } = toon(800);
     expect(800 * config.calendarLifeYears).toBeGreaterThan(config.cycleLife);
-    expect(screen.getByRole("heading", { level: 3 }).textContent).toMatch(/eerder dan de kalender/);
+    expect(screen.getByRole("heading", { level: 3 }).textContent).toMatch(/eerder door gebruik dan door leeftijd/);
   });
 
   it("toont de drempel als deel van de slijtageprijs", () => {

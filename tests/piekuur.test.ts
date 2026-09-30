@@ -118,8 +118,10 @@ describe("de piekafname in de maandtotalen", () => {
     const jaar = lite.perYear[0]!;
     expect(jaar.peakHourImportKwh).toBeGreaterThan(0);
     expect(jaar.peakHourImportWithBatteryKwh).toBeLessThanOrEqual(jaar.peakHourImportKwh);
-    expect(lite.stats.peakHourImportBaselineKwh).toBeCloseTo(jaar.peakHourImportKwh, 9);
-    expect(lite.stats.peakHourImportBatteryKwh).toBeCloseTo(jaar.peakHourImportWithBatteryKwh, 9);
+    // Veertien dagen is geen jaar: het kerncijfer is naar 365 dagen geschaald.
+    const schaal = 365 / 14;
+    expect(lite.stats.peakHourImportBaselineKwh).toBeCloseTo(jaar.peakHourImportKwh * schaal, 9);
+    expect(lite.stats.peakHourImportBatteryKwh).toBeCloseTo(jaar.peakHourImportWithBatteryKwh * schaal, 9);
     // De maanden tellen op tot het jaar.
     const somMaanden = jaar.months.reduce((a, m) => a + m.peakHourImportBaselineKwh, 0);
     expect(somMaanden).toBeCloseTo(jaar.peakHourImportKwh, 9);

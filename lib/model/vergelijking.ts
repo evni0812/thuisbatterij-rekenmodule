@@ -17,7 +17,7 @@
  * zonder dat bestand te verdubbelen.
  *
  * ── Eén dag voor alle drie ──────────────────────────────────────────────────
- * De voorbeelddag is de doorsnee zomerdag van het hoofdantwoord (de dag met de
+ * De voorbeelddag is de gewone zomerdag van het hoofdantwoord (de dag met de
  * mediane prijsspreiding in de zomer van het referentiejaar). Die keuze hangt
  * alleen van de prijzen af, dus is voor alle drie de doelen dezelfde datum;
  * per doel wordt de dag uit de eigen dispatch gesneden.
@@ -84,7 +84,7 @@ export function deelVan(r: ScenarioResult, dag?: SampleDay | null): Vergelijking
   };
 }
 
-/** De datum van de voorbeelddag: de doorsnee zomerdag van het hoofdantwoord. */
+/** De datum van de voorbeelddag: de gewone zomerdag van het hoofdantwoord. */
 export function vergelijkDatum(result: Pick<AnalysisResult, "sampleDays">): string | null {
   return result.sampleDays[0]?.date ?? null;
 }

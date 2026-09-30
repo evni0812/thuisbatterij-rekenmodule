@@ -35,10 +35,10 @@ function isZomer(maand: number): boolean {
   return maand >= 4 && maand <= 9;
 }
 
-const B = 860;
+const B_STANDAARD = 860;
 const HOOGTE = 190;
-const LINKS = 52;
-const RECHTS = 16;
+const LINKS_STANDAARD = 52;
+const RECHTS_STANDAARD = 16;
 const ONDER = 46;
 /**
  * Ruimte boven de plot voor het bedrag dat bij elke staaf staat. Zonder die
@@ -47,17 +47,33 @@ const ONDER = 46;
  */
 const BOVEN = 24;
 
-export function MaandVerloop({ maanden, actie }: { maanden: MonthTotals[]; actie?: ReactNode }) {
-  const { kader, tip, toon, wis } = useTip();
+export function MaandVerloop({
+  maanden,
+  zonnepanelen = true,
+  actie,
+}: {
+  maanden: MonthTotals[];
+  /** Zonder zonnepanelen is er geen zonoverschot om af te vangen: dan telt alleen het prijsverschil. */
+  zonnepanelen?: boolean;
+  actie?: ReactNode;
+}) {
+  const { kader, tip, toon, wis, breedte: gemeten } = useTip();
   const [aangewezen, setAangewezen] = useState<number | null>(null);
   if (maanden.length < 2) return null;
+
+  // De viewBox volgt het kader: twaalf staven passen ook op een telefoon,
+  // met letters op ware grootte, zonder zijwaarts te scrollen.
+  const B = gemeten ?? B_STANDAARD;
+  const smal = B < 560;
+  const LINKS = smal ? 42 : LINKS_STANDAARD;
+  const RECHTS = smal ? 6 : RECHTS_STANDAARD;
 
   const hoogste = Math.max(...maanden.map((m) => m.savingEur), 0.01);
   const laagste = Math.min(...maanden.map((m) => m.savingEur), 0);
   const span = hoogste - laagste;
   const y = (v: number) => BOVEN + (1 - (v - laagste) / span) * HOOGTE;
   const breedte = (B - LINKS - RECHTS) / maanden.length;
-  const staaf = Math.min(46, breedte * 0.62);
+  const staaf = Math.min(46, breedte * (smal ? 0.66 : 0.62));
 
   const zomer = maanden.filter((m) => isZomer(m.month));
   const winter = maanden.filter((m) => !isZomer(m.month));
@@ -71,8 +87,8 @@ export function MaandVerloop({ maanden, actie }: { maanden: MonthTotals[]; actie
       actie={actie}
       titel={
         som(zomer) > som(winter)
-          ? "De batterij verdient zijn geld in de zomer"
-          : "De batterij verdient zijn geld in de winter"
+          ? "De besparing zit vooral in de zomer"
+          : "De besparing zit vooral in de winter"
       }
       toelichting={
         <>
@@ -93,7 +109,7 @@ export function MaandVerloop({ maanden, actie }: { maanden: MonthTotals[]; actie
       >
       <svg
         viewBox={`0 0 ${B} ${BOVEN + HOOGTE + ONDER}`}
-        className="chart"
+        className="chart chart-fluid"
         role="img"
         aria-label={`Besparing per maand, van ${euro(slechtste.savingEur)} in ${
           MAANDEN[slechtste.month - 1]
@@ -197,7 +213,9 @@ export function MaandVerloop({ maanden, actie }: { maanden: MonthTotals[]; actie
                   },
                 ],
                 noot: isZomer(m.month)
-                  ? "Zomer: de batterij vangt vooral zonoverschot af."
+                  ? zonnepanelen
+                    ? "Zomer: de batterij vangt vooral zonneoverschot af."
+                    : "Zomer: de batterij laadt op goedkope uren en levert op dure uren."
                   : "Winter: de batterij leeft van het verschil tussen nacht en avond.",
               });
             }}

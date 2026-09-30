@@ -348,7 +348,7 @@ describe("de teksten beweren niets wat niet klopt", () => {
   });
 
   it("noemt de ANWB als afzender en de voorwaarde van een dynamisch contract", () => {
-    expect(tekst).toMatch(/Deze tool is van de\s+ANWB\. De ANWB verkoopt ook energie en thuisbatterijen\./);
+    expect(tekst).toMatch(/Deze tool is van\s+ANWB\. ANWB verkoopt ook energie en thuisbatterijen\./);
     expect(tekst).toMatch(/Deze doorrekening gaat uit van een dynamisch energiecontract/);
   });
 });

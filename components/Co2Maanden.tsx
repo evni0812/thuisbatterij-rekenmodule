@@ -1,7 +1,7 @@
 "use client";
 
 /**
- * De CO2-winst door het jaar heen.
+ * Minder CO2 door het jaar heen, per maand, met de zomer gearceerd.
  *
  * Dezelfde twee verdienmodellen als bij de euro's, maar met een ander gewicht:
  * in de zomer kan de batterij zonnestroom bewaren voor de avond, in de winter
@@ -18,6 +18,11 @@ import { kg } from "./Co2Antwoord";
 
 const MAANDEN = ["jan", "feb", "mrt", "apr", "mei", "jun", "jul", "aug", "sep", "okt", "nov", "dec"];
 const VOLUIT = ["januari", "februari", "maart", "april", "mei", "juni", "juli", "augustus", "september", "oktober", "november", "december"];
+
+/** "3 kg minder" of "2 kg meer", naar het teken. */
+function minderMeer(kgMinder: number): string {
+  return kgMinder >= 0 ? `${kg(kgMinder)} minder` : `${kg(-kgMinder)} meer`;
+}
 
 function isZomer(maand: number): boolean {
   return maand >= 4 && maand <= 9;
@@ -63,24 +68,24 @@ export function Co2Maanden({
       actie={actie}
       titel={
         zomer <= 0 && winter <= 0
-          ? `De batterij kost in beide seizoenen CO2: ${kg(-zomer)} in de zomer en ${kg(-winter)} in de winter`
+          ? `De batterij zorgt in beide seizoenen voor meer CO2: ${kg(-zomer)} in de zomer en ${kg(-winter)} in de winter`
           : zomer > winter
-            ? `De CO2-winst zit in de zomer: ${kg(zomer)} tegen ${kg(winter)} in de winter`
-            : `De CO2-winst zit in de winter: ${kg(winter)} tegen ${kg(zomer)} in de zomer`
+            ? `Je CO2-uitstoot daalt vooral in de zomer: ${minderMeer(zomer)}, tegen ${minderMeer(winter)} in de winter`
+            : `Je CO2-uitstoot daalt vooral in de winter: ${minderMeer(winter)}, tegen ${minderMeer(zomer)} in de zomer`
       }
       toelichting={
         <>
-          Hoeveel minder CO2 je netafname per maand kost met batterij, gemiddeld over de volledige
-          jaren; een rode staaf is een maand waarin het meer CO2 kostte. De gearceerde helft is de
-          zomer, april tot en met september.{" "}
+          Per maand: hoeveel minder CO2 de stroom van het net veroorzaakt met batterij, gemiddeld
+          over de volledige jaren. Een rode staaf is een maand met meer CO2. De gearceerde maanden
+          zijn de zomer, april tot en met september.{" "}
           {zonnepanelen
-            ? "In de zomer kan opgeslagen zonnestroom een deel van de avondafname vervangen; in de winter verschuift de batterij afname naar de nacht, en die is niet altijd schoner."
-            : "Zonder zonnepanelen verschuift de batterij alleen afname: hij laadt van het net en levert later, en dat is niet op elk uur schoner."}
+            ? "In de zomer kan opgeslagen zonnestroom een deel van wat je 's avonds van het net haalt vervangen. In de winter verschuift de batterij die stroom naar de nacht, en die is niet altijd schoner."
+            : "Zonder zonnepanelen verschuift de batterij alleen wat je van het net haalt: hij laadt van het net en levert later, en dat is niet op elk uur schoner."}
         </>
       }
     >
-      <Grafiek kader={kader} tip={tip} onWis={() => { setAangewezen(null); wis(); }} label="CO2-winst per maand">
-        <svg viewBox={`0 0 ${B} ${BOVEN + HOOGTE + ONDER}`} className="chart" role="img" aria-label={`CO2-winst per maand, het meest in ${VOLUIT[beste.month - 1]}`}>
+      <Grafiek kader={kader} tip={tip} onWis={() => { setAangewezen(null); wis(); }} label="Minder CO2 per maand">
+        <svg viewBox={`0 0 ${B} ${BOVEN + HOOGTE + ONDER}`} className="chart" role="img" aria-label={`Minder CO2 per maand, het meest in ${VOLUIT[beste.month - 1]}`}>
           {maanden.map((m, i) =>
             isZomer(m.month) ? (
               <rect key={`z${m.month}`} x={LINKS + i * breedte} y={0} width={breedte} height={BOVEN + HOOGTE} fill="var(--series-4)" opacity={0.07} />
@@ -122,15 +127,15 @@ export function Co2Maanden({
                 toon(punt, {
                   titel: VOLUIT[m.month - 1]!,
                   regels: [
-                    { label: "Uitstoot afname zonder batterij", waarde: kg(m.importBasisKg) },
+                    { label: "Uitstoot van het net zonder batterij", waarde: kg(m.importBasisKg) },
                     { label: "Met batterij", waarde: kg(m.importBatKg) },
-                    { kleur: "var(--series-3)", label: "Winst", waarde: kg(m.winstKg), uitkomst: true },
+                    { kleur: "var(--series-3)", label: "Minder CO2", waarde: kg(m.winstKg), uitkomst: true },
                   ],
                   noot: !zonnepanelen
-                    ? "Zonder zonnepanelen: afname verschuift naar de uren waarop de batterij laadt."
+                    ? "Zonder zonnepanelen: wat je van het net haalt verschuift naar de uren waarop de batterij laadt."
                     : isZomer(m.month)
-                      ? "Zomer: opgeslagen zonnestroom kan een deel van de avondafname vervangen."
-                      : "Winter: afname verschuift van de avondpiek naar de nacht.",
+                      ? "Zomer: opgeslagen zonnestroom kan een deel van wat je 's avonds van het net haalt vervangen."
+                      : "Winter: wat je van het net haalt verschuift van de avondpiek naar de nacht.",
                 });
               }}
               onWis={() => { setAangewezen(null); wis(); }}

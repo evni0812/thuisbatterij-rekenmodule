@@ -40,15 +40,15 @@
  * ── Alleen op afname ────────────────────────────────────────────────────────
  * Het voorstel is expliciet: het gaat uitsluitend over afgenomen elektriciteit,
  * "aangezien aangeslotenen uitsluitend tarieven betalen voor afname en niet voor
- * invoeding". Een invoedingstarief zou een nieuw voorstel vergen. De schakelaar
- * om het tarief ook op teruglevering te heffen staat daarom standaard uit en is
- * een wat-als.
+ * invoeding". Een invoedingstarief zou een nieuw voorstel vergen. De optie om
+ * het tarief ook op teruglevering te heffen bestaat alleen in de code
+ * (`opTeruglevering`), niet in de pagina.
  *
  * ── De heffing in het scenario ──────────────────────────────────────────────
  * Het nettarief komt bovenop de energiebelasting en de inkoopopslag. De
  * gewone doorrekening rekent standaard met de heffing van nu (12,9 cent in
  * 2026) over alle historische jaren; wie "toen" kiest krijgt de heffing zoals
- * die per uur gold, 17 à 18 cent in 2023 tot en met 2025 (`heffingToen`). In
+ * die per uur gold, 17 tot 18 cent in 2023 tot en met 2025 (`heffingToen`). In
  * 2029 en 2030 ligt de energiebelasting volgens CE Delft (Tabel 2) op EUR
  * 0,075 respectievelijk 0,076 per kWh exclusief btw. Het scenario rekent
  * daarom met de heffing van dat jaar, ongeacht de keuze tussen nu en toen: het
@@ -248,9 +248,12 @@ export const OPSLAG_2026_INCL_BTW = 0.128848 - ENERGIEBELASTING_EXCL_BTW[2026] *
 /**
  * Hoeveel meer de standaardbatterij (met zonnepanelen, de standaardinvoer)
  * bespaart met de heffing van toen in plaats van die van nu: gemeten op de
- * volle jaren 2024 en 2025, 104,81 tegen 118,78 euro per jaar (+13,3%).
- * tests/voorbeeld.test.ts rekent het na; wijkt het af, dan klopt de tekst
- * op de pagina niet meer.
+ * volle jaren 2024 en 2025, 104,81 tegen 118,78 euro per jaar (+13,3%). Die
+ * twee bedragen zijn gemeten met afregelen aan, want dat was de standaard tot
+ * 30 september 2026. Sinds die dag staat afregelen standaard uit; de
+ * verhouding blijft binnen een procentpunt van de 13% (het bedrag van nu is
+ * ongeveer 105 euro). tests/voorbeeld.test.ts rekent het na met de huidige
+ * standaard; wijkt het af, dan klopt de tekst op de pagina niet meer.
  */
 export const BESPARING_MET_HEFFING_TOEN = 0.13;
 
@@ -312,15 +315,15 @@ export function hoeveelHoger(relatief: number): string {
   return `${verschil > 0 ? "ruim" : "bijna"} ${woord} hoger`;
 }
 
-/** "17,1 à 18 cent" of "17,4 cent": centen met hoogstens één decimaal. */
+/** "17,1 tot 18 cent" of "17,4 cent": centen met hoogstens één decimaal. */
 function centen(h: HeffingToen): string {
   const c = (v: number) => getal(v * 100, 1);
-  return Math.abs(h.hoogste - h.laagste) < 0.0005 ? `${c(h.laagste)} cent` : `${c(h.laagste)} à ${c(h.hoogste)} cent`;
+  return Math.abs(h.hoogste - h.laagste) < 0.0005 ? `${c(h.laagste)} cent` : `${c(h.laagste)} tot ${c(h.hoogste)} cent`;
 }
 
 /**
  * De zin over de heffing van toen, uit de data: "In 2024 en 2025 lag de
- * heffing ruim een derde hoger (17,1 à 18 cent tegen 12,9 cent nu)".
+ * heffing ruim een derde hoger (17,1 tot 18 cent tegen 12,9 cent nu)".
  */
 export function heffingToenZin(h: HeffingToen, jarenTekst: string, nu: number = HEFFING_NU): string {
   return `In ${jarenTekst} lag de heffing ${hoeveelHoger(h.gemiddeld / nu - 1)} (${centen(h)} tegen ${getal(nu * 100, 1)} cent nu)`;

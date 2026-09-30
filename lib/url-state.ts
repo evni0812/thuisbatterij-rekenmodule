@@ -154,6 +154,12 @@ export function schrijfUrl(
   extra: Record<string, string> = {},
   /** Een anker naar een figuur (`per-maand`), dat achter de URL blijft staan. */
   anker?: string,
+  /**
+   * `vervang` past de huidige adresbalk aan (invoer wijzigen); `duw` zet er een
+   * nieuwe stap in de geschiedenis bij (van tabblad wisselen). Zo brengt de
+   * terugknop je naar het vorige tabblad in plaats van de tool uit.
+   */
+  modus: "vervang" | "duw" = "vervang",
 ): void {
   if (typeof window === "undefined") return;
   const p = new URLSearchParams();
@@ -173,7 +179,10 @@ export function schrijfUrl(
   const doel =
     (query ? `${window.location.pathname}?${query}` : window.location.pathname) +
     (anker ? `#${anker}` : "");
-  // replaceState in plaats van pushState: elke schuif zou anders een stap in de
-  // geschiedenis worden en de terugknop onbruikbaar maken.
-  window.history.replaceState(null, "", doel);
+  // Invoer wijzigen vervangt de huidige stap: elke schuif zou anders een stap in
+  // de geschiedenis worden en de terugknop onbruikbaar maken. Alleen een
+  // tabwissel duwt een stap erbij, en niet als de adresbalk er al zo uitziet.
+  const huidig = window.location.pathname + window.location.search + window.location.hash;
+  if (modus === "duw" && doel !== huidig) window.history.pushState(null, "", doel);
+  else window.history.replaceState(null, "", doel);
 }

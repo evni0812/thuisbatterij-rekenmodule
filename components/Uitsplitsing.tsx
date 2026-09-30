@@ -20,48 +20,13 @@
 import { useState, type ReactNode } from "react";
 import type { SavingBreakdown } from "../lib/model/analysis";
 import { euro, euroAs, kwh } from "../lib/format";
-import { Figure, Grafiek, Raster, Trefvlak, kiesTicks, useTip } from "./chart-parts";
+import { AsLabel, Figure, Grafiek, Raster, Trefvlak, kiesTicks, useTip } from "./chart-parts";
 
 interface Post {
   label: string;
   uitleg: string;
   waarde: number;
   kleur: string;
-}
-
-/**
- * Een aslabel dat over twee regels breekt. Een kolom is hier ongeveer 170
- * eenheden breed en "Negatieve prijzen ontlopen" past daar op één regel net
- * niet in; over twee regels wel, en dan botsen de kolommen nooit.
- */
-function AsLabel({ x, y, tekst }: { x: number; y: number; tekst: string }) {
-  const woorden = tekst.split(" ");
-  if (tekst.length <= 16 || woorden.length < 2) {
-    return (
-      <text x={x} y={y} textAnchor="middle" className="as-label">
-        {tekst}
-      </text>
-    );
-  }
-  // Breek op het woord waarna beide helften het meest in balans zijn.
-  let knip = 1;
-  let beste = Infinity;
-  for (let i = 1; i < woorden.length; i++) {
-    const links = woorden.slice(0, i).join(" ").length;
-    const rechts = woorden.slice(i).join(" ").length;
-    if (Math.abs(links - rechts) < beste) {
-      beste = Math.abs(links - rechts);
-      knip = i;
-    }
-  }
-  return (
-    <text x={x} y={y} textAnchor="middle" className="as-label">
-      <tspan x={x}>{woorden.slice(0, knip).join(" ")}</tspan>
-      <tspan x={x} dy={13}>
-        {woorden.slice(knip).join(" ")}
-      </tspan>
-    </text>
-  );
 }
 
 const B = 760;
@@ -71,10 +36,13 @@ const MARGE = { boven: 26, rechts: 16, onder: 54, links: 62 };
 export function Uitsplitsing({
   breakdown,
   periodeLabel,
+  afregelen = false,
   actie,
 }: {
   breakdown: SavingBreakdown;
   periodeLabel: string;
+  /** Regelt de omvormer af bij een negatieve prijs? Standaard niet. */
+  afregelen?: boolean;
   /** De knop "Hoe is dit berekend?" in de kop. */
   actie?: ReactNode;
 }) {
@@ -83,15 +51,15 @@ export function Uitsplitsing({
 
   const posten: Post[] = [
     {
-      label: "Zelf verbruiken",
+      label: "Zelf gebruiken",
       uitleg:
         "Stroom die je opslaat in plaats van teruglevert, en later zelf gebruikt. " +
-        "Je bespaart het verschil tussen wat afname kost en wat teruglevering opbrengt.",
+        "Je bespaart het verschil tussen wat afname kost en wat je voor teruglevering krijgt.",
       waarde: breakdown.selfConsumptionEur,
       kleur: "var(--series-1)",
     },
     {
-      label: "Slim in- en verkopen",
+      label: "Slim laden en leveren",
       uitleg:
         "Laden als stroom goedkoop is en gebruiken als hij duur is, los van je eigen opwek.",
       waarde: breakdown.arbitrageEur,
@@ -137,16 +105,16 @@ export function Uitsplitsing({
   const midden = (i: number) => MARGE.links + kolomB * (i + 0.5);
 
   // De titel volgt de uitkomst. Een vaste kop zou de grafiek eronder kunnen
-  // tegenspreken zodra er weinig wordt teruggeleverd en de winst juist uit
+  // tegenspreken zodra er weinig wordt teruggeleverd en de besparing juist uit
   // prijsverschillen komt.
   const zelf = breakdown.selfConsumptionEur;
   const handel = breakdown.arbitrageEur;
   const titel =
     zelf > handel * 1.5
-      ? "De winst zit vooral in zelf verbruiken, niet in slim handelen"
+      ? "De besparing zit vooral in zelf gebruiken, niet in slim laden en leveren"
       : handel > zelf * 1.5
-        ? "Bij jouw invoer verdient de batterij vooral aan prijsverschillen"
-        : "Zelf verbruiken en slim handelen leveren ongeveer evenveel op";
+        ? "Bij jouw invoer komt de besparing vooral uit prijsverschillen"
+        : "Zelf gebruiken en slim laden en leveren besparen ongeveer evenveel";
 
   const aandeel = (v: number) =>
     breakdown.totalEur !== 0
@@ -165,7 +133,9 @@ export function Uitsplitsing({
           verschil waard. De {aantal} posten stapelen op tot de besparing over{" "}
           {periodeLabel}.
           {negatiefNul
-            ? " Negatieve prijzen ontlopen staat er niet bij: het model neemt aan dat je omvormer bij een negatieve prijs afregelt, en dan kost teruglevering op die momenten al niets."
+            ? afregelen
+              ? " Negatieve prijzen ontlopen staat er niet bij: je omvormer regelt bij een negatieve prijs af, en dan kost teruglevering op die momenten al niets."
+              : " Negatieve prijzen ontlopen staat er niet bij: bij deze invoer levert dat vrijwel niets op."
             : null}
         </>
       }
@@ -281,7 +251,7 @@ export function Uitsplitsing({
                     ? {
                         titel: p.label,
                         regels: [
-                          { kleur: p.kleur, label: "Levert op", waarde: euro(p.waarde) },
+                          { kleur: p.kleur, label: "Besparing", waarde: euro(p.waarde) },
                           { label: "Aandeel", waarde: aandeel(p.waarde) },
                         ],
                         noot: p.uitleg,
@@ -321,7 +291,7 @@ export function Uitsplitsing({
           <li key={p.label}>
             <span className="post-vlak" style={{ background: p.kleur }} />
             <span>
-              <b>{p.label}</b> — {p.uitleg}
+              <b>{p.label}</b>: {p.uitleg}
             </span>
           </li>
         ))}
@@ -330,10 +300,10 @@ export function Uitsplitsing({
       <p className="posten-noot">
         Bij het laden en ontladen ging {kwh(breakdown.conversionLossKwh)}{" "}
         verloren, goed voor ongeveer {euro(breakdown.conversionLossEur)}. Dat
-        staat hierboven niet als aparte kostenpost, want het is er al vanaf: je
-        bespaart minder afname dan je aan stroom opsloeg, en dat verschil ís het
-        verlies. Zonder omzettingsverlies had de batterij dus zo'n{" "}
-        {euro(breakdown.totalEur + breakdown.conversionLossEur)} opgeleverd.
+        staat hierboven niet als aparte kostenpost, want het zit al in de
+        besparing. Je haalt minder van het net dan je in de batterij stopte, en
+        dat verschil is het verlies. Zonder omzettingsverlies had je dus zo'n{" "}
+        {euro(breakdown.totalEur + breakdown.conversionLossEur)} bespaard.
       </p>
       <p className="posten-noot">
         Slijtage staat er evenmin tussen. Die is geen aparte kostenpost naast de

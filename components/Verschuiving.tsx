@@ -42,9 +42,12 @@ function netto(imp: number[], exp: number[]): number[] {
 
 export function Verschuiving({
   profielen,
+  zonnepanelen = true,
   actie,
 }: {
   profielen: SeasonProfile[];
+  /** Zonder zonnepanelen is er geen middagoverschot: dan gaat het om goedkoop laden en duur leveren. */
+  zonnepanelen?: boolean;
   /** De knop "Hoe is dit berekend?" in de kop. */
   actie?: ReactNode;
 }) {
@@ -126,18 +129,19 @@ export function Verschuiving({
       anker="zomer-en-winter"
       actie={actie}
       titel={
-        grootsteDaling[1] && grootsteDaling[1].kwh > (grootsteDaling[0]?.kwh ?? 0)
+        zonnepanelen && grootsteDaling[1] && grootsteDaling[1].kwh > (grootsteDaling[0]?.kwh ?? 0)
           ? "In de zomer verschuift de batterij een deel van je middagoverschot naar de avond"
-          : "De batterij haalt je avondpiek van het net af"
+          : grootsteDaling.every((d) => d.uur >= 17)
+            ? "De batterij haalt je avondpiek van het net af"
+            : "De batterij verschuift wat je van het net haalt naar andere uren"
       }
       toelichting={
         <>
           De gemiddelde dag in winter en zomer: wat er per uur door de meter
           gaat. Boven de nullijn haal je stroom van het net, eronder lever je
-          terug. <b>Het grijze vlak is hoe die dag eruitzag zonder batterij</b>;
-          de zwarte lijn is dezelfde dag mét, en de gekleurde kolommen zijn
-          precies het verschil. Hoe dichter beide bij de nullijn kruipen, hoe
-          minder het net van jou te verduren krijgt.
+          stroom aan het net. <b>Het grijze vlak is hoe die dag eruitzag zonder
+          batterij.</b> De zwarte lijn is dezelfde dag met batterij, en de
+          gekleurde kolommen zijn het verschil.
         </>
       }
     >
@@ -154,7 +158,7 @@ export function Verschuiving({
           aria-label={reeksen
             .map(
               (r, i) =>
-                `${r.profiel.season}: de batterij haalt om ${grootsteDaling[i]!.uur}:00 het meest van het net af, ${getal(
+                `${r.profiel.season}: de batterij haalt om ${grootsteDaling[i]!.uur}.00 uur het meest van het net af, ${getal(
                   grootsteDaling[i]!.kwh,
                   2,
                 )} kWh`,
@@ -167,8 +171,8 @@ export function Verschuiving({
               <g key={r.profiel.season}>
                 <text x={MARGE.links} y={paneelTop(i) - 10} className="paneel-titel">
                   {r.profiel.season === "winter"
-                    ? "Winter — oktober tot en met maart"
-                    : "Zomer — april tot en met september"}
+                    ? "Winter: oktober tot en met maart"
+                    : "Zomer: april tot en met september"}
                 </text>
 
                 {/* De aangewezen kolom, achter alles. */}
@@ -261,7 +265,7 @@ export function Verschuiving({
                     textAnchor="middle"
                     className="as-label"
                   >
-                    {u}:00
+                    {u}.00 uur
                   </text>
                 ))}
 
@@ -277,9 +281,7 @@ export function Verschuiving({
                       const p = r.profiel;
                       const verschil = r.met[u]! - r.zonder[u]!;
                       toon(punt, {
-                        titel: `${r.profiel.season === "winter" ? "Winter" : "Zomer"}, ${String(
-                          u,
-                        ).padStart(2, "0")}:00 – ${String((u + 1) % 24).padStart(2, "0")}:00`,
+                        titel: `${r.profiel.season === "winter" ? "Winter" : "Zomer"}, ${u}.00 tot ${u + 1}.00 uur`,
                         regels: [
                           {
                             kleur: ZONDER,
@@ -298,7 +300,7 @@ export function Verschuiving({
                             uitkomst: true,
                           },
                         ],
-                        noot: `Gemiddeld over ${getal(p.days, 0)} dagen. Teruglevering telt negatief.`,
+                        noot: `Gemiddeld over ${getal(p.days, 0)} dagen. Stroom naar het net telt negatief.`,
                       });
                     }}
                     onWis={() => {
@@ -340,8 +342,9 @@ export function Verschuiving({
       <p className="verschuiving-winst">
         <b>Wat het net ervan merkt.</b> Een net raakt niet overbelast door
         kilowatturen maar door pieken: het hoogste uur waarop iedereen tegelijk
-        afneemt, en het hoogste uur waarop iedereen tegelijk invoedt. Dit zijn
-        jouw twee pieken, zonder en met batterij.
+        stroom van het net haalt, en het hoogste uur waarop iedereen tegelijk
+        stroom aan het net levert. Dit zijn jouw twee pieken, zonder en met
+        batterij.
       </p>
 
       <dl className="kerncijfers">
@@ -354,9 +357,9 @@ export function Verschuiving({
               <dd>
                 {getal(p.afnameMet, 2)} kWh
                 <span className="dd-noot">
-                  om {p.afnameUur}:00, zonder batterij {getal(p.afnameZonder, 2)} kWh
+                  om {p.afnameUur}.00 uur, zonder batterij {getal(p.afnameZonder, 2)} kWh
                   {p.afnameZonder > 0.005
-                    ? ` — ${procent(1 - p.afnameMet / p.afnameZonder)} lager`
+                    ? `, ${procent(1 - p.afnameMet / p.afnameZonder)} lager`
                     : ""}
                 </span>
               </dd>
@@ -373,11 +376,11 @@ export function Verschuiving({
                 {getal(p.invoedingMet, 2)} kWh
                 <span className="dd-noot">
                   {p.invoedingZonder > 0.005
-                    ? `om ${p.invoedingUur}:00, zonder batterij ${getal(
+                    ? `om ${p.invoedingUur}.00 uur, zonder batterij ${getal(
                         p.invoedingZonder,
                         2,
-                      )} kWh — ${procent(1 - p.invoedingMet / p.invoedingZonder)} lager`
-                    : "je levert in dit seizoen nauwelijks terug"}
+                      )} kWh, ${procent(1 - p.invoedingMet / p.invoedingZonder)} lager`
+                    : "je levert in dit seizoen nauwelijks aan het net"}
                 </span>
               </dd>
             </div>

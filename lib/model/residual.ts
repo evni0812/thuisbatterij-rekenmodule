@@ -99,6 +99,15 @@ export const GEEN_SCHALING: NettingScale = { importScale: 1, exportScale: 1 };
  * jaartotalen in een deel van het jaar proppen. Deeljaren lenen de factoren van
  * een vol jaar, net zoals de normalisatie in build_assets.py dat doet.
  *
+ * ── Met spreiding ────────────────────────────────────────────────────────────
+ * De spreidingsfactor werkt op de netto reeks, en daarna wordt opnieuw per
+ * kwartier genet (zie buildResidualParts). Dat netten kost weer volume, dus de
+ * factoren worden op de gespreide reeks opgelost, met dezelfde bisectie. De som
+ * van de reeks blijft door het spreiden gelijk (per dag blijft het gemiddelde
+ * staan), dus het verschil van de twee vergelijkingen legt ook hier a vast.
+ * Geef `startMs` mee, want de dagen zijn lokale kalenderdagen; zonder tijdas
+ * zijn het blokken van 96, wat op de zomertijdovergangen een uur verschuift.
+ *
  * Zonder teruglevering (of zonder afname) valt er niets te netten en zijn de
  * factoren 1.
  *
@@ -111,17 +120,31 @@ export function solveNettingScale(
   importFraction: Float32Array,
   exportFraction: Float32Array,
   household: HouseholdSpec,
+  startMs?: Float64Array,
 ): NettingScale {
   const imp = household.annualGridImportKwh;
   const exp = household.annualGridExportKwh;
   if (imp <= 0 || exp <= 0) return GEEN_SCHALING;
+  const spreiding: Spreiding | undefined =
+    household.spreadFactor !== 1
+      ? {
+          factor: household.spreadFactor,
+          grenzen: startMs ? localDayStarts(startMs) : vasteBlokken(importFraction.length, 96),
+        }
+      : undefined;
   // Los op voor de kleine kant; de grote volgt uit de som van de reeks.
   if (imp >= exp) {
-    const [a, b] = schaalKleineKant(importFraction, imp, exportFraction, exp);
+    const [a, b] = schaalKleineKant(importFraction, imp, exportFraction, exp, spreiding);
     return { importScale: a, exportScale: b };
   }
-  const [b, a] = schaalKleineKant(exportFraction, exp, importFraction, imp);
+  const [b, a] = schaalKleineKant(exportFraction, exp, importFraction, imp, spreiding);
   return { importScale: a, exportScale: b };
+}
+
+/** De spreidingsfactor met de daggrenzen waarop hij werkt. */
+interface Spreiding {
+  factor: number;
+  grenzen: number[];
 }
 
 /**
@@ -133,6 +156,7 @@ function schaalKleineKant(
   grootVolume: number,
   kleinFractie: Float32Array,
   kleinVolume: number,
+  spreiding?: Spreiding,
 ): [number, number] {
   const n = Math.min(grootFractie.length, kleinFractie.length);
   let somGroot = 0;
@@ -143,9 +167,20 @@ function schaalKleineKant(
   }
   const groot = (klein: number) =>
     (grootVolume - kleinVolume + klein * kleinVolume * somKlein) / (grootVolume * somGroot);
+  const gespreid = spreiding ? new Float64Array(n) : undefined;
   const overschot = (klein: number) => {
     const g = groot(klein);
     let s = 0;
+    if (gespreid) {
+      // Het overschot van de kleine kant in de reeks zoals het model hem gebruikt:
+      // eerst gespreid, dan per kwartier genet.
+      for (let i = 0; i < n; i++) {
+        gespreid[i] = klein * kleinFractie[i]! * kleinVolume - g * grootFractie[i]! * grootVolume;
+      }
+      applySpread(gespreid, spreiding!.factor, spreiding!.grenzen);
+      for (let i = 0; i < n; i++) if (gespreid[i]! > 0) s += gespreid[i]!;
+      return s;
+    }
     for (let i = 0; i < n; i++) {
       const r = klein * kleinFractie[i]! * kleinVolume - g * grootFractie[i]! * grootVolume;
       if (r > 0) s += r;
@@ -154,6 +189,13 @@ function schaalKleineKant(
   };
 
   // Bij klein = 0 is het overschot nul; zoek een bovengrens door te verdubbelen.
+  // Gespreid is het overschot dan al iets groter dan nul (de nachtelijke uitslag
+  // naar de andere kant); haalt dat de meterstand al, dan is die onhaalbaar.
+  if (gespreid && overschot(0) >= kleinVolume) {
+    throw new Error(
+      `netting: ${kleinVolume} kWh is met dit profiel en deze spreiding niet te halen naast ${grootVolume} kWh`,
+    );
+  }
   // Bij de standaardinvoer ligt de oplossing rond 1,25, bij een verhouding van
   // duizend rond de 25; 2^40 is alleen haalbaar als het profiel geen zon kent.
   let laag = 0;
@@ -224,9 +266,12 @@ export function buildResidual(
  */
 export interface ResidualParts {
   residualKwh: Float64Array;
-  /** Afname van het net per kwartier vóór het netten, kWh (E17). */
+  /**
+   * Afname van het net per kwartier vóór het netten, kWh (E17). Met spreiding
+   * ongelijk aan 1 is dit de genette afname van de gespreide reeks.
+   */
   gridImportKwh: Float64Array;
-  /** Teruglevering aan het net per kwartier vóór het netten, kWh (E18). */
+  /** Idem voor de teruglevering (E18), kWh. */
   gridExportKwh: Float64Array;
 }
 
@@ -257,12 +302,16 @@ export function buildResidualParts(
   const spread = household.spreadFactor;
   if (spread !== 1) {
     const grenzen = startMs ? localDayStarts(startMs) : undefined;
-    // De componenten krijgen dezelfde behandeling als de netto reeks, anders
-    // klopt imp − exp = residual niet meer en zou de dagweergave iets anders
-    // tonen dan waarop gerekend is.
     applySpread(out, spread, grenzen);
-    applySpread(imp, spread, grenzen);
-    applySpread(exp, spread, grenzen);
+    // Na het spreiden opnieuw per kwartier netten. De componenten los spreiden
+    // (zoals eerder) hield het jaarverbruik niet gelijk en gaf negatieve
+    // kwartierwaarden; nu volgen ze uit de gespreide reeks, zodat imp − exp =
+    // residual blijft kloppen en de dagweergave toont waarop gerekend is.
+    for (let i = 0; i < n; i++) {
+      const r = out[i]!;
+      imp[i] = r > 0 ? r : 0;
+      exp[i] = r < 0 ? -r : 0;
+    }
   }
   return { residualKwh: out, gridImportKwh: imp, gridExportKwh: exp };
 }

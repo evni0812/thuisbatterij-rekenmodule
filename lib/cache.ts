@@ -104,7 +104,7 @@ export interface Bundel {
  * heffing per uur in plaats van een jaarconstante, en de uitvoerder die bewuste
  * verkoop aan het net doorlaat. Alle drie veranderen de bedragen.
  */
-export const MODEL_VERSIE = 17;
+export const MODEL_VERSIE = 18;
 
 /**
  * Alles van de cache staat onder zijn eigen voorvoegsel, `tbat:cache:`.

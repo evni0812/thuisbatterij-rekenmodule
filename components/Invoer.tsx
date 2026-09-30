@@ -14,7 +14,7 @@ import { PRESETS, type BatteryPreset } from "../lib/presets";
 import { DOELEN, doelInfo } from "../lib/model/doel";
 import type { Doel } from "../lib/model/types";
 import { STRATEGIEEN, strategieVoor } from "../lib/strategie";
-import { centPerKwh, euro, getal, kwh, procent } from "../lib/format";
+import { euro, getal, kwh, procent } from "../lib/format";
 import { GRENZEN } from "../lib/normaliseer";
 import { GetalInvoer } from "./GetalInvoer";
 
@@ -34,6 +34,8 @@ export function controleerInvoer(
   terugleveringKwh: number,
   preset: BatteryPreset,
   zonnepanelen = true,
+  /** De maat waarmee gerekend wordt, als die van de preset afwijkt (lib/configuratie.ts). */
+  maat: { capaciteitKwh: number; vermogenKw: number } = preset,
 ): Waarschuwing[] {
   const uit: Waarschuwing[] = [];
 
@@ -74,18 +76,19 @@ export function controleerInvoer(
   }
 
   const dagverbruik = afnameKwh / 365;
-  if (preset.capaciteitKwh > dagverbruik * 3 && dagverbruik > 0) {
+  if (maat.capaciteitKwh > dagverbruik * 3 && dagverbruik > 0) {
     uit.push({
       ernst: "info",
-      tekst: `Deze batterij (${getal(preset.capaciteitKwh, 2)} kWh) is groot ten opzichte van je ` +
+      tekst: `Deze batterij (${getal(maat.capaciteitKwh, 2)} kWh) is groot ten opzichte van je ` +
         `dagelijkse afname van ongeveer ${getal(dagverbruik, 1)} kWh. Hij zal zelden vollopen.`,
     });
   }
 
-  if (preset.vermogenKw > 5) {
+  if (maat.vermogenKw > 5) {
     uit.push({
       ernst: "info",
-      tekst: "Bij dit vermogen kan een gewone 1-fase aansluiting knellen. Controleer wat jouw " +
+      tekst: "Bij dit vermogen kan een 1-fase aansluiting knellen. Dat is een huisaansluiting met " +
+        "één fase in de meterkast, zoals veel woningen die hebben. Vraag je netbeheerder wat jouw " +
         "aansluiting aankan.",
     });
   }
@@ -94,21 +97,42 @@ export function controleerInvoer(
 }
 
 /**
- * Wat de gekozen slijtagestrategie in centen betekent, met een rekenvoorbeeld:
- * bij inkoop tegen 20 ct moet de verkoop- of vermeden prijs minstens het
- * omzettingsverlies plus de drempel hoger liggen voordat een beurt doorgaat.
+ * Wat de gekozen stand voor de laadbeurten betekent, in twee zinnen: alleen de
+ * kern, zonder getallen. Het rekenvoorbeeld staat in `slijtageVoorbeeld`.
  */
-export function slijtageHint(deel: number, slijtageprijsEur: number, rondgang: number): string {
+export function slijtageHint(deel: number): string {
   const st = strategieVoor(deel);
+  switch (st?.id) {
+    case "zuinig":
+      return "Zuinig: de batterij laadt en levert alleen als het prijsverschil groot genoeg is om de slijtage terug te verdienen. Minder laadbeurten, langere levensduur, lagere besparing.";
+    case "gebalanceerd":
+      return "Gebalanceerd: de batterij telt de helft van de slijtage mee. Hij doet mee met de duidelijke prijsverschillen en laat de krappe dagen liggen.";
+    case "maximaal":
+      return "Volop: de batterij laadt en levert ook bij een klein prijsverschil. Meer laadbeurten en een hogere besparing, maar ook meer slijtage.";
+    default:
+      return `Eigen stand (${procent(deel)}): de batterij telt ${procent(deel)} van de slijtage mee bij de keuze om te laden of te leveren.`;
+  }
+}
+
+/** Een bedrag per kWh in gewone woorden: "24,5 cent per kWh". */
+const centPer = (eur: number) => `${getal(eur * 100, 1)} cent per kWh`;
+
+/**
+ * Het rekenvoorbeeld bij de gekozen stand, in gewone taal: wat de aansturing
+ * meerekent en hoe groot het prijsverschil minstens moet zijn. Bij inkoop
+ * tegen 20 cent moet de stroom later minstens het omzettingsverlies plus de
+ * drempel meer waard zijn voordat een beurt doorgaat.
+ */
+export function slijtageVoorbeeld(deel: number, slijtageprijsEur: number, rondgang: number): string {
   const drempel = slijtageprijsEur * deel;
   const inkoop = 0.2;
   const verlies = rondgang > 0 ? inkoop / rondgang - inkoop : 0;
-  const naam = st ? st.naam : `Eigen stand (${procent(deel)})`;
-  if (slijtageprijsEur <= 0) return `${naam}: de planner rekent ${procent(deel)} van de slijtageprijs als drempel per geleverde kWh.`;
   return (
-    `${naam}: de planner rekent ${procent(deel)} van de slijtageprijs van ${centPerKwh(slijtageprijsEur)} mee, ` +
-    `dus ${centPerKwh(drempel)} per geleverde kWh. Bij inkoop tegen ${centPerKwh(inkoop)} gaat een beurt door als de stroom ` +
-    `later minstens ${centPerKwh(inkoop + verlies + drempel)} waard is: ${centPerKwh(verlies)} omzettingsverlies plus de drempel.`
+    `Een voorbeeld: koop je stroom in tegen ${centPer(inkoop)}, dan gaat er bij het omzetten ${centPer(verlies)} verloren. ` +
+    (drempel > 0
+      ? `De aansturing (de software die bepaalt wanneer de batterij laadt en levert) rekent daar ${centPer(drempel)} aan slijtage bij. `
+      : "Slijtage telt dan niet mee. ") +
+    `De batterij laadt dan alleen als die stroom je later minstens ${centPer(inkoop + verlies + drempel)} waard is.`
   );
 }
 
@@ -142,6 +166,9 @@ export function Invoer({
   terugleveringKwh,
   zonnepanelen = true,
   presetId,
+  capaciteitKwh,
+  vermogenKw,
+  prijsEur,
   onAfname,
   onTeruglevering,
   onZonnepanelen,
@@ -161,19 +188,26 @@ export function Invoer({
   /** Met (standaard) of zonder zonnepanelen; kiest het gemeten profiel. */
   zonnepanelen?: boolean;
   presetId: string;
+  /**
+   * De maat en prijs waarmee gerekend wordt (`effectieveBatterij` in
+   * lib/configuratie.ts). Zonder: die van de gekozen batterij.
+   */
+  capaciteitKwh?: number;
+  vermogenKw?: number;
+  prijsEur?: number;
   onAfname: (v: number) => void;
   onTeruglevering: (v: number) => void;
   onZonnepanelen?: (v: boolean) => void;
   onPreset: (id: string) => void;
-  /** Waar de planner op stuurt; zie lib/model/doel.ts. */
+  /** Waar de aansturing op stuurt; zie lib/model/doel.ts. */
   doel?: Doel;
   onDoel?: (d: Doel) => void;
-  /** Deel van de slijtageprijs dat de planner meerekent; zie lib/strategie.ts. */
+  /** Deel van de slijtageprijs dat de aansturing meerekent; zie lib/strategie.ts. */
   slijtageDeel?: number;
   onSlijtageDeel?: (deel: number) => void;
   /** Volle slijtageprijs per geleverde kWh van de gekozen batterij, euro; voor de uitleg in centen. */
   slijtageprijsEur?: number;
-  /** Rondgangsrendement van de batterij, 0–1; voor het minimale prijsverschil in de uitleg. */
+  /** Van elke kWh die je opslaat, komt dit deel terug (0 tot 1); voor het rekenvoorbeeld in de uitleg. */
   rondgang?: number;
   /** Reken door met de huidige invoer. */
   onBereken: () => void;
@@ -182,7 +216,19 @@ export function Invoer({
   bezig: boolean;
 }) {
   const preset = PRESETS.find((p) => p.id === presetId) ?? PRESETS[0]!;
-  const waarschuwingen = controleerInvoer(afnameKwh, terugleveringKwh, preset, zonnepanelen);
+  const cap = capaciteitKwh ?? preset.capaciteitKwh;
+  const kw = vermogenKw ?? preset.vermogenKw;
+  const prijs = prijsEur ?? preset.prijsEur;
+  const waarschuwingen = controleerInvoer(afnameKwh, terugleveringKwh, preset, zonnepanelen, {
+    capaciteitKwh: cap,
+    vermogenKw: kw,
+  });
+  // Wat er staat is wat er gerekend wordt; wijkt dat van de batterij af, dan zeggen we dat.
+  const aangepast = (afwijkt: boolean) => (afwijkt ? " (aangepast)" : "");
+  const batterijHint =
+    `${getal(cap, 2)} kWh${aangepast(cap !== preset.capaciteitKwh)} · ` +
+    `${getal(kw, 2)} kW${aangepast(kw !== preset.vermogenKw)} · ` +
+    `${euro(prijs)}${aangepast(prijs !== preset.prijsEur)}`;
 
   return (
     <div className="invoer">
@@ -213,8 +259,9 @@ export function Invoer({
             : "Gerekend met het gemeten gemiddelde kwartierpatroon van alle kleinverbruikers zonder teruglevering in je netgebied (MFFBAS), geschaald naar jouw jaarafname. Geen meting van één huishouden."}
         </p>
         <p className="invoer-keuze-hint">
-          Gerekend met een dynamisch energiecontract; wat dat betekent staat
-          bij het antwoord.
+          Gerekend met een dynamisch energiecontract: je betaalt per uur de
+          marktprijs. Wat dat betekent en wat je zonder salderen krijgt voor
+          teruglevering, staat bij het antwoord.
         </p>
       </div>
       <div className="invoer-velden">
@@ -223,19 +270,17 @@ export function Invoer({
           hint="Staat op je jaarafrekening onder 'verbruik' of 'geleverd'. Staan er een normaal- en een daltarief? Tel ze dan op."
           hintId="afname-hint"
         >
-          <div className="getal-veld">
-            {/* Klemt pas bij het verlaten van het veld (components/GetalInvoer.tsx):
-                een leeg veld is "nog niet ingevuld", niet 0. */}
-            <GetalInvoer
-              waarde={afnameKwh}
-              min={GRENZEN.afnameKwh.min}
-              max={GRENZEN.afnameKwh.max}
-              decimalen={GRENZEN.afnameKwh.decimalen}
-              onWaarde={(v) => v !== null && onAfname(v)}
-              aria-describedby="afname-hint"
-            />
-            <span className="eenheid">kWh</span>
-          </div>
+          {/* Klemt pas bij het verlaten van het veld (components/GetalInvoer.tsx):
+              een leeg veld is "nog niet ingevuld", niet 0. */}
+          <GetalInvoer
+            waarde={afnameKwh}
+            min={GRENZEN.afnameKwh.min}
+            max={GRENZEN.afnameKwh.max}
+            decimalen={GRENZEN.afnameKwh.decimalen}
+            eenheid="kWh"
+            onWaarde={(v) => v !== null && onAfname(v)}
+            aria-describedby="afname-hint"
+          />
         </Veld>
 
         {zonnepanelen ? (
@@ -244,21 +289,19 @@ export function Invoer({
           hint="Staat op je jaarafrekening onder 'teruglevering' of 'ingevoed'. Staan er een normaal- en een daltarief? Tel ze dan op."
           hintId="teruglevering-hint"
         >
-          <div className="getal-veld">
-            <GetalInvoer
-              waarde={terugleveringKwh}
-              min={GRENZEN.terugleveringKwh.min}
-              max={GRENZEN.terugleveringKwh.max}
-              decimalen={GRENZEN.terugleveringKwh.decimalen}
-              onWaarde={(v) => v !== null && onTeruglevering(v)}
-              aria-describedby="teruglevering-hint"
-            />
-            <span className="eenheid">kWh</span>
-          </div>
+          <GetalInvoer
+            waarde={terugleveringKwh}
+            min={GRENZEN.terugleveringKwh.min}
+            max={GRENZEN.terugleveringKwh.max}
+            decimalen={GRENZEN.terugleveringKwh.decimalen}
+            eenheid="kWh"
+            onWaarde={(v) => v !== null && onTeruglevering(v)}
+            aria-describedby="teruglevering-hint"
+          />
         </Veld>
         ) : null}
 
-        <Veld label="Welke batterij?" hint={`${getal(preset.capaciteitKwh, 2)} kWh · ${getal(preset.vermogenKw, 1)} kW · ${euro(preset.prijsEur)}`}>
+        <Veld label="Welke batterij?" hint={batterijHint}>
           <select value={presetId} onChange={(e) => onPreset(e.target.value)}>
             {PRESETS.map((p) => (
               <option key={p.id} value={p.id}>
@@ -268,6 +311,10 @@ export function Invoer({
           </select>
         </Veld>
       </div>
+      <p className="invoer-keuze-hint">
+        Capaciteit (kWh) is hoeveel stroom erin past; vermogen (kW) is hoe snel hij laadt en
+        levert.
+      </p>
 
       {/* De twee strategiekeuzes, hier bij de batterij in plaats van diep in de
           geavanceerde instellingen: waar de batterij op stuurt, en hoe zuinig hij
@@ -298,13 +345,12 @@ export function Invoer({
           <span className="veld-label">Hoe zuinig met de laadbeurten?</span>
           <div className="segment" role="group" aria-label="Slijtagestrategie">
             {STRATEGIEEN.map((st) => {
-              const drempel = slijtageprijsEur * st.deel;
               return (
                 <button
                   key={st.id}
                   type="button"
                   aria-pressed={strategieVoor(slijtageDeel)?.id === st.id}
-                  title={`${st.naam}: ${procent(st.deel)} van de slijtageprijs (${centPerKwh(drempel)} per geleverde kWh) als drempel. ${st.kort}`}
+                  title={`${slijtageHint(st.deel)} ${slijtageVoorbeeld(st.deel, slijtageprijsEur, rondgang)}`}
                   className={strategieVoor(slijtageDeel)?.id === st.id ? "segment-knop actief" : "segment-knop"}
                   onClick={() => onSlijtageDeel(st.deel)}
                 >
@@ -313,7 +359,7 @@ export function Invoer({
               );
             })}
           </div>
-          <p className="invoer-keuze-hint">{slijtageHint(slijtageDeel, slijtageprijsEur, rondgang)}</p>
+          <p className="invoer-keuze-hint">{slijtageHint(slijtageDeel)}</p>
         </div>
       ) : null}
 

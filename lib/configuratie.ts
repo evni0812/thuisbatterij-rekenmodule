@@ -24,7 +24,7 @@ import {
 import { STANDAARD_CO2_DREMPEL_G } from "./model/co2";
 import { STANDAARD_DOEL } from "./model/doel";
 import { STANDAARD_KOSTENREGEL, kostenVan } from "./model/kosten";
-import { normaliseer } from "./normaliseer";
+import { LAATSTE_DAG, VROEGSTE_DAG, normaliseer } from "./normaliseer";
 import { STANDAARD_SLIJTAGEDEEL } from "./strategie";
 import type { Instellingen } from "./url-state";
 import type { Configuration } from "./worker/protocol";
@@ -32,12 +32,9 @@ import type { Configuration } from "./worker/protocol";
 /** Het netgebied van Liander: het grootste, en daarmee het meest waarschijnlijke. */
 export const STANDAARD_NETGEBIED = "871685900000056162";
 
-/**
- * De eerste dag waarvoor er profieldata is, en de laatste die we ooit willen
- * meenemen. Leeg in de instellingen betekent: alles wat er is.
- */
-export const VROEGSTE_DAG = "2023-04-01";
-export const LAATSTE_DAG = "2026-12-31";
+// De grenzen van de periode wonen bij `normaliseer`, dat er de instellingen
+// mee klemt; hier blijven ze onder dezelfde naam bereikbaar.
+export { VROEGSTE_DAG, LAATSTE_DAG };
 
 export const STANDAARD: Instellingen = {
   afnameKwh: STANDAARD_AFNAME_KWH,
@@ -49,7 +46,9 @@ export const STANDAARD: Instellingen = {
   tot: "",
   spreiding: 1,
   terugleverkostenCt: 0,
-  curtailment: true,
+  // Afregelen bij een negatieve prijs staat uit: de meeste omvormers doen het
+  // niet vanzelf. Wie het wel kan, zet het aan bij de geavanceerde instellingen.
+  curtailment: false,
   // De heffing van nu (energiebelasting plus opslag van het meest recente
   // prijsjaar, 12,885 ct in 2026) over alle jaren: wat een koper vandaag wil
   // weten. Raster, huishoudens en de overgang rekenen op dezelfde configuratie
@@ -77,14 +76,64 @@ export function kiesPreset(presetId: string): BatteryPreset {
   return PRESETS.find((p) => p.id === presetId) ?? PRESETS[0]!;
 }
 
+/** De batterij zoals hij wordt doorgerekend, en waar hij van de gekozen preset afwijkt. */
+export interface EffectieveBatterij {
+  capaciteitKwh: number;
+  vermogenKw: number;
+  prijsEur: number;
+  /** Wijkt de waarde af van die van de preset? Dan staat hij als "aangepast" in beeld. */
+  aangepast: { capaciteit: boolean; vermogen: boolean; prijs: boolean };
+}
+
+/** `effectieveBatterij` voor instellingen die al door `normaliseer` zijn. */
+function effectief(inst: Instellingen): EffectieveBatterij {
+  const preset = kiesPreset(inst.presetId);
+  const kosten = {
+    perKwhEur: inst.kostenPerKwh,
+    perKwEur: inst.kostenPerKw,
+    installatieEur: inst.installatieEur,
+  };
+  const capaciteitKwh = inst.capaciteitKwh ?? preset.capaciteitKwh;
+  const vermogenKw = inst.vermogenKw ?? preset.vermogenKw;
+  const prijsEur =
+    inst.prijsEur ??
+    kostenVan(
+      { investmentEur: preset.prijsEur, capaciteitKwh: preset.capaciteitKwh, vermogenKw: preset.vermogenKw },
+      kosten,
+      capaciteitKwh,
+      vermogenKw,
+    );
+  return {
+    capaciteitKwh,
+    vermogenKw,
+    prijsEur,
+    aangepast: {
+      capaciteit: capaciteitKwh !== preset.capaciteitKwh,
+      vermogen: vermogenKw !== preset.vermogenKw,
+      prijs: prijsEur !== preset.prijsEur,
+    },
+  };
+}
+
 /**
- * Bouw de configuratie die de worker doorrekent.
+ * De capaciteit, het vermogen en de prijs waarmee gerekend wordt: de enige bron
+ * voor wat de pagina bij de batterij toont (het prijsveld, de hint onder de
+ * keuze, de slijtageprijs) én voor wat `maakConfiguratie` naar de worker stuurt.
  *
  * Capaciteit, vermogen en prijs komen uit de batterij, tenzij de gebruiker ze
  * zelf heeft overschreven. Is de maat overschreven maar de prijs niet, dan
  * volgt de prijs uit de kostenregel vanaf de preset: een Zendure van 10 kWh
  * kost niet 699 euro. Bij de presetmaat is dat exact de presetprijs, zodat de
  * standaardconfiguratie en haar hash niet veranderen.
+ */
+export function effectieveBatterij(invoer: Instellingen): EffectieveBatterij {
+  return effectief(normaliseer(invoer, STANDAARD));
+}
+
+/**
+ * Bouw de configuratie die de worker doorrekent.
+ *
+ * De batterijmaat en -prijs komen uit `effectieveBatterij`.
  *
  * De instellingen gaan eerst door `normaliseer` (lib/normaliseer.ts): wat hier
  * binnenkomt kan uit een URL of een oude bewaarde set komen, en een negatief
@@ -99,16 +148,7 @@ export function maakConfiguratie(invoer: Instellingen): Configuration {
     perKwEur: inst.kostenPerKw,
     installatieEur: inst.installatieEur,
   };
-  const capaciteit = inst.capaciteitKwh ?? preset.capaciteitKwh;
-  const vermogen = inst.vermogenKw ?? preset.vermogenKw;
-  const prijs =
-    inst.prijsEur ??
-    kostenVan(
-      { investmentEur: preset.prijsEur, capaciteitKwh: preset.capaciteitKwh, vermogenKw: preset.vermogenKw },
-      kosten,
-      capaciteit,
-      vermogen,
-    );
+  const { capaciteitKwh: capaciteit, vermogenKw: vermogen, prijsEur: prijs } = effectief(inst);
   // Zonder zonnepanelen is er niets om terug te leveren en geen eigen opwek;
   // het profiel wisselt naar de gemeten aansluitingen zonder invoeding. Het
   // veld blijft afwezig in het standaardgeval, zodat de hash niet verandert.

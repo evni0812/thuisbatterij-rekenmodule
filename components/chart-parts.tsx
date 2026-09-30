@@ -8,7 +8,7 @@
  * aan de kant van de waarde, en een legenda zodra er meer dan één serie is.
  */
 
-import { useCallback, useRef, useState, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { figuurNaam, type FiguurId } from "./Tabs";
 
 export const SERIES_VARS = [
@@ -64,6 +64,41 @@ export function FiguurNaam({ anker }: { anker: FiguurId }) {
     <a className="eyebrow figuur-naam" href={`#${anker}`} title="Link naar dit onderdeel">
       {figuurNaam(anker)}
     </a>
+  );
+}
+
+/**
+ * Een aslabel dat over twee regels breekt. In de opbouwgrafieken is een kolom
+ * ongeveer 170 eenheden breed en "Negatieve prijzen ontlopen" past daar op één regel net
+ * niet in; over twee regels wel, en dan botsen de kolommen nooit.
+ */
+export function AsLabel({ x, y, tekst }: { x: number; y: number; tekst: string }) {
+  const woorden = tekst.split(" ");
+  if (tekst.length <= 16 || woorden.length < 2) {
+    return (
+      <text x={x} y={y} textAnchor="middle" className="as-label">
+        {tekst}
+      </text>
+    );
+  }
+  // Breek op het woord waarna beide helften het meest in balans zijn.
+  let knip = 1;
+  let beste = Infinity;
+  for (let i = 1; i < woorden.length; i++) {
+    const links = woorden.slice(0, i).join(" ").length;
+    const rechts = woorden.slice(i).join(" ").length;
+    if (Math.abs(links - rechts) < beste) {
+      beste = Math.abs(links - rechts);
+      knip = i;
+    }
+  }
+  return (
+    <text x={x} y={y} textAnchor="middle" className="as-label">
+      <tspan x={x}>{woorden.slice(0, knip).join(" ")}</tspan>
+      <tspan x={x} dy={13}>
+        {woorden.slice(knip).join(" ")}
+      </tspan>
+    </text>
   );
 }
 
@@ -202,6 +237,24 @@ interface Punt {
 export function useTip() {
   const kader = useRef<HTMLDivElement>(null);
   const [tip, setTip] = useState<TipStand | null>(null);
+  const [breedte, setBreedte] = useState<number | null>(null);
+
+  // De gemeten breedte van het kader, voor grafieken die hun viewBox aan het
+  // scherm aanpassen in plaats van te schalen of te scrollen. Zolang er niets
+  // gemeten is (eerste render, jsdom) is het null: gebruik dan de standaardmaat.
+  useEffect(() => {
+    const el = kader.current;
+    if (!el) return;
+    const meet = () => {
+      const b = Math.round(el.getBoundingClientRect().width);
+      if (b > 0) setBreedte((oud) => (oud === b ? oud : b));
+    };
+    meet();
+    if (typeof ResizeObserver === "undefined") return;
+    const ro = new ResizeObserver(meet);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, []);
 
   const toon = useCallback((punt: Punt | null | undefined, inhoud: TipInhoud) => {
     const el = kader.current;
@@ -217,7 +270,7 @@ export function useTip() {
 
   const wis = useCallback(() => setTip(null), []);
 
-  return { kader, tip, toon, wis };
+  return { kader, tip, toon, wis, breedte };
 }
 
 /**
@@ -232,6 +285,7 @@ export function Grafiek({
   onWis,
   kader,
   klasse,
+  startAan,
   children,
 }: {
   /** Wat er in de scrollende regio te zien is, voor schermlezers. */
@@ -241,20 +295,102 @@ export function Grafiek({
   kader: ReturnType<typeof useTip>["kader"];
   /** Extra klasse op de scrollende laag, bijvoorbeeld voor een minimumbreedte. */
   klasse?: string;
+  /**
+   * Waar de scroll begint als de grafiek breder is dan het scherm. Standaard
+   * links; "einde" laat het meest recente (rechts) zien, zoals bij jaren.
+   */
+  startAan?: "begin" | "einde";
   children: ReactNode;
 }) {
   return (
     <div className="chart-hover" ref={kader} onMouseLeave={onWis}>
-      <div
-        className={klasse ? `chart-wrap ${klasse}` : "chart-wrap"}
-        tabIndex={0}
-        role="group"
-        aria-label={label ?? "Grafiek, horizontaal scrollbaar"}
+      <ScrollKader
+        klasse={klasse ? `chart-wrap ${klasse}` : "chart-wrap"}
+        startAan={startAan}
+        label={label ?? "Grafiek, horizontaal scrollbaar"}
       >
         {children}
-      </div>
+      </ScrollKader>
       <TipLaag tip={tip} />
     </div>
+  );
+}
+
+/**
+ * Een zijwaarts scrollende laag die zegt dat hij scrolt: de rand vervaagt aan
+ * de kant waar nog iets staat, en onder de laag staat een korte hint. Een
+ * afgesneden grafiek zonder aanwijzing leest als een grafiek die klaar is.
+ * Past alles, dan is er niets te zien.
+ */
+export function ScrollKader({
+  klasse = "chart-wrap",
+  label,
+  startAan,
+  children,
+}: {
+  klasse?: string;
+  label: string;
+  startAan?: "begin" | "einde";
+  children: ReactNode;
+}) {
+  const wrap = useRef<HTMLDivElement>(null);
+  const [rand, setRand] = useState({ links: false, rechts: false });
+  const gestart = useRef(false);
+
+  useEffect(() => {
+    const el = wrap.current;
+    if (!el) return;
+    const meet = () => {
+      // De minimumbreedte op smalle schermen volgt de viewBox (zie theme.css):
+      // een brede viewBox krijgt evenredig meer ruimte, zodat de letters overal
+      // even groot uitvallen.
+      const vb = el.querySelector("svg")?.viewBox?.baseVal;
+      if (vb && vb.width > 0) el.style.setProperty("--vb", String(Math.round(vb.width)));
+      const kan = el.scrollWidth - el.clientWidth > 4;
+      if (kan && !gestart.current) {
+        gestart.current = true;
+        if (startAan === "einde") el.scrollLeft = el.scrollWidth;
+      }
+      const links = kan && el.scrollLeft > 4;
+      const rechts = kan && el.scrollLeft < el.scrollWidth - el.clientWidth - 4;
+      setRand((o) => (o.links === links && o.rechts === rechts ? o : { links, rechts }));
+    };
+    meet();
+    el.addEventListener("scroll", meet, { passive: true });
+    if (typeof ResizeObserver === "undefined") return () => el.removeEventListener("scroll", meet);
+    const ro = new ResizeObserver(meet);
+    ro.observe(el);
+    const kind = el.firstElementChild;
+    if (kind) ro.observe(kind);
+    return () => {
+      el.removeEventListener("scroll", meet);
+      ro.disconnect();
+    };
+  }, [startAan]);
+
+  return (
+    <>
+      <div
+        className="chart-scrollkader"
+        data-links={rand.links || undefined}
+        data-rechts={rand.rechts || undefined}
+      >
+        <div
+          ref={wrap}
+          className={klasse}
+          tabIndex={0}
+          role="group"
+          aria-label={label}
+        >
+          {children}
+        </div>
+      </div>
+      {rand.links || rand.rechts ? (
+        <p className="chart-hint" aria-hidden="true">
+          <span>{rand.links && !rand.rechts ? "\u2190" : "\u2192"}</span> Veeg voor de rest van de grafiek
+        </p>
+      ) : null}
+    </>
   );
 }
 

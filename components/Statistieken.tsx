@@ -8,7 +8,7 @@
  * batterij doet. Elke tegel heeft zijn eigen "Hoe is dit berekend?" met de
  * getallen van deze doorrekening.
  *
- * Zelfconsumptie en autarkie vragen het bruto verbruik en de bruto opwek, en
+ * Eigen verbruik en zelf gedekt vragen het bruto verbruik en de bruto opwek, en
  * die staan niet op je jaarafrekening — daar staat alleen wat er door de meter
  * ging. Ze verschijnen daarom pas als je de jaaropwek van je panelen invult.
  */
@@ -18,6 +18,7 @@ import type { KeyStats } from "../lib/model/analysis";
 import { centPerKwh, euro, getal, kwh, meerMinder, procent } from "../lib/format";
 import { DIRECT_EIGEN_VERBRUIK_ZONDER_BATTERIJ } from "../lib/presets";
 import { UITLEG, type UitlegContext, type UitlegId } from "../lib/uitleg";
+import { FiguurNaam } from "./chart-parts";
 import { Uitleg } from "./Uitleg";
 
 /**
@@ -54,6 +55,8 @@ export function Tegel({
   waarde,
   van,
   naar,
+  vanLabel,
+  naarLabel,
   delta,
   deltaGoed,
   uitleg,
@@ -66,6 +69,9 @@ export function Tegel({
   /** Bij een verandering: de waarde zonder en met batterij. */
   van?: string;
   naar?: string;
+  /** Kleine labels boven de twee waarden: welke kant is nu, welke is straks. */
+  vanLabel?: string;
+  naarLabel?: string;
   /** Hoeveel er veranderde, in de eenheid die bij het cijfer past. */
   delta?: string;
   /** Is die verandering een verbetering? Bepaalt de kleur van het chipje. */
@@ -85,12 +91,18 @@ export function Tegel({
         {knop}
       </div>
       {van !== undefined && naar !== undefined ? (
-        <div className="stat-verloop">
-          <span className="stat-van">{van}</span>
+        <div className={vanLabel || naarLabel ? "stat-verloop met-labels" : "stat-verloop"}>
+          <span className="stat-kolom">
+            {vanLabel ? <span className="stat-kolomlabel">{vanLabel}</span> : null}
+            <span className="stat-van">{van}</span>
+          </span>
           <span className="stat-pijl" aria-label="wordt">
             →
           </span>
-          <span className="stat-naar">{naar}</span>
+          <span className="stat-kolom">
+            {naarLabel ? <span className="stat-kolomlabel">{naarLabel}</span> : null}
+            <span className="stat-naar">{naar}</span>
+          </span>
         </div>
       ) : (
         <div className="stat-waarde">{waarde}</div>
@@ -144,12 +156,27 @@ export function Statistieken({
     : null;
   const piekMinderKwh = stats.peakHourImportBaselineKwh - stats.peakHourImportBatteryKwh;
 
+  // De titel is een conclusie uit de getallen, geen herhaling van de kicker.
+  const gedekt =
+    zonnepanelen && stats.selfConsumptionBaseline !== null && stats.selfConsumptionBattery !== null
+      ? { van: stats.selfConsumptionBaseline, naar: stats.selfConsumptionBattery }
+      : null;
+  const titel =
+    gedekt && gedekt.naar > gedekt.van + 0.005
+      ? `Met de batterij gebruik je ${opwekBekend ? "" : "ongeveer "}${procent(gedekt.naar)} van je zonnestroom zelf, tegen ${procent(gedekt.van)} zonder`
+      : importStijgt
+        ? "De batterij verlaagt je afname niet, maar verschuift hem naar andere uren"
+        : stats.gridImportBaselineKwh - stats.gridImportBatteryKwh > 0.5
+          ? `Met de batterij haal je ${kwh(stats.gridImportBaselineKwh - stats.gridImportBatteryKwh)} per jaar minder van het net`
+          : "Met de batterij verandert je afname van het net nauwelijks";
+
   const knop = (id: UitlegId) =>
     context ? <Uitleg blok={UITLEG[id](context)} variant="icoon" /> : null;
 
   return (
     <section id="cijfers" className="statistieken">
-      <h3>De cijfers op een rij</h3>
+      <FiguurNaam anker="cijfers" />
+      <h3>{titel}</h3>
       <p className="statistieken-uitleg">
         Gemiddeld per jaar, over de volledige jaren in de gekozen periode.
       </p>
@@ -163,12 +190,14 @@ export function Statistieken({
         stats.selfConsumptionBattery !== null ? (
           <Tegel
             label="Eigen verbruik"
+            vanLabel="Zonder batterij"
+            naarLabel="Met batterij"
             van={procent(stats.selfConsumptionBaseline)}
             naar={procent(stats.selfConsumptionBattery)}
             delta={procentpunt(stats.selfConsumptionBaseline, stats.selfConsumptionBattery)}
             deltaGoed={stats.selfConsumptionBattery > stats.selfConsumptionBaseline}
-            uitleg={`Welk deel van wat je panelen opwekken, je ook zelf gebruikt.${
-              opwekBekend ? "" : " Op basis van een geschatte jaaropwek — zie hieronder."
+            uitleg={`Welk deel van je zonnestroom je zelf gebruikt.${
+              opwekBekend ? "" : " Op basis van een geschatte jaaropwek, zie hieronder."
             }`}
             accent="var(--series-5)"
             knop={knop("zelfconsumptie")}
@@ -179,13 +208,15 @@ export function Statistieken({
         stats.selfSufficiencyBaseline !== null &&
         stats.selfSufficiencyBattery !== null ? (
           <Tegel
-            label="Onafhankelijk van het net"
+            label="Zelf gedekt"
+            vanLabel="Zonder batterij"
+            naarLabel="Met batterij"
             van={procent(stats.selfSufficiencyBaseline)}
             naar={procent(stats.selfSufficiencyBattery)}
             delta={procentpunt(stats.selfSufficiencyBaseline, stats.selfSufficiencyBattery)}
             deltaGoed={stats.selfSufficiencyBattery > stats.selfSufficiencyBaseline}
-            uitleg={`Welk deel van je verbruik je zelf dekt, zonder het net.${
-              opwekBekend ? "" : " Op basis van een geschatte jaaropwek — zie hieronder."
+            uitleg={`Welk deel van je stroomverbruik van je eigen panelen komt, direct of via de batterij.${
+              opwekBekend ? "" : " Op basis van een geschatte jaaropwek, zie hieronder."
             }`}
             accent="var(--series-5)"
             knop={knop("autarkie")}
@@ -194,6 +225,8 @@ export function Statistieken({
 
         <Tegel
           label="Afname in de piekuren"
+          vanLabel="Zonder batterij"
+          naarLabel="Met batterij"
           van={procent(piekBasis)}
           naar={procent(piekBatterij)}
           delta={procentpunt(piekBasis, piekBatterij)}
@@ -205,20 +238,22 @@ export function Statistieken({
               </>
             ) : null
           }
-          uitleg={`Welk deel van wat je van het net haalt op de piekuren van het voorgestelde nettarief valt: in de winter 16.00–23.00 uur, in de zomer 19.00–24.00 uur. De batterij haalt er ${kwh(piekMinderKwh)} per jaar uit.`}
+          uitleg={`Welk deel van je afname valt op de duurste uren van het voorgestelde nettarief: in de winter van 16.00 tot 23.00 uur, in de zomer van 19.00 tot 24.00 uur. De batterij haalt er ${kwh(piekMinderKwh)} per jaar uit.`}
           accent="var(--ac)"
           knop={knop("piekuren")}
         />
 
         <Tegel
           label="Van het net"
+          vanLabel="Zonder batterij"
+          naarLabel="Met batterij"
           van={kwh(stats.gridImportBaselineKwh)}
           naar={kwh(stats.gridImportBatteryKwh)}
           delta={importDelta ?? undefined}
           deltaGoed={stats.gridImportBatteryKwh < stats.gridImportBaselineKwh}
           uitleg={
             importStijgt
-              ? "Wat je in een jaar van het net haalt, zonder en met batterij. De batterij laadt ook van het net, en met het omzettingsverlies erbij neem je per saldo iets meer af. De besparing zit in wánneer je afneemt, niet in hoeveel."
+              ? "Wat je in een jaar van het net haalt, zonder en met batterij. De batterij laadt ook van het net, en met het omzettingsverlies erbij haal je per saldo iets meer van het net. De besparing zit in wanneer je stroom haalt, niet in hoeveel."
               : "Wat je in een jaar van het net haalt, zonder en met batterij."
           }
           accent="var(--series-1)"
@@ -228,6 +263,8 @@ export function Statistieken({
         {zonnepanelen ? (
         <Tegel
           label="Naar het net"
+          vanLabel="Zonder batterij"
+          naarLabel="Met batterij"
           van={kwh(stats.gridExportBaselineKwh)}
           naar={kwh(stats.gridExportBatteryKwh)}
           delta={exportDelta ?? undefined}
@@ -253,7 +290,7 @@ export function Statistieken({
         <Tegel
           label="Laadbeurten"
           waarde={`${getal(stats.cyclesPerDay, 2)} per dag`}
-          uitleg={`${getal(stats.cyclesPerYear)} volledige beurten per jaar. Meer beurten kan meer opleveren, maar kost ook slijtage.`}
+          uitleg={`${getal(stats.cyclesPerYear)} volledige beurten per jaar. Meer laadbeurten kunnen meer besparen, maar kosten ook slijtage.`}
           accent="var(--series-3)"
           knop={knop("laadbeurten")}
         />
@@ -269,7 +306,7 @@ export function Statistieken({
         <Tegel
           label="Slijtage"
           waarde={`${euro(stats.wearCostPerYearEur)} per jaar`}
-          uitleg={`Wat de laadbeurten van de aanschafprijs opsouperen: ${centPerKwh(stats.wearCostEurPerKwh)} geleverd. Zit al in de aanschaf en is niet van de besparing afgetrokken.`}
+          uitleg={`Wat de laadbeurten van de aanschafprijs opsouperen: ${centPerKwh(stats.wearCostEurPerKwh)} geleverd. Die kosten zitten al in de aanschafprijs en zijn niet van de besparing afgetrokken.`}
           accent="var(--series-4)"
           knop={knop("slijtage")}
         />
@@ -277,7 +314,7 @@ export function Statistieken({
 
       {zonnepanelen && !opwekBekend ? (
         <p className="statistieken-noot">
-          <b>Eigen verbruik en onafhankelijkheid rusten op een schatting.</b> Ze
+          <b>Eigen verbruik en zelf gedekt rusten op een schatting.</b> Ze
           vragen je bruto jaaropwek, en die staat niet op je jaarafrekening: daar
           staat alleen wat er door de meter ging, niet wat je direct zelf
           verbruikte. We gaan uit van{" "}

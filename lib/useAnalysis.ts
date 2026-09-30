@@ -80,7 +80,7 @@ import {
   type NettariefJaar,
 } from "./nettarief";
 import { Gegevensdeler } from "./worker/ophalen";
-import { WorkerPool, poolGrootte } from "./worker/pool";
+import { REKENFOUT, WorkerPool, poolGrootte, type PoolFase } from "./worker/pool";
 import type {
   Configuration,
   GridPoint,
@@ -459,6 +459,12 @@ export function useAnalysis(config: Configuration | null, opties: AnalyseOpties 
   /** Voor welke configuratie de vergelijking nu getoond wordt, en de datum van haar voorbeelddag. */
   const vergelijkingCfg = useRef<Configuration | null>(null);
   const vergelijkingDag = useRef<string | null>(null);
+  /**
+   * Het id van de laatst gevraagde dag en periodes. Ze komen uit dezelfde teller
+   * als de pooltaken (`nextId`), zodat een fout of antwoord met id 7 nooit
+   * bij een dag hoort terwijl het een rastertaak was: eerder telde elk soort
+   * zijn eigen ids en vielen die samen.
+   */
   const dagId = useRef(0);
   const periodeId = useRef<Record<PeriodeKanaal, number>>({ verloop: 0, week: 0 });
   const opTerugleveringRef = useRef(false);
@@ -501,7 +507,8 @@ export function useAnalysis(config: Configuration | null, opties: AnalyseOpties 
     for (const k of kanaal ? [kanaal] : (["verloop", "week"] as PeriodeKanaal[])) {
       const vraag = periodeVraag.current[k];
       if (!vraag) continue;
-      const id = ++periodeId.current[k];
+      const id = ++nextId.current;
+      periodeId.current[k] = id;
       setState((s) =>
         k === "week" ? { ...s, weekBezig: true, weekFout: null } : { ...s, periodeBezig: true, periodeFout: null },
       );
@@ -893,9 +900,9 @@ export function useAnalysis(config: Configuration | null, opties: AnalyseOpties 
    * terugzet naar wat er stond, hoort alles terug te zien.
    */
   const wisAchtergrond = useCallback(() => {
-    dagId.current++;
-    periodeId.current.verloop++;
-    periodeId.current.week++;
+    dagId.current = ++nextId.current;
+    periodeId.current.verloop = ++nextId.current;
+    periodeId.current.week = ++nextId.current;
     gridIds.current = new Set();
     huishoudensIds.current = new Set();
     const pool = poolRef.current;
@@ -1227,8 +1234,39 @@ export function useAnalysis(config: Configuration | null, opties: AnalyseOpties 
     const fataal = (bericht: string) =>
       setState((s) => ({ ...s, busy: false, voortgang: null, fataal: bericht }));
     let pool: WorkerPool;
+    const foutVanPool = (bericht: string, fase: PoolFase, worker: number) => {
+      if (fase === "init") {
+        // De rekenmodule kon niet starten: de gegevens zijn niet te laden. Een
+        // helper die niet start is te missen; zonder hoofdworker, of zonder
+        // enige worker, kan er niets gerekend worden.
+        if (worker === 0 || !pool.heeftWerkers()) fataal(bericht);
+        return;
+      }
+      // Een worker liep vast nadat hij was gestart. De pool heeft hem vervangen
+      // en zijn lopende taak als fout afgesloten (dat gaat via `onBericht`, en
+      // komt bij de groep of figuur die erom vroeg). Hier de rest: wat direct
+      // naar de hoofdworker ging staat in geen wachtrij, en zijn bewaarde
+      // dispatches zijn weg.
+      if (!pool.heeftWerkers()) {
+        fataal(bericht);
+        return;
+      }
+      if (worker !== 0) return;
+      setState((s) => ({
+        ...s,
+        dagBezig: false,
+        dagFout: s.dagBezig ? bericht : s.dagFout,
+        periodeBezig: false,
+        periodeFout: s.periodeBezig ? bericht : s.periodeFout,
+        weekBezig: false,
+        weekFout: s.weekBezig ? bericht : s.weekFout,
+      }));
+      // De nieuwe hoofdworker begint zonder dispatches; warm hem op voor het
+      // getoonde antwoord, zodat de dagkiezer niet alles van voren af aan rekent.
+      if (getoondeCfg.current) warmOp(getoondeCfg.current);
+    };
     try {
-      pool = new WorkerPool(poolGrootte(), maakWorker, onBericht, fataal, deler);
+      pool = new WorkerPool(poolGrootte(), maakWorker, onBericht, foutVanPool, deler);
     } catch (err) {
       // Een browser zonder module-workers, of een beveiligingsregel die ze
       // tegenhoudt: dan kan er niets gerekend worden, en dat zeggen we.
@@ -1266,14 +1304,36 @@ export function useAnalysis(config: Configuration | null, opties: AnalyseOpties 
       huishoudensGroep.current = null;
       vergelijkingLopend.current.clear();
     };
-  }, [onBericht, poging]);
+  }, [onBericht, poging, warmOp]);
 
   const probeerOpnieuw = useCallback(() => {
     // Een nieuw manifest kan een nieuwe dataversie zijn; wat er getoond wordt
     // (een bewaard antwoord) wordt dan opnieuw bekeken.
     if (getoondVoor.current !== null) voorlopig.current = true;
     manifestRef.current = null;
-    setState((s) => ({ ...s, fataal: null, error: null, manifest: null, busy: false, voortgang: null }));
+    // De taken van de oude pool komen nooit meer terug. Wat halverwege stond
+    // (een half raster, huishoudens die nog "bezig" zijn) blijft anders voor
+    // altijd bezig en wordt niet opnieuw gestart, want de tab ziet dat er al
+    // iets staat. Volledige onderdelen blijven; de rest begint opnieuw.
+    gridIds.current = new Set();
+    huishoudensIds.current = new Set();
+    gridGroep.current = null;
+    huishoudensGroep.current = null;
+    vergelijkingLopend.current.clear();
+    setState((s) => ({
+      ...s,
+      fataal: null,
+      error: null,
+      manifest: null,
+      busy: false,
+      voortgang: null,
+      grid: s.grid?.klaar ? s.grid : null,
+      huishoudens: s.huishoudens?.klaar ? s.huishoudens : null,
+      vergelijking: s.vergelijking?.klaar ? s.vergelijking : null,
+      dagBezig: false,
+      periodeBezig: false,
+      weekBezig: false,
+    }));
     setPoging((p) => p + 1);
   }, []);
 
@@ -1313,13 +1373,14 @@ export function useAnalysis(config: Configuration | null, opties: AnalyseOpties 
     // erboven.
     const cfg = getoondeCfg.current;
     if (!pool || !cfg) return;
-    const id = ++dagId.current;
+    const id = ++nextId.current;
+    dagId.current = id;
     setState((s) => ({ ...s, dagBezig: true, dagFout: null }));
     pool.postDirect(0, { type: "day", id, date: datum, config: cfg } satisfies WorkerRequest);
   }, []);
 
   const wisDag = useCallback(() => {
-    dagId.current++;
+    dagId.current = ++nextId.current;
     setState((s) => ({ ...s, dag: null, dagBezig: false, dagOntbreekt: null, dagFout: null }));
   }, []);
 

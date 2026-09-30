@@ -7,8 +7,9 @@
  * lokaal: er gaat niets naar een server, en wat je bewaart is met één klik weg.
  */
 
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { datum } from "../lib/format";
+import { FiguurNaam } from "./chart-parts";
 import {
   MAX_PROFIELEN,
   bewaarLaatste,
@@ -37,16 +38,43 @@ export function Bewaren({
 }) {
   const [naam, setNaam] = useState("");
   const [melding, setMelding] = useState<string | null>(null);
+  /** De wisknop wacht op een tweede klik. */
+  const [zekerWissen, setZekerWissen] = useState(false);
+  const meldTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const wisTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
+  // Een timer die na het verdwijnen van het onderdeel nog afgaat zet state op
+  // iets dat er niet meer is.
+  useEffect(
+    () => () => {
+      if (meldTimer.current) clearTimeout(meldTimer.current);
+      if (wisTimer.current) clearTimeout(wisTimer.current);
+    },
+    [],
+  );
+
+  // Een nieuwe melding neemt de plaats van de vorige, en de timer van de vorige
+  // gaat mee weg: anders haalt die de nieuwe melding te vroeg van het scherm.
   const meld = (tekst: string) => {
+    if (meldTimer.current) clearTimeout(meldTimer.current);
     setMelding(tekst);
-    setTimeout(() => setMelding(null), 3000);
+    meldTimer.current = setTimeout(() => {
+      setMelding(null);
+      meldTimer.current = null;
+    }, 3000);
+  };
+
+  const stopWissen = () => {
+    if (wisTimer.current) clearTimeout(wisTimer.current);
+    wisTimer.current = null;
+    setZekerWissen(false);
   };
 
   return (
     <section id="bewaren" className="bewaren" aria-labelledby="bewaren-kop">
       <div className="bewaren-kop">
         <div>
+          <FiguurNaam anker="bewaren" />
           <h2 id="bewaren-kop">Instellingen bewaren</h2>
           <p>
             In deze browser, nergens anders. Bewaarde instellingen laden vanzelf
@@ -72,13 +100,21 @@ export function Bewaren({
             <button
               type="button"
               className="knop licht"
+              onBlur={stopWissen}
               onClick={() => {
+                if (!zekerWissen) {
+                  // Eerst een tweede klik, zodat je het niet per ongeluk wist.
+                  setZekerWissen(true);
+                  wisTimer.current = setTimeout(stopWissen, 5000);
+                  return;
+                }
+                stopWissen();
                 vergeetLaatste();
                 onLaatste(null);
-                meld("Vergeten.");
+                meld("Bewaarde instellingen gewist.");
               }}
             >
-              Vergeet
+              {zekerWissen ? "Zeker weten? Klik nogmaals" : "Wis bewaarde instellingen"}
             </button>
           ) : null}
         </div>
@@ -90,7 +126,7 @@ export function Bewaren({
             type="text"
             maxLength={40}
             value={naam}
-            placeholder="Naam, bijvoorbeeld ‘Thuis’ of ‘Ouders’"
+            placeholder="Naam, bijvoorbeeld 'Thuis' of 'Ouders'"
             aria-label="Naam voor dit profiel"
             onChange={(e) => setNaam(e.target.value)}
           />
@@ -104,7 +140,7 @@ export function Bewaren({
             if (nieuw) {
               onProfielen(nieuw);
               setNaam("");
-              meld(`Profiel “${naam.trim()}” bewaard.`);
+              meld(`Profiel '${naam.trim()}' bewaard.`);
             } else {
               meld(`Hoogstens ${MAX_PROFIELEN} profielen; verwijder er eerst een.`);
             }
@@ -121,7 +157,7 @@ export function Bewaren({
               <span className="profiel-naam">{p.naam}</span>
               <span className="profiel-meta">
                 {p.inst.afnameKwh} kWh af, {p.inst.terugleveringKwh} kWh terug
-                {p.bewaard ? ` · ${datum(p.bewaard.slice(0, 10))}` : ""}
+                {typeof p.bewaard === "string" && p.bewaard ? ` · ${datum(p.bewaard.slice(0, 10))}` : ""}
               </span>
               <button type="button" className="knop klein" onClick={() => onLaad(p.inst)}>
                 Laad

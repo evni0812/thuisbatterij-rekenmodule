@@ -30,7 +30,7 @@ import { deelVan, type VergelijkingDeel } from "../lib/model/vergelijking";
 import type { VergelijkingState } from "../lib/useAnalysis";
 import type { Doel } from "../lib/model/types";
 import { Co2Maanden } from "../components/Co2Maanden";
-import { Co2Nederland } from "../components/Co2Nederland";
+import { Co2Nederland, Co2OverschotStaven } from "../components/Co2Nederland";
 import { Co2Uren } from "../components/Co2Uren";
 import { co2Jaar } from "../lib/model/co2";
 import type { DispatchResult, Window } from "../lib/model/types";
@@ -40,8 +40,8 @@ import { huishoudensVarianten } from "../lib/model/huishoudens";
 import { RASTER_GRONDSLAG } from "../lib/model/dimensionering";
 import { Verloop } from "../components/Verloop";
 import { dagenLater, maandagVan, type PeriodeReeks } from "../lib/model/periode";
-import { Tariefblad } from "../components/Tariefblad";
-import { Invoer, controleerInvoer, slijtageHint } from "../components/Invoer";
+import { Tariefblad, TEKST_DONKER, TEKST_LICHT, TINT_HEX, contrast, tekstOpTint, tintVoorFactor } from "../components/Tariefblad";
+import { Invoer, controleerInvoer, slijtageHint, slijtageVoorbeeld } from "../components/Invoer";
 import { expandPricesToQuarters, loadManifest, loadPriceYear, loadProfileYear } from "../lib/data/loader";
 import type { Manifest } from "../lib/data/manifest";
 import { addDays, localMidnightUtcMs } from "../lib/data/timeaxis";
@@ -164,13 +164,13 @@ describe("de pagina toont het antwoord", () => {
     render(<Antwoord result={result} scenario={null} overgang={null} investeringEur={699} bezig={false} />);
     const tekst = document.body.textContent ?? "";
     expect(tekst).toMatch(/had deze batterij je/);
-    expect(tekst).toMatch(/Blijven de komende jaren hierop lijken|blijven lijken/);
+    expect(tekst).toMatch(/We nemen aan dat de prijzen de komende jaren zijn zoals in \d{4}/);
     expect(tekst).toMatch(/aanname, geen voorspelling/);
     // De grondslag en de voorwaarden staan in het antwoord zelf, niet alleen in
     // de uitleg: welke jaren, welke heffing, welk contract, en wat er niet in zit.
     expect(tekst).toMatch(/Doorgerekend op de uurprijzen van \d{4}.* met de belasting en\s+opslag van nu/);
     expect(tekst).toMatch(/dynamisch energiecontract/);
-    expect(tekst).toMatch(/eigen stroomverbruik van de\s+batterij/);
+    expect(tekst).toMatch(/stand-byverbruik van de\s+batterij/);
   });
 
   it("zegt waar de batterij op stuurde, niet altijd de uurprijzen", () => {
@@ -202,7 +202,7 @@ describe("de pagina toont het antwoord", () => {
     // Het omzettingsverlies staat naast de optelling, met uitleg waarom.
     expect(document.body.textContent).toMatch(/ging.*verloren/);
     expect(document.body.textContent).toMatch(/Slijtage staat er evenmin tussen/);
-    expect(screen.getAllByText(/Zelf verbruiken/).length).toBeGreaterThan(0);
+    expect(screen.getAllByText(/Zelf gebruiken/).length).toBeGreaterThan(0);
   });
 
   it("zet de posten van de waterval op elkaar, eindigend op het totaal", () => {
@@ -263,8 +263,8 @@ describe("de pagina toont het antwoord", () => {
     expect(tekst).toMatch(/prijsverschil op deze dag/);
     // De vergelijking met perfecte kennis: dat is waar het verschil tussen de
     // twee strategieën zichtbaar wordt.
-    expect(tekst).toMatch(/van wat er in zat/);
-    expect(tekst).toMatch(/met perfecte kennis/);
+    expect(tekst).toMatch(/van het maximaal haalbare/);
+    expect(tekst).toMatch(/perfecte kennis van morgen/);
   });
 
   it("laat met de pijltjes naar de dag ernaast springen", () => {
@@ -332,8 +332,8 @@ describe("de pagina toont het antwoord", () => {
     render(<Cashflow finance={result.finance} overgang={null} investeringEur={1199} />);
     const tekst = document.body.textContent ?? "";
     expect(tekst).toMatch(/Terugverdientijd/);
-    expect(tekst).toMatch(/Contante waarde/);
-    expect(tekst).toMatch(/Rendement/);
+    expect(tekst).toMatch(/Netto resultaat/);
+    expect(tekst).toMatch(/Rendement op je aankoop/);
   });
 
   it("rekent de uitleg van de cashflow op dezelfde grondslag als de kaart, met de overgang", () => {
@@ -352,18 +352,18 @@ describe("de pagina toont het antwoord", () => {
     expect(overgang.finance.paybackYears).not.toBe(result.finance.paybackYears);
     const blok = UITLEG.cashflow({ result, scenario, config, preset: PRESETS[1]! });
     const regels = blok.voorbeeld!.regels;
-    const tvt = regels.find((r) => /^Terugverdiend na, als het nettarief-voorstel doorgaat/.test(String(r.wat)));
+    const tvt = regels.find((r) => /^Terugverdientijd, als het nettarief-voorstel doorgaat/.test(String(r.wat)));
     expect(tvt?.waarde).toBe(jaren(overgang.finance.paybackYears));
-    expect(regels.find((r) => r.wat === "Netto contante waarde")?.waarde).toBe(euro(overgang.finance.npvEur));
+    expect(regels.find((r) => r.wat === "Netto resultaat")?.waarde).toBe(euro(overgang.finance.npvEur));
     expect(
       regels.some(
         (r) =>
-          /^Ter vergelijking, als het nettarief blijft zoals nu: terugverdiend na/.test(String(r.wat)) &&
+          /^Ter vergelijking, als het nettarief blijft zoals nu: terugverdientijd/.test(String(r.wat)) &&
           r.waarde === jaren(result.finance.paybackYears),
       ),
     ).toBe(true);
     // Het opgetelde bedrag is al na aftrek van de aanschaf, en dat staat erbij.
-    expect(regels.some((r) => /netto na aftrek van de aanschaf/.test(String(r.wat)))).toBe(true);
+    expect(regels.some((r) => /min de aanschaf/.test(String(r.wat)))).toBe(true);
     render(
       <Cashflow finance={result.finance} overgang={overgang} investeringEur={config.investmentEur} cycleLife={config.cycleLife} />,
     );
@@ -371,7 +371,7 @@ describe("de pagina toont het antwoord", () => {
     expect(tekst).toContain(jaren(overgang.finance.paybackYears));
     // Grote getallen met een duizendtalpunt, en de grondslag van het totaal.
     expect(tekst).toMatch(/Laadbeurten in totaal\d{1,3}(\.\d{3})*/);
-    expect(tekst).toMatch(/met het nettarief vanaf 2029 handelt de batterij vaker/);
+    expect(tekst).toMatch(/met het nettarief vanaf 2029 laadt en levert de batterij vaker/);
   });
 
   it("verantwoordt de bron en de beperkingen", () => {
@@ -550,7 +550,7 @@ describe("kerncijfers en herberekenen", () => {
     render(<Statistieken stats={metOpwek} opwekBekend geschatteOpwek={2877} />);
     const tekst = document.body.textContent ?? "";
     expect(tekst).toMatch(/Eigen verbruik/);
-    expect(tekst).toMatch(/Onafhankelijk van het net/);
+    expect(tekst).toMatch(/Zelf gedekt/);
     expect(tekst).toMatch(/Afname in de piekuren/);
     // Het verschil staat erbij, in procentpunten — niet als percentage van een
     // percentage, want dat getal klopt wel en zegt niets.
@@ -582,7 +582,7 @@ describe("kerncijfers en herberekenen", () => {
     expect(zonder.selfConsumptionBaseline).toBeNull();
     render(<Statistieken stats={zonder} opwekBekend={false} geschatteOpwek={0} zonnepanelen={false} />);
     const tekst = document.body.textContent ?? "";
-    expect(tekst).not.toMatch(/Onafhankelijk van het net/);
+    expect(tekst).not.toMatch(/Zelf gedekt/);
     expect(tekst).not.toMatch(/Eigen verbruik/);
     expect(tekst).not.toMatch(/Naar het net/);
     expect(tekst).not.toMatch(/rusten op een schatting/);
@@ -631,7 +631,7 @@ describe("kerncijfers en herberekenen", () => {
     // Bij gewijzigde invoer hoort de knop om aandacht te vragen: anders kijk je
     // naar een uitkomst die niet meer bij je instellingen hoort.
     expect(screen.getByText("Instellingen gewijzigd")).toBeDefined();
-    const knop = screen.getByRole("button", { name: /Bereken opnieuw/ });
+    const knop = screen.getByRole("button", { name: /Reken door/ });
     fireEvent.click(knop);
     expect(opBereken).toHaveBeenCalledOnce();
   });
@@ -840,7 +840,7 @@ describe("de instellingen zijn geordend op wat ze veranderen", () => {
     ]);
     const tekst = document.body.textContent ?? "";
     // De groep die de fysica niet raakt, zegt dat met zoveel woorden.
-    expect(tekst).toMatch(/Niet de jaaropbrengst/);
+    expect(tekst).toMatch(/Niet de jaarbesparing/);
   });
 
   it("zet capaciteitsverlies bij de batterij, niet bij de doorrekening", () => {
@@ -862,15 +862,17 @@ describe("de instellingen zijn geordend op wat ze veranderen", () => {
   });
 
   it("meldt hoeveel instellingen afwijken van de standaard", () => {
-    // LEGE_INSTELLINGEN kiest bewust een andere batterij dan de standaard, dus
-    // dat is al één afwijking; hier zetten we hem gelijk om vanaf nul te tellen.
-    toon({ presetId: STANDAARD.presetId });
+    // LEGE_INSTELLINGEN kiest bewust een andere batterij dan de standaard en
+    // regelt af bij negatieve prijzen; hier zetten we beide gelijk om vanaf nul
+    // te tellen.
+    const standaard = { presetId: STANDAARD.presetId, curtailment: STANDAARD.curtailment };
+    toon(standaard);
     expect(
       screen.getByRole("button", { name: /Alles staat op de standaardwaarden/ }),
     ).toBeDefined();
 
     cleanup();
-    toon({ presetId: STANDAARD.presetId, discontovoet: 0.05, spreiding: 1.4 });
+    toon({ ...standaard, discontovoet: 0.05, spreiding: 1.4 });
     expect(screen.getByRole("button", { name: /2 gewijzigd/ })).toBeDefined();
   });
 });
@@ -922,7 +924,7 @@ describe("het nettarief van 2029", () => {
     expect(tekst).toMatch(/17,8 ct/);
     expect(tekst).toMatch(/0 ct/);
     expect(tekst).toMatch(/piek/);
-    expect(tekst).toMatch(/gratis/);
+    expect(tekst).toMatch(/geen tarief/);
     // Waar je vandaan komt: nul per kilowattuur, als nulpunt van de as.
     expect(tekst).toMatch(/nu 0/);
     expect(tekst).toMatch(/vast bedrag per jaar/);
@@ -941,7 +943,7 @@ describe("het nettarief van 2029", () => {
     const tekst = document.body.textContent ?? "";
     expect(tekst).toMatch(/vast bedrag per jaar/);
     expect(tekst).toMatch(/per kilowattuur/);
-    expect(tekst).toMatch(/het moment/);
+    expect(tekst).toMatch(/het tijdstip/);
     // De verantwoording staat uitgeklapt, niet in de lopende tekst.
     const uitklap = document.querySelectorAll("details.voetnoot-uitklap");
     expect(uitklap.length).toBe(1);
@@ -1006,8 +1008,8 @@ describe("de profielverschuiving", () => {
   it("tekent beide seizoenen met hun uren en een legenda", () => {
     render(<Verschuiving profielen={result.seasonProfiles} />);
     const tekst = document.body.textContent ?? "";
-    expect(tekst).toMatch(/Winter — oktober tot en met maart/);
-    expect(tekst).toMatch(/Zomer — april tot en met september/);
+    expect(tekst).toMatch(/Winter: oktober tot en met maart/);
+    expect(tekst).toMatch(/Zomer: april tot en met september/);
     expect(tekst).toMatch(/de batterij levert/);
     // De grijze vorm heet bij naam wat hij is, niet "je profiel".
     expect(tekst).toMatch(/zonder batterij: wat er door de meter ging/);
@@ -1153,7 +1155,7 @@ describe("de pagina vertelt het verhaal in zeven tabbladen, in die volgorde", ()
     const tekst = document.body.textContent ?? "";
     // Het nettarief is een voorstel, geen feit.
     // Het voorstel komt van de netbeheerders; de ACM beslist.
-    expect(tekst).toMatch(/Gaat het voorstel van de netbeheerders door \(de ACM beslist\s+erover\)/);
+    expect(tekst).toMatch(/Gaat het voorstel van de netbeheerders door.*De ACM \(Autoriteit\s+Consument & Markt\) beslist daarover/);
     expect(tekst).not.toMatch(/voorstel van de ACM/);
     expect(tekst).toMatch(/mogelijk later/);
     // Eén vetgedrukt hoofdgetal: de terugverdientijd mét de overgang. Die van
@@ -1161,10 +1163,10 @@ describe("de pagina vertelt het verhaal in zeven tabbladen, in die volgorde", ()
     const vet = [...document.querySelectorAll(".antwoord-zin strong")].map((el) => el.textContent);
     expect(vet).toEqual([
       overgang.finance.paybackYears === null
-        ? "niet terugverdiend"
+        ? "niet terugverdiend binnen de looptijd"
         : expect.stringMatching(/^terugverdiend na /),
     ]);
-    expect(tekst).toMatch(/gaat het voorstel voor het\s+nieuwe nettarief door/);
+    expect(tekst).toMatch(/Gaat het voorstel voor het nieuwe nettarief door/);
     expect(tekst).toMatch(/Blijft\s+het nettarief zoals nu/);
     expect(tekst).toMatch(new RegExp(`eerst\\s+${overgang.jarenOpHuidigTarief} jaar\\s+met\\s+het huidige nettarief`));
     // De overgang volgt uit Overgang.start (1 januari 2027) en twee jaar op
@@ -1232,7 +1234,7 @@ describe("het batterijraster is leesbaar", () => {
     // 2 kWh bij 0,8 kW: de dubbele besparing voor 320 euro meer, en geen
     // installateur. De vaste kolom kost 300 euro extra voor minder besparing.
     expect(beste[0]!.getAttribute("aria-label")).toMatch(/^2 kWh bij 0.8 kW/);
-    expect(beste[0]!.getAttribute("aria-label")).toMatch(/het hoogste netto resultaat in dit raster/);
+    expect(beste[0]!.getAttribute("aria-label")).toMatch(/het hoogste netto resultaat in deze tabel/);
   });
 
   it("geeft elk vakje dezelfde vorm, zodat de kolommen uitlijnen", () => {
@@ -1264,7 +1266,7 @@ describe("het batterijraster is leesbaar", () => {
     toon();
     expect(document.body.textContent).not.toMatch(/geen rekenfout/);
     fireEvent.click(screen.getByRole("button", { name: "Besparing per jaar" }));
-    expect(document.body.textContent).toMatch(/méér vermogen iets mínder/);
+    expect(document.body.textContent).toMatch(/meer vermogen iets minder/);
     expect(document.body.textContent).toMatch(/geen rekenfout/);
   });
 });
@@ -1607,7 +1609,7 @@ describe("de week bij het dagprofiel", () => {
      * vraagt niets meer.
      */
     const { vraagWeek } = toon(null);
-    expect(document.body.textContent).toMatch(/op een dag precies doet/);
+    expect(document.body.textContent).toMatch(/Op deze dag laadt de batterij vooral/);
     expect(vraagWeek).toHaveBeenCalledTimes(1);
     const [van, tot] = vraagWeek.mock.calls[0]!;
     expect(van).toBe(maandagVan(result.sampleDays[0]!.date));
@@ -1628,7 +1630,7 @@ describe("de week bij het dagprofiel", () => {
     const { container } = toon(weekReeks(result.sampleDays[0]!.date));
     fireEvent.click(screen.getByRole("button", { name: "Week" }));
 
-    expect(document.body.textContent).toMatch(/in een week precies doet/);
+    expect(document.body.textContent).toMatch(/In deze week laadt de batterij vooral/);
 
     /*
      * Alleen de labels van het dagprofiel zelf, niet die van elke figuur op de
@@ -1702,7 +1704,7 @@ describe("het wachtscherm", () => {
 
   it("toont tijdens het rekenen de stappen met hun stand en een voortgangsbalk", () => {
     render(<Wachtscherm voortgang={voortgang} bezig verouderd={false} eersteKeer={false} onBereken={() => {}} />);
-    expect(document.body.textContent).toMatch(/opnieuw berekend/);
+    expect(document.body.textContent).toMatch(/opnieuw uit/);
     expect(document.body.textContent).toMatch(/2 van 4/);
     expect(document.body.textContent).toMatch(/1 van 2/);
     const balk = screen.getByRole("progressbar");
@@ -1723,7 +1725,7 @@ describe("het wachtscherm", () => {
         onBereken={() => {}}
       />,
     );
-    expect(document.body.textContent).toMatch(/Je antwoord wordt berekend/);
+    expect(document.body.textContent).toMatch(/We rekenen je antwoord uit/);
     const stappen = [...document.querySelectorAll(".wacht-stappen li")];
     expect(stappen.slice(0, 3).map((s) => s.className)).toEqual(["klaar", "klaar", "klaar"]);
     expect(stappen[3]!.className).toBe("bezig");
@@ -1731,7 +1733,7 @@ describe("het wachtscherm", () => {
 
   it("laat zonder stand een onbepaalde balk zien: de gegevens laden nog", () => {
     render(<Wachtscherm voortgang={null} bezig verouderd={false} eersteKeer onBereken={() => {}} />);
-    expect(document.body.textContent).toMatch(/worden geladen/);
+    expect(document.body.textContent).toMatch(/We laden de gegevens/);
     expect(screen.getByRole("progressbar").className).toMatch(/onbepaald/);
   });
 
@@ -1788,9 +1790,9 @@ describe("het tabblad CO2", () => {
     // Zonder batterij 4 kWh op 400 g = 1,6 kg; met 1 kWh op 400 g = 0,4 kg.
     render(<Co2Antwoord co2={co2} periodeLabel="in 2025" />);
     const tekst = document.body.textContent ?? "";
-    expect(tekst).toMatch(/scheelt 1,2 kg CO2 per jaar/);
+    expect(tekst).toMatch(/1,2 kg minder CO2 vrij per jaar/);
     expect(tekst).toMatch(/75% minder/);
-    expect(tekst).toMatch(/Uitstoot van je netafname/);
+    expect(tekst).toMatch(/Uitstoot van stroom van het net/);
     expect(tekst).toMatch(/km rijden/);
   });
 
@@ -1808,36 +1810,65 @@ describe("het tabblad CO2", () => {
     );
     render(<Co2Antwoord co2={slechter} periodeLabel="in 2025" zonnepanelen={false} />);
     const tekst = document.body.textContent ?? "";
-    expect(tekst).toMatch(/Met deze batterij stoot je netafname 0,6 kg méér CO2 uit per jaar/);
+    expect(tekst).toMatch(/Met deze batterij komt er 0,6 kg meer CO2 vrij per jaar/);
     expect(tekst).not.toMatch(/nauwelijks/);
     expect(tekst).not.toMatch(/zonnestroom/);
-    expect(tekst).toMatch(/kostte in 2025 9,2 kg CO2/);
+    expect(tekst).toMatch(/In 2025 veroorzaakte de stroom die je van het net haalt 9,2 kg CO2\. Met batterij is dat 9,8 kg/);
     const tegel = screen.getByText("Van het net gehaald").closest(".stat")!;
     expect(tegel.textContent).toMatch(/10 kWh meer/);
     expect(tegel.querySelector(".stat-delta.goed")).toBeNull();
     // Het is een toerekening, en dat staat er.
     expect(tekst).toMatch(/toerekening/);
-    expect(tekst).toMatch(/stuurt hier op prijs/);
+    expect(tekst).toMatch(/Het doel van de aansturing is hier Rendement/);
 
     cleanup();
-    render(<Co2Nederland co2={slechter} drempel={100} onDrempel={() => {}} zonnepanelen={false} />);
+    render(<Co2Nederland co2={slechter} drempel={100} zonnepanelen={false} />);
     const nl = document.body.textContent ?? "";
     expect(nl).toMatch(/Zonder zonnepanelen lever je niets terug/);
-    expect(nl).toMatch(/méér CO2 uit per jaar/);
+    expect(nl).toMatch(/meer CO2 vrij per jaar/);
   });
 
-  it("laat voor Nederland de teruglevering onder de drempel als overschot tellen", () => {
-    const opDrempel = vi.fn();
-    const { rerender } = render(<Co2Nederland co2={co2} drempel={100} onDrempel={opDrempel} />);
-    // Teruglevering op 60 g was overschot: verdringt niets, dus NL-winst = huishoudwinst 1,2 kg.
-    expect(document.body.textContent).toMatch(/Voor Nederland scheelt de batterij 1,2 kg/);
-    expect(document.body.textContent).toMatch(/Overschot onder 100 g\/kWh/);
-    fireEvent.change(screen.getByRole("slider"), { target: { value: "40" } });
-    expect(opDrempel).toHaveBeenCalledWith(40);
+  it("telt voor Nederland je afname en je teruglevering op tot het getal in de titel", () => {
+    /**
+     * De figuur is een optelsom: wat de batterij aan je afname scheelt, plus
+     * of min wat er verandert aan teruglevering die elders gas vervangt, is
+     * wat hij Nederland scheelt. Eerder stond hier een staafdiagram per klasse
+     * met een schuif, en zag je nergens hoe je op het getal in de titel kwam.
+     */
+    const { rerender } = render(<Co2Nederland co2={co2} drempel={100} />);
+    // Teruglevering op 60 g was overschot: verdringt niets, dus NL-winst =
+    // huishoudwinst 1,2 kg, en de tweede stap valt weg.
+    let tekst = document.body.textContent ?? "";
+    expect(tekst).toMatch(/Voor Nederland komt er met deze batterij 1,2 kg minder CO2 vrij/);
+    expect(tekst).toMatch(/Stroom van het net/);
+    expect(tekst).not.toMatch(/Teruglevering die gas vervangt/);
+    expect(tekst).toMatch(/vooral op de schoonste uren \(onder 100 g\/kWh\)/);
+
     // Met een lage drempel telde de teruglevering wél: 2 kWh × 60 g = 0,12 kg
     // ging verloren toen de batterij hem opsloeg; winst 1,08 kg.
-    rerender(<Co2Nederland co2={co2} drempel={40} onDrempel={opDrempel} />);
-    expect(document.body.textContent).toMatch(/scheelt de batterij 1,1 kg/);
+    rerender(<Co2Nederland co2={co2} drempel={40} />);
+    tekst = document.body.textContent ?? "";
+    expect(tekst).toMatch(/komt er met deze batterij 1,1 kg minder CO2 vrij/);
+    expect(tekst).toMatch(/Teruglevering die gas vervangt/);
+    expect(tekst).toMatch(/is 0,1 kg meer CO2 voor Nederland/);
+    const labels = [...document.querySelectorAll(".mark-label")].map((t) => t.textContent);
+    expect(labels).toEqual(["+1,2 kg", "−0,1 kg", "+1,1 kg"]);
+  });
+
+  it("zet de drempel niet als schuif bij de figuur, maar noemt waar hij staat", () => {
+    render(<Co2Nederland co2={co2} drempel={100} />);
+    expect(screen.queryByRole("slider")).toBeNull();
+    expect(document.body.textContent).toMatch(/geavanceerde instellingen, onder "Hoe je\s+ernaar kijkt"/);
+  });
+
+  it("zet de teruglevering per klasse in de uitleg, met de drempel erbij", () => {
+    render(<Co2OverschotStaven co2={co2} drempel={100} />);
+    const labels = [...document.querySelectorAll(".mark-label")].map((t) => t.textContent);
+    expect(labels).toEqual(["overschot", "vervangt opwek elders"]);
+    // Beide labels staan boven het plotvlak, niet over de staven heen.
+    for (const t of document.querySelectorAll(".mark-label")) {
+      expect(Number(t.getAttribute("y"))).toBeLessThan(30);
+    }
   });
 
   it("tekent de maanden en de uren zonder om te vallen op een kort jaar", () => {
@@ -1848,8 +1879,8 @@ describe("het tabblad CO2", () => {
     render(<Co2Uren co2={co2} profielen={profielen} />);
     const tekst = document.body.textContent ?? "";
     expect(tekst).toMatch(/Schoonste uur in de zomer/);
-    expect(tekst).toMatch(/19:00/);
-    expect(screen.getByRole("img", { name: /Emissiefactor per uur/ })).toBeDefined();
+    expect(tekst).toMatch(/19\.00 uur/);
+    expect(screen.getByRole("img", { name: /Uitstoot per kWh per uur/ })).toBeDefined();
   });
 });
 
@@ -1894,19 +1925,26 @@ describe("de strategiekeuzes bij de invoer", () => {
 
   it("legt de gekozen stand uit in centen, ook in de tooltip", () => {
     toon();
-    // 20% van 9 ct is 1,8 ct; bij inkoop 20 ct en 88% rondgang is het verlies
-    // 2,7 ct, dus de stroom moet later minstens 24,5 ct waard zijn.
-    const hint = slijtageHint(0.2, 0.09, 0.88);
-    expect(hint).toMatch(/Volop: de planner rekent 20% van de slijtageprijs van 9 ct\/kWh/);
-    expect(hint).toMatch(/1,8 ct\/kWh per geleverde kWh/);
-    expect(hint).toMatch(/minstens 24,5 ct\/kWh/);
+    // De hint op de hoofdinvoer is alleen de kern, zonder getallen.
+    const hint = slijtageHint(0.2);
+    expect(hint).toMatch(/^Volop: de batterij laadt en levert ook bij een klein prijsverschil/);
+    expect(hint).not.toMatch(/\d/);
     expect(document.body.textContent).toContain(hint);
+    // Het rekenvoorbeeld staat in de tooltip: 20% van 9 ct is 1,8 ct; bij inkoop
+    // 20 ct en 88% rondgang is het verlies 2,7 ct, dus de stroom moet later
+    // minstens 24,5 ct waard zijn.
+    const voorbeeld = slijtageVoorbeeld(0.2, 0.09, 0.88);
+    expect(voorbeeld).toMatch(/aansturing/);
+    expect(voorbeeld).toMatch(/2,7 cent per kWh verloren/);
+    expect(voorbeeld).toMatch(/1,8 cent per kWh aan slijtage/);
+    expect(voorbeeld).toMatch(/minstens 24,5 cent per kWh/);
     const knop = screen.getByRole("button", { name: "Zuinig" });
-    expect(knop.getAttribute("title")).toMatch(/100% van de slijtageprijs \(9 ct\/kWh/);
+    expect(knop.getAttribute("title")).toMatch(/^Zuinig: de batterij laadt en levert alleen als/);
+    expect(knop.getAttribute("title")).toMatch(/9 cent per kWh aan slijtage/);
   });
 
   it("zegt bij een eigen stand dat het een eigen stand is", () => {
-    expect(slijtageHint(0.35, 0.09, 0.88)).toMatch(/^Eigen stand \(35%\)/);
+    expect(slijtageHint(0.35)).toMatch(/^Eigen stand \(35%\)/);
   });
 });
 
@@ -1940,16 +1978,16 @@ describe("de drie doelen naast elkaar op Wat als", () => {
     expect(gemarkeerd[0]!.textContent).toMatch(/Nu gekozen/);
     // De titel is een stelling met de uitkomst.
     expect(container.querySelector("h3")!.textContent).toBe(
-      "Sturen op uitstoot kost je €\u00a031 per jaar en scheelt 28 kg CO2 extra",
+      "Sturen op uitstoot kost je €\u00a031 per jaar en geeft 28 kg minder CO2",
     );
     // Elke kaart dezelfde cijfers.
     for (const k of kaarten) {
-      for (const label of ["Besparing per jaar", "CO2-winst per jaar", "Van het net", "Laadbeurten per jaar", "Terugverdientijd"]) {
+      for (const label of ["Besparing per jaar", "Minder CO2 per jaar", "Van het net", "Laadbeurten per jaar", "Terugverdientijd"]) {
         expect(k.textContent).toContain(label);
       }
     }
     // Wisselen gaat via de knop op een niet-gekozen kaart.
-    fireEvent.click(screen.getByRole("button", { name: "Reken hiermee: Uitstoot" }));
+    fireEvent.click(screen.getByRole("button", { name: "Kies dit doel: Uitstoot" }));
     expect(gekozen).toEqual(["uitstoot"]);
     expect(within(gemarkeerd[0] as HTMLElement).queryByRole("button")).toBeNull();
     // En de voorbeelddag staat eronder, voor alle drie op dezelfde dag.
@@ -1977,5 +2015,136 @@ describe("de drie doelen naast elkaar op Wat als", () => {
     expect(fout.textContent).toMatch(/Dit doel kon niet worden doorgerekend/);
     expect(fout.textContent).toMatch(/kapot/);
     expect(fout.closest(".doelkaart")!.getAttribute("data-doel")).toBe("zelfconsumptie");
+  });
+});
+
+describe("de mobiele weergave en leesbaarheid", () => {
+  it("kiest voor elke wegingsfactor een tekstkleur met minstens 4,5:1 contrast", () => {
+    // Het donkerste blok (factor 1) kreeg eerst donkere tekst: 1,4:1, "17,8 ct"
+    // was onleesbaar. De kleur volgt nu uit een echte contrastberekening.
+    for (const factor of [0, 0.3, 0.5, 0.7, 1]) {
+      const bg = TINT_HEX[tintVoorFactor(factor) as keyof typeof TINT_HEX];
+      const tekst = tekstOpTint(factor);
+      expect([TEKST_DONKER, TEKST_LICHT]).toContain(tekst);
+      expect(contrast(bg, tekst), `factor ${factor} op ${bg}`).toBeGreaterThanOrEqual(4.5);
+    }
+    // Het donkerste blok krijgt lichte tekst.
+    expect(tekstOpTint(1)).toBe(TEKST_LICHT);
+  });
+
+  it("houdt de tinten in het tariefblad gelijk aan de tokens in het thema", () => {
+    const css = readFileSync("app/theme.css", "utf8");
+    for (const [token, hex] of Object.entries(TINT_HEX)) {
+      const naam = token.replace("var(", "").replace(")", "");
+      const m = css.match(new RegExp(`${naam}:\\s*(#[0-9a-fA-F]{6})`));
+      expect(m, `${naam} staat niet in theme.css`).not.toBeNull();
+      expect(m![1]!.toLowerCase()).toBe(hex);
+    }
+  });
+
+  it("zet de tekstkleur in het tariefblad via style, niet via een attribuut dat de klasse overschrijft", () => {
+    const { container } = render(<Tariefblad />);
+    const piek = [...container.querySelectorAll("text")].find((t) => t.textContent === "17,8 ct");
+    expect(piek).toBeDefined();
+    expect((piek as SVGElement).style.fill).toBe("rgb(255, 255, 255)");
+    expect(container.textContent).toMatch(/ct\/kWh/);
+  });
+
+  it("tekent het blok over middernacht als één blok, met één label", () => {
+    const { container } = render(<Tariefblad />);
+    // Winter: 23:00 tot 01:00 is één blok van twee stukken, met één bedrag.
+    const winter = container.textContent ?? "";
+    expect(winter).toMatch(/één blok/);
+    const labels = [...container.querySelectorAll("text")].filter((t) => t.textContent === "12,4 ct");
+    // Winter: het middernachtblok (1x) en de ochtend (1x); zomer: de piek (1x).
+    expect(labels.length).toBe(3);
+  });
+
+  it("geeft Het antwoord en Cijfers op een rij hun vaste naam als kicker", () => {
+    render(<Antwoord result={result} scenario={null} overgang={null} investeringEur={699} bezig={false} />);
+    const a = screen.getByRole("link", { name: "Het antwoord" });
+    expect(a.getAttribute("href")).toBe("#antwoord");
+    cleanup();
+    render(<Statistieken stats={result.stats} opwekBekend={false} geschatteOpwek={2800} />);
+    const b = screen.getByRole("link", { name: "Cijfers op een rij" });
+    expect(b.getAttribute("href")).toBe("#cijfers");
+  });
+
+  it("zet Nu en Met nettarief 2029 boven de waarden van het nettarief", () => {
+    const scenario = { ...result, averageSavingEur: result.averageSavingEur * 1.4 };
+    const overgang = overgangsFinance(result, scenario, maakConfiguratie(LEGE_INSTELLINGEN));
+    const { container } = render(<Nettarief huidig={result} scenario={scenario} overgang={overgang} />);
+    const labels = [...container.querySelectorAll(".stat-kolomlabel")].map((l) => l.textContent);
+    expect(labels.filter((l) => l === "Nu").length).toBe(4);
+    expect(labels.filter((l) => /^Met nettarief \d{4}$/.test(l ?? "")).length).toBe(4);
+  });
+
+  it("legt de uitleg van de cashflow zichtbaar neer, niet in title-attributen", () => {
+    const { container } = render(<Cashflow finance={result.finance} overgang={null} investeringEur={1199} />);
+    expect(container.querySelector(".kerncijfers [title]")).toBeNull();
+    expect(container.textContent).toMatch(/rente die je misloopt/);
+    expect(container.textContent).toMatch(/rentepercentage/);
+  });
+
+  it("noemt de verliesposten met dezelfde decimalen en geeft de omzettingsdelen een legenda", () => {
+    const { container } = render(
+      <Verliezen losses={result.losses} afnameKwh={2500} besparingEur={result.averageSavingEur} />,
+    );
+    const bedragen = [...container.querySelectorAll(".verlies-tabel td:nth-child(3)")].map((td) => td.textContent ?? "");
+    expect(bedragen.length).toBe(3);
+    for (const b of bedragen) expect(b, `bedrag "${b}"`).toMatch(/,\d{2}$/);
+    const legenda = [...container.querySelectorAll(".legenda li")].map((li) => li.textContent);
+    expect(legenda).toEqual(
+      expect.arrayContaining(["geleverd aan het huis", "verlies bij het laden", "verlies bij het ontladen"]),
+    );
+  });
+
+  it("noemt in de beschrijving van het verloop alleen wat er getoond wordt", () => {
+    render(
+      <Verloop
+        periode={null}
+        bezig={false}
+        eersteDag={result.perYear[0]?.firstDay ?? ""}
+        laatsteDag={result.perYear[result.perYear.length - 1]?.lastDay ?? ""}
+        onVraag={() => {}}
+        onKiesDag={() => {}}
+      />,
+    );
+    for (const el of document.querySelectorAll("[aria-label]")) {
+      expect(el.getAttribute("aria-label")).not.toMatch(/slijtage/i);
+    }
+  });
+
+  it("maakt het netto resultaat in het raster divergerend: winst en verlies hebben een eigen schaal", () => {
+    const grid = {
+      capacities: [1, 2],
+      powers: [0.8, 2.5],
+      klaar: true,
+      bezig: false,
+      rows: [
+        [
+          { capacityKwh: 1, powerKw: 0.8, savingEur: 47.4, cyclesPerYear: 406 },
+          { capacityKwh: 1, powerKw: 2.5, savingEur: 46.6, cyclesPerYear: 407 },
+        ],
+        [
+          { capacityKwh: 2, powerKw: 0.8, savingEur: 104.4, cyclesPerYear: 359 },
+          { capacityKwh: 2, powerKw: 2.5, savingEur: 103.3, cyclesPerYear: 366 },
+        ],
+      ],
+    };
+    const config = maakConfiguratie({ ...LEGE_INSTELLINGEN, presetId: "zendure-800pro2" });
+    const { container } = render(
+      <BatterijMaat grid={grid} huidigeCapaciteit={1} huidigVermogen={0.8} onKies={() => {}} config={config} curve={result.curve} />,
+    );
+    const cellen = [...container.querySelectorAll("button.heat-cel")];
+    const winst = cellen.filter((c) => /\bwinst-\d\b/.test(c.className));
+    const verlies = cellen.filter((c) => /\bverlies-\d\b/.test(c.className));
+    // Elke cel is winst of verlies, nooit iets ertussen, en het teken klopt.
+    if (winst.length > 0 && verlies.length > 0) {
+      expect(winst.length + verlies.length).toBe(cellen.length);
+      for (const c of winst) expect(c.textContent).toMatch(/^\+/);
+      for (const c of verlies) expect(c.textContent).toMatch(/^[\u2212-]/);
+      expect(container.querySelector(".heat-sleutel")).not.toBeNull();
+    }
   });
 });

@@ -54,6 +54,7 @@ export const TABS = [
       { id: "zomer-en-winter", naam: "Zomer- en winterdag" },
       { id: "verloop", naam: "Verloop over tijd" },
       { id: "dag-en-week", naam: "Een dag of week van dichtbij" },
+      { id: "meterprofiel", naam: "Wat door de meter ging" },
     ],
   },
   {
@@ -125,7 +126,10 @@ const OUDE_TAB_IDS: Record<string, TabId> = {
 /** Het tabblad uit een `?tab=`-waarde, ook een van vóór de herindeling. */
 export function leesTab(v: string | null | undefined): TabId | null {
   if (isTabId(v)) return v;
-  return (v && OUDE_TAB_IDS[v]) || null;
+  // Alleen eigen sleutels: `?tab=constructor` of `?tab=__proto__` mag niet
+  // bij een functie of prototype uitkomen.
+  if (v && Object.hasOwn(OUDE_TAB_IDS, v)) return OUDE_TAB_IDS[v] ?? null;
+  return null;
 }
 
 /** Het tabblad waarop een figuur staat, of null als het anker er geen is. */

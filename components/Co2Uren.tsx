@@ -25,8 +25,9 @@ const H = MARGE.boven + LIJN_H + TUSSEN + STAAF_H + MARGE.onder;
 
 const KLEUR = { winter: "var(--series-2)", zomer: "var(--series-3)" } as const;
 
+/** "13.00 uur"; 24 mag ook, voor de rechterrand van de as. */
 function uurLabel(u: number): string {
-  return `${String(u).padStart(2, "0")}:00`;
+  return `${u}.00 uur`;
 }
 
 export function Co2Uren({
@@ -72,23 +73,23 @@ export function Co2Uren({
   const schoonst = uurMin(zomer.factor);
   const vuilst = uurMax(zomer.factor);
   const grootsteDaling = uurMax(zomer.daling);
-  const verschuiftNaarSchoon = zomer.factor[grootsteDaling]! > zomer.factor[schoonst]! * 1.3;
+  const batterijHaaltWeg = zomer.daling[grootsteDaling]! > 0.01;
 
   return (
     <Figure
       anker="co2-per-uur"
       actie={actie}
       titel={
-        verschuiftNaarSchoon
-          ? `Stroom is om ${uurLabel(schoonst)} het schoonst en om ${uurLabel(vuilst)} het vuilst; de batterij haalt juist de avond van het net`
-          : "Hoe schoon de stroom per uur is, en waar de batterij je afname weghaalt"
+        batterijHaaltWeg
+          ? `In de zomer is stroom om ${uurLabel(schoonst)} het schoonst en om ${uurLabel(vuilst)} het vuilst. De batterij haalt vooral om ${uurLabel(grootsteDaling)} minder van het net`
+          : "Hoe schoon de stroom per uur is, en wanneer de batterij minder van het net haalt"
       }
       toelichting={
         <>
-          Boven: de gemiddelde uitstoot van één kWh van de Nederlandse opwek per uur van de dag, in
-          de winter en in de zomer (april tot en met september); import zit er niet in. Onder: hoeveel afname de batterij op
-          dat uur van het net weghaalt (boven de lijn) of erbij haalt om te laden (onder de lijn),
-          kWh per gemiddelde dag.
+          Boven: de gemiddelde uitstoot van één kWh uit de Nederlandse opwek per uur van de dag, in
+          de winter en in de zomer (april tot en met september). Stroom uit het buitenland zit er
+          niet in. Onder: hoeveel minder de batterij op dat uur van het net haalt (boven de lijn)
+          of juist meer, omdat hij laadt (onder de lijn). Dat is in kWh per gemiddelde dag.
         </>
       }
     >
@@ -98,8 +99,8 @@ export function Co2Uren({
           { kleur: KLEUR.zomer, label: "zomer", waarde: `${getal(zomer.factor.reduce((a, b) => a + b, 0) / 24)} g/kWh gemiddeld` },
         ]}
       />
-      <Grafiek kader={kader} tip={tip} onWis={() => { setAangewezen(null); wis(); }} label="Emissiefactor per uur van de dag">
-        <svg viewBox={`0 0 ${B} ${H}`} className="chart" role="img" aria-label="Emissiefactor per uur van de dag, winter en zomer, met de afname die de batterij weghaalt">
+      <Grafiek kader={kader} tip={tip} onWis={() => { setAangewezen(null); wis(); }} label="Uitstoot per kWh per uur van de dag">
+        <svg viewBox={`0 0 ${B} ${H}`} className="chart" role="img" aria-label="Uitstoot per kWh per uur van de dag, winter en zomer, met wat de batterij minder van het net haalt">
           {aangewezen !== null ? (
             <rect className="aangewezen" x={x(aangewezen)} y={MARGE.boven} width={uurB} height={LIJN_H + TUSSEN + STAAF_H} />
           ) : null}
@@ -133,7 +134,7 @@ export function Co2Uren({
 
           {[0, 6, 12, 18, 24].map((u) => (
             <text key={u} x={x(u)} y={H - 10} textAnchor={u === 24 ? "end" : u === 0 ? "start" : "middle"} className="as-label">
-              {uurLabel(u % 24)}
+              {uurLabel(u)}
             </text>
           ))}
 
@@ -147,14 +148,14 @@ export function Co2Uren({
               onWijs={(punt) => {
                 setAangewezen(u);
                 toon(punt, {
-                  titel: `${uurLabel(u)} tot ${uurLabel((u + 1) % 24)}`,
+                  titel: `${u}.00 tot ${u + 1}.00 uur`,
                   regels: [
                     { kleur: KLEUR.winter, label: "Uitstoot per kWh, winter", waarde: `${getal(winter.factor[u]!)} g` },
                     { kleur: KLEUR.zomer, label: "Uitstoot per kWh, zomer", waarde: `${getal(zomer.factor[u]!)} g` },
-                    { label: "Batterij haalt van het net weg, winter", waarde: `${getal(winter.daling[u]!, 2)} kWh` },
-                    { label: "Batterij haalt van het net weg, zomer", waarde: `${getal(zomer.daling[u]!, 2)} kWh`, uitkomst: true },
+                    { label: "Minder van het net door batterij, winter", waarde: `${getal(winter.daling[u]!, 2)} kWh` },
+                    { label: "Minder van het net door batterij, zomer", waarde: `${getal(zomer.daling[u]!, 2)} kWh`, uitkomst: true },
                   ],
-                  noot: "Per gemiddelde dag in dat seizoen; een negatief getal is laden van het net.",
+                  noot: "Per gemiddelde dag in dat seizoen. Een negatief getal betekent dat de batterij van het net laadt.",
                 });
               }}
               onWis={() => { setAangewezen(null); wis(); }}
@@ -179,7 +180,7 @@ export function Co2Uren({
           </dd>
         </div>
         <div>
-          <dt>Waar de batterij de meeste afname weghaalt</dt>
+          <dt>Uur waarop je het meest minder van het net haalt</dt>
           <dd>
             {uurLabel(grootsteDaling)}
             <span className="dd-noot">
