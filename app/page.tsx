@@ -696,6 +696,7 @@ export default function Page() {
                 overgang={overgang}
                 investeringEur={toonPrijs}
                 cycleLife={toon?.cycleLife}
+                jarenTekst={bedragJarenTekst}
                 actie={uitleg("cashflow")}
               />
               {toon ? (

@@ -3495,3 +3495,25 @@ details.uitklap[open] > summary {
     min-height: 44px;
   }
 }
+
+/* ── Over de looptijd: disclaimer en vergelijking met en zonder nettarief ── */
+
+.looptijd-disclaimer {
+  margin: 4px 0 14px;
+  font-size: 0.92rem;
+}
+
+.looptijd-vergelijking td.goed {
+  color: var(--success-text);
+}
+
+.looptijd-vergelijking td.slecht {
+  color: var(--critical);
+}
+
+@media (max-width: 480px) {
+  .looptijd-vergelijking td {
+    width: auto;
+    white-space: normal;
+  }
+}

@@ -374,6 +374,49 @@ describe("de pagina toont het antwoord", () => {
     expect(tekst).toMatch(/met het nettarief vanaf 2029 laadt en levert de batterij vaker/);
   });
 
+  it("zet over de looptijd met en zonder nettarief naast elkaar, onder een disclaimer", () => {
+    const config = maakConfiguratie(LEGE_INSTELLINGEN);
+    const scenario = {
+      ...result,
+      curve: result.curve.map((p) => ({ ...p, savingEur: p.savingEur * 2 })),
+    };
+    const overgang = overgangsFinance(result, scenario, config);
+    const { container } = render(
+      <Cashflow
+        finance={result.finance}
+        overgang={overgang}
+        investeringEur={config.investmentEur}
+        jarenTekst="2024 en 2025"
+      />,
+    );
+    const tekst = container.textContent ?? "";
+    // Groot en vooraan: het is een doorgetrokken gemiddelde, geen voorspelling.
+    const disclaimer = container.querySelector(".looptijd-disclaimer")!;
+    expect(disclaimer.textContent).toMatch(/Dit is geen voorspelling/);
+    expect(disclaimer.textContent).toMatch(/gemiddelde besparing van 2024 en 2025/);
+    expect(disclaimer.textContent).toMatch(/Niemand weet/);
+    // Twee lijnen en een tabel met beide terugverdientijden en netto resultaten.
+    const tabel = container.querySelector("table.looptijd-vergelijking")!;
+    const rij = (naam: string) =>
+      [...tabel.querySelectorAll("tbody tr")].find((r) => r.querySelector("th")?.textContent === naam)!;
+    const cellen = (naam: string) => [...rij(naam).querySelectorAll("td")].map((td) => td.textContent);
+    expect(cellen("Terugverdientijd")).toEqual([
+      jaren(overgang.finance.paybackYears),
+      jaren(result.finance.paybackYears),
+    ]);
+    expect(cellen("Netto resultaat")).toEqual([euro(overgang.finance.npvEur), euro(result.finance.npvEur)]);
+    expect(tekst).toMatch(/Als het nettarief blijft zoals nu/);
+    expect(container.querySelectorAll("svg path[stroke-dasharray]").length).toBe(1);
+  });
+
+  it("laat zonder overgang de vergelijking weg, maar niet de disclaimer", () => {
+    const { container } = render(
+      <Cashflow finance={result.finance} overgang={null} investeringEur={1199} />,
+    );
+    expect(container.querySelector("table.looptijd-vergelijking")).toBeNull();
+    expect(container.querySelector(".looptijd-disclaimer")?.textContent).toMatch(/Dit is geen voorspelling/);
+  });
+
   it("verantwoordt de bron en de beperkingen", () => {
     render(
       <Verantwoording manifest={manifest} result={result} domein={DOMAIN} />,
