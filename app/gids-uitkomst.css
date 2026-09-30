@@ -1,0 +1,670 @@
+/*
+ * Stap 4 (Wat had hij je opgeleverd?) en stap 5 (Past het bij je?).
+ *
+ * uk-  = stap 4 en de bouwstenen die stap 5 mee gebruikt
+ * ps-  = stap 5
+ *
+ * Alleen tokens uit theme.css. Beweging (optellen, lijntje tekenen) staat achter
+ * prefers-reduced-motion onderaan.
+ */
+
+/* ── Stap 4: het hoofdgetal ───────────────────────────────────────────────── */
+
+.uk-hoofd {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  padding: 24px 28px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, var(--acs) 0%, #f1f6f4 100%);
+}
+
+.uk-munten {
+  flex: none;
+  width: 96px;
+  height: 96px;
+}
+
+.uk-aanhef {
+  margin: 0 0 6px;
+  font-size: 1.05rem;
+  color: var(--text-secondary);
+}
+
+.uk-getal {
+  margin: 0;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 14px;
+}
+
+.uk-eenheid {
+  font-size: clamp(1.1rem, 2.6vw, 1.5rem);
+  font-weight: 600;
+  letter-spacing: 0;
+}
+
+.uk-band {
+  margin: 12px 0 0;
+  font-size: 1.05rem;
+  font-weight: 560;
+  color: var(--text-primary);
+}
+
+.uk-grond {
+  margin: 8px 0 0;
+  max-width: var(--maat-tekst, 48rem);
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+}
+
+/* ── Blokken met een eigen kop ────────────────────────────────────────────── */
+
+.uk-blok {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.uk-blok h2 {
+  margin: 0;
+  font-size: 1.3rem;
+  line-height: 1.25;
+  color: var(--text-primary);
+}
+
+.uk-intro {
+  margin: -6px 0 0;
+  max-width: var(--maat-tekst, 48rem);
+  color: var(--text-secondary);
+  line-height: 1.5;
+}
+
+.uk-noot {
+  margin: 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+/* ── Waar het vandaan komt ────────────────────────────────────────────────── */
+
+.uk-balk {
+  display: flex;
+  gap: 3px;
+  height: 34px;
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.uk-deel {
+  flex-basis: 0;
+  min-width: 6px;
+  transform-origin: left center;
+  animation: uk-groei 0.8s cubic-bezier(0.2, 0.7, 0.2, 1) both;
+}
+
+.uk-posten {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 10px;
+}
+
+.uk-posten li {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: start;
+  gap: 12px;
+}
+
+.uk-stip {
+  width: 14px;
+  height: 14px;
+  border-radius: 4px;
+  margin-top: 4px;
+}
+
+.uk-post-tekst {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  font-size: 0.92rem;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+.uk-post-tekst strong {
+  color: var(--text-primary);
+  font-size: 1rem;
+}
+
+.uk-post-bedrag {
+  font-size: 1.15rem;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+  white-space: nowrap;
+}
+
+/* ── Terugverdienen: twee kaarten ─────────────────────────────────────────── */
+
+.uk-kaarten {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.uk-kaart {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+  padding: 18px 20px;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--surface-1);
+}
+
+.uk-kaart-hoofd {
+  border-color: var(--ac);
+  box-shadow: 0 0 0 3px var(--acs);
+}
+
+.uk-kaart h3 {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.3;
+  color: var(--text-secondary);
+}
+
+.uk-tvt {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.uk-tvt-label {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.uk-tvt strong {
+  font-size: clamp(1.5rem, 3.6vw, 2rem);
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  color: var(--ac);
+}
+
+.uk-tvt-nee strong {
+  font-size: 1.3rem;
+  color: var(--warning);
+}
+
+.uk-spark {
+  display: block;
+  width: 100%;
+  height: auto;
+  margin-top: 2px;
+}
+
+.uk-nul {
+  stroke: var(--border-strong);
+  stroke-width: 1;
+  stroke-dasharray: 3 3;
+}
+
+.uk-vlak {
+  fill: var(--series-3);
+  opacity: 0.12;
+}
+
+.uk-vlak-min {
+  fill: var(--warning);
+}
+
+.uk-lijn {
+  fill: none;
+  stroke: var(--series-3);
+  stroke-width: 2.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  vector-effect: non-scaling-stroke;
+  /* Onthullen van links naar rechts. Niet met stroke-dasharray: samen met
+     non-scaling-stroke rekent de browser de streep in schermpixels en bleef de
+     lijn halverwege staan. */
+  animation: uk-teken 1s ease-out both;
+}
+
+.uk-lijn-min {
+  stroke: var(--warning);
+}
+
+.uk-punt {
+  fill: var(--surface-1);
+  stroke: var(--series-3);
+  stroke-width: 2.5;
+}
+
+.uk-spark-noot {
+  margin: 0;
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+
+.uk-wacht {
+  margin: 0;
+  color: var(--text-secondary);
+}
+
+.uk-skelet-lijn {
+  height: 60px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  animation: uk-puls 1.4s ease-in-out infinite;
+}
+
+.uk-disclaimer {
+  align-items: flex-start;
+}
+
+.uk-disclaimer p {
+  font-size: 0.92rem;
+  line-height: 1.5;
+}
+
+/* ── Wachtstand ───────────────────────────────────────────────────────────── */
+
+.uk-skelet {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.uk-skelet-blok {
+  height: 20px;
+  border-radius: 8px;
+  background: var(--surface-2);
+  animation: uk-puls 1.4s ease-in-out infinite;
+}
+
+.uk-skelet-groot {
+  height: 64px;
+  width: min(320px, 70%);
+}
+
+.uk-skelet-balk {
+  height: 34px;
+}
+
+.uk-skelet-rij {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.uk-skelet-kaart {
+  height: 150px;
+  border-radius: 12px;
+}
+
+@keyframes uk-puls {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+@keyframes uk-groei {
+  from {
+    transform: scaleX(0);
+  }
+  to {
+    transform: none;
+  }
+}
+
+@keyframes uk-teken {
+  from {
+    clip-path: inset(0 100% 0 0);
+  }
+  to {
+    clip-path: inset(0 0 0 0);
+  }
+}
+
+/* ── Stap 5: het oordeel ──────────────────────────────────────────────────── */
+
+.ps-oordeel {
+  display: flex;
+  align-items: center;
+  gap: 22px;
+  padding: 24px 28px;
+  border-radius: 14px;
+  border-left: 6px solid var(--ps-kleur);
+  background: var(--ps-tint);
+  --ps-kleur: var(--good);
+  --ps-tint: #e6f2ea;
+}
+
+.ps-oordeel.ps-lang {
+  --ps-kleur: var(--warning);
+  --ps-tint: #f9f1de;
+}
+
+.ps-oordeel.ps-niet {
+  --ps-kleur: var(--critical);
+  --ps-tint: #fbebe9;
+}
+
+.ps-oordeel h2 {
+  margin: 0;
+  font-size: clamp(1.4rem, 3.4vw, 1.9rem);
+  line-height: 1.2;
+  letter-spacing: -0.01em;
+  color: var(--ps-kleur);
+}
+
+.ps-toelichting {
+  margin: 8px 0 0;
+  max-width: var(--maat-tekst, 48rem);
+  font-size: 1rem;
+  line-height: 1.5;
+  color: var(--text-primary);
+}
+
+.ps-wacht {
+  margin: 8px 0 0;
+  font-size: 0.88rem;
+  color: var(--text-secondary);
+}
+
+.ps-icoon {
+  flex: none;
+  width: 64px;
+  height: 64px;
+}
+
+.ps-icoon-vlak {
+  fill: var(--ps-kleur);
+}
+
+.ps-icoon-lijn {
+  fill: none;
+  stroke: #fff;
+  stroke-width: 5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.ps-cijfers {
+  margin: 0;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.ps-cijfers > div {
+  padding: 14px 16px;
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  background: var(--surface-2);
+}
+
+.ps-cijfers dt {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+.ps-cijfers dd {
+  margin: 4px 0 0;
+  font-size: 1.35rem;
+  font-weight: 650;
+  line-height: 1.2;
+  font-variant-numeric: tabular-nums;
+  color: var(--text-primary);
+}
+
+.ps-cijfers dd.goed {
+  color: var(--success-text);
+}
+
+.ps-cijfers dd.slecht {
+  color: var(--critical);
+}
+
+.ps-cijfers dd.ps-cijfer-noot {
+  margin-top: 4px;
+  font-size: 0.78rem;
+  font-weight: 400;
+  color: var(--text-muted);
+}
+
+/* ── De checklist ─────────────────────────────────────────────────────────── */
+
+.ps-lijst {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 4px;
+}
+
+.ps-regel {
+  display: grid;
+  grid-template-columns: 34px 1fr;
+  gap: 14px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+
+.ps-regel:last-child {
+  border-bottom: 0;
+}
+
+.ps-teken {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 1rem;
+  font-weight: 700;
+  line-height: 1;
+  color: #fff;
+  background: var(--good);
+}
+
+.ps-regel-let-op .ps-teken {
+  background: var(--warning);
+}
+
+.ps-regel-nee .ps-teken {
+  background: var(--critical);
+}
+
+.ps-regel-info .ps-teken {
+  background: var(--seq-500);
+  font-style: italic;
+  font-family: Georgia, "Times New Roman", serif;
+}
+
+.ps-regel-tekst p {
+  margin: 4px 0 0;
+  max-width: var(--maat-tekst, 48rem);
+  line-height: 1.5;
+  color: var(--text-primary);
+}
+
+.ps-acties {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 8px 18px;
+  margin-top: 10px;
+}
+
+/* ── Wat kan je nu doen ───────────────────────────────────────────────────── */
+
+.ps-kaarten {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.ps-kaart {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px 18px;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--surface-1);
+  font: inherit;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    transform 0.15s;
+}
+
+button.ps-kaart:hover,
+.ps-kaart-deel:hover {
+  border-color: var(--seq-400);
+  transform: translateY(-1px);
+}
+
+.ps-kaart:focus-visible,
+.ps-kaart-knop:focus-visible {
+  outline: 2px solid var(--ac);
+  outline-offset: 2px;
+}
+
+.ps-kaart-deel {
+  cursor: default;
+  padding: 0;
+}
+
+.ps-kaart-knop {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  padding: 16px 18px 6px;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: inherit;
+  text-align: left;
+  cursor: pointer;
+  border-radius: 12px;
+}
+
+.ps-kaart-kop {
+  font-weight: 650;
+  color: var(--ac);
+}
+
+.ps-kaart-tekst {
+  font-size: 0.88rem;
+  line-height: 1.45;
+  color: var(--text-secondary);
+}
+
+.ps-bevestiging {
+  min-height: 1.5em;
+  padding: 0 18px 12px;
+  font-size: 0.88rem;
+  font-weight: 600;
+  color: var(--success-text);
+  opacity: 0;
+  transition: opacity 0.2s;
+}
+
+.ps-bevestiging.zichtbaar {
+  opacity: 1;
+}
+
+/* ── Smal scherm ──────────────────────────────────────────────────────────── */
+
+@media (max-width: 760px) {
+  .uk-kaarten,
+  .ps-kaarten,
+  .uk-skelet-rij {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .ps-cijfers {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .ps-cijfers > div:last-child {
+    grid-column: 1 / -1;
+  }
+}
+
+@media (max-width: 640px) {
+  .uk-hoofd {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 14px;
+    padding: 20px 18px;
+  }
+
+  .uk-munten {
+    width: 64px;
+    height: 64px;
+  }
+
+  .ps-oordeel {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 20px 18px;
+  }
+
+  .ps-icoon {
+    width: 48px;
+    height: 48px;
+  }
+
+}
+
+@media (pointer: coarse) {
+  .ps-acties .knop,
+  .ps-acties .gids-link,
+  .gids-verdieping button {
+    min-height: 44px;
+  }
+
+  .ps-acties .gids-link,
+  .gids-verdieping button {
+    display: inline-flex;
+    align-items: center;
+  }
+
+  .ps-kaart,
+  .ps-kaart-knop {
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .uk-deel,
+  .uk-lijn,
+  .uk-skelet-blok,
+  .uk-skelet-lijn,
+  .ps-kaart,
+  .ps-bevestiging {
+    animation: none;
+    transition: none;
+  }
+
+  .uk-lijn {
+    stroke-dasharray: none;
+  }
+}

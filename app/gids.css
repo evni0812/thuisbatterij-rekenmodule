@@ -1,0 +1,320 @@
+/*
+ * De begeleide stappen: het frame. Elke stap heeft zijn eigen bestand
+ * (gids-invoer.css, gids-dag.css, gids-uitkomst.css); hier alleen wat alle
+ * stappen delen: voortgang, kop, navigatie en de bouwstenen die overal terugkomen.
+ *
+ * Zelfde tokens als de rest (theme.css), maar speelser: grotere getallen, meer
+ * lucht, één boodschap per scherm.
+ */
+
+.gids {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+/* ── Voortgang ────────────────────────────────────────────────────────────── */
+
+.gids-voortgang ol {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 6px;
+}
+
+.gids-voortgang button {
+  width: 100%;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 6px;
+  border: 0;
+  background: none;
+  font: inherit;
+  color: var(--text-muted);
+  cursor: pointer;
+  text-align: left;
+  border-radius: var(--radius-sm);
+}
+
+.gids-voortgang button:hover {
+  background: var(--acs);
+}
+
+.gids-nummer {
+  flex: none;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  font-size: 0.8rem;
+  font-weight: 650;
+  border: 1.5px solid var(--border-strong);
+  background: var(--surface-1);
+}
+
+.gids-stapnaam {
+  font-size: 0.85rem;
+  font-weight: 560;
+  line-height: 1.2;
+}
+
+.gids-voortgang li.actief button {
+  color: var(--ac);
+}
+
+.gids-voortgang li.actief .gids-nummer {
+  background: var(--ac);
+  border-color: var(--ac);
+  color: #fff;
+}
+
+.gids-voortgang li.gedaan .gids-nummer {
+  background: var(--acs);
+  border-color: var(--acs);
+  color: var(--ac);
+}
+
+.gids-balk {
+  margin-top: 8px;
+  height: 4px;
+  border-radius: 999px;
+  background: var(--border);
+  overflow: hidden;
+}
+
+.gids-balk span {
+  display: block;
+  height: 100%;
+  background: var(--ac);
+  border-radius: 999px;
+  transition: width 0.35s ease;
+}
+
+/* ── De stap zelf ─────────────────────────────────────────────────────────── */
+
+.gids-stap {
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 32px 36px 36px;
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  animation: gids-in 0.3s ease;
+}
+
+@keyframes gids-in {
+  from {
+    opacity: 0;
+    transform: translateY(6px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+.gids-eyebrow {
+  margin: 0 0 -14px;
+  font-size: 0.78rem;
+  font-weight: 600;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--text-muted);
+}
+
+.gids-stap h1 {
+  margin: 0;
+  font-size: 2rem;
+  line-height: 1.15;
+  letter-spacing: -0.01em;
+  color: var(--ac);
+  outline: none;
+}
+
+/* Eén inleidende zin onder de kop: wat je hier doet of ziet. */
+.gids-lead {
+  margin: -8px 0 0;
+  font-size: 1.1rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  max-width: var(--maat-tekst, 48rem);
+}
+
+/* Het grote getal van een stap: het antwoord in één oogopslag. */
+.gids-groot {
+  font-size: clamp(2.6rem, 7vw, 4.2rem);
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.02em;
+  color: var(--ac);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Kaartjes om uit te kiezen (panelen ja/nee, batterij, doel). */
+.gids-keuzes {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 12px;
+}
+
+.gids-keuze {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  padding: 16px 18px;
+  border: 1.5px solid var(--border-strong);
+  border-radius: 12px;
+  background: var(--surface-1);
+  font: inherit;
+  color: var(--text-primary);
+  text-align: left;
+  cursor: pointer;
+  transition:
+    border-color 0.15s,
+    box-shadow 0.15s,
+    transform 0.15s;
+}
+
+.gids-keuze:hover {
+  border-color: var(--seq-400);
+  transform: translateY(-1px);
+}
+
+.gids-keuze[aria-pressed="true"],
+.gids-keuze[aria-checked="true"] {
+  border-color: var(--ac);
+  box-shadow: 0 0 0 3px var(--acs);
+}
+
+.gids-keuze:focus-visible {
+  outline: 2px solid var(--ac);
+  outline-offset: 2px;
+}
+
+/* Onderaan elke stap: de weg naar de verdieping. */
+.gids-verdieping {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 18px;
+  padding-top: 16px;
+  border-top: 1px solid var(--border);
+  font-size: 0.88rem;
+  color: var(--text-muted);
+}
+
+.gids-verdieping button,
+.gids-link {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  color: var(--ac);
+  font-weight: 560;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+  cursor: pointer;
+}
+
+/* ── Navigatie ────────────────────────────────────────────────────────────── */
+
+.gids-navigatie {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+}
+
+.gids-navigatie .knop {
+  padding: 12px 20px;
+  font-size: 1rem;
+  border-radius: 10px;
+}
+
+/* ── De wissel in de kop: stap voor stap of alle cijfers ──────────────────── */
+
+.weergave-wissel {
+  display: inline-flex;
+  flex: none;
+  padding: 3px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.1);
+  gap: 2px;
+}
+
+.weergave-wissel button {
+  border: 0;
+  background: none;
+  color: rgba(255, 255, 255, 0.8);
+  font: inherit;
+  font-size: 0.82rem;
+  font-weight: 560;
+  padding: 6px 12px;
+  border-radius: 999px;
+  cursor: pointer;
+  white-space: nowrap;
+}
+
+.weergave-wissel button[aria-pressed="true"] {
+  background: #fff;
+  color: var(--ac);
+}
+
+@media (max-width: 640px) {
+  .gids-stap {
+    padding: 22px 18px 24px;
+    border-radius: 12px;
+  }
+
+  .gids-stap h1 {
+    font-size: 1.55rem;
+  }
+
+  .gids-stapnaam {
+    display: none;
+  }
+
+  .gids-voortgang li.actief .gids-stapnaam {
+    display: inline;
+  }
+
+  .gids-voortgang ol {
+    grid-template-columns: repeat(4, auto) 1fr;
+  }
+
+  .weergave-wissel button {
+    padding: 6px 9px;
+  }
+}
+
+@media (pointer: coarse) {
+  .gids-voortgang button,
+  .weergave-wissel button {
+    min-height: 44px;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .gids-stap,
+  .gids-balk span,
+  .gids-keuze {
+    animation: none;
+    transition: none;
+  }
+}
+
+/* In de stappen staan geen tabbladen in de kop; de meta schuift naar rechts. */
+.balk-vul {
+  flex: 1;
+}
+
+/* `.pagina` is een flexbox; zonder deze regel wint dat van het hidden-attribuut
+   en stonden de tabbladen onder de stappen. */
+.pagina[hidden] {
+  display: none;
+}

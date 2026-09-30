@@ -29,7 +29,7 @@ gebruik, alles vanaf de CDN.
 ```bash
 npm install
 npm run dev          # http://localhost:3000
-npm test             # 590 tests, waaronder de modelinvarianten
+npm test             # 661 tests, waaronder de modelinvarianten
 npm run build        # statische export naar out/
 npm run clean        # bij een vastgelopen build-cache
 ```
@@ -47,6 +47,31 @@ die fout toch nog, dan is er oude rommel blijven staan: `npm run clean`.
 te maken, is de webpack-compile gesmoord door geheugendruk — kijk naar
 `vm.swapusage`. `npx next build --turbopack` doet hetzelfde werk in een fractie
 van het geheugen en levert dezelfde export op.
+
+## Stap voor stap: de begeleide route
+
+Zonder tabblad in de link opent de tool een begeleide route in vijf stappen,
+voor wie de tool voor het eerst ziet. In de kop wissel je tussen **Stap voor
+stap** en **Alle cijfers** (de zeven tabbladen hieronder).
+
+| Stap | Kop | Wat er gebeurt |
+|---|---|---|
+| 1 Jouw huis | Hoe ziet jouw huis eruit? | zonnepanelen ja of nee, afname en teruglevering van de jaarafrekening, netgebied |
+| 2 Jouw batterij | Welke batterij wil je doorrekenen? | een kaart per batterij (stopcontact of installateur), het doel |
+| 3 Wat hij doet | Wat doet de batterij op een dag? | een gewone zomer- of winterdag als film, per kwartier; daarna de jaarcijfers 's avonds en overdag |
+| 4 Wat het oplevert | Wat had hij je opgeleverd? | de besparing per jaar, waar die vandaan komt, terugverdienen met en zonder nettarief, "Dit is geen voorspelling" |
+| 5 Past het bij je? | Past een thuisbatterij bij jou? | een oordeel op de terugverdientijd tegen de levensduur, een checklist, een betere maat als die er is, delen |
+
+De stappen rekenen niets zelf: ze lezen dezelfde doorrekening en schrijven
+dezelfde instellingen als de tabbladen (contract in `components/gids/types.ts`).
+Pas bij "Volgende" naar stap 3 wordt gewijzigde invoer doorgerekend. De stap
+staat in de URL (`?stap=3`); een link met alleen instellingen opent bij stap 4,
+het antwoord. Een link met `?tab=` of een figuuranker (`#per-maand`) opent
+direct Alle cijfers, zodat bestaande links blijven werken. Het oordeel op stap
+5 staat in `oordeel()` in `components/gids/uitkomst.ts`: onder 8 jaar "ruim
+binnen de levensduur", tot en met de levensduur "terug, maar het duurt lang",
+daarboven of nooit "niet terug". Een andere maat noemt stap 5 pas bij minstens
+100 euro meer netto resultaat.
 
 ## De pagina: zeven tabbladen, elk over één onderwerp
 

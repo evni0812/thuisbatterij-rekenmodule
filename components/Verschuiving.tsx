@@ -51,6 +51,49 @@ function perJaar(reeks: number[], [van, tot]: readonly [number, number], seizoen
   return som * DAGEN_PER_JAAR[seizoen];
 }
 
+/** De kilowatturen per jaar van één seizoen, in de blokken uren van de tegels. */
+export interface Jaarcijfers {
+  seizoen: "winter" | "zomer";
+  avondZonder: number;
+  avondMet: number;
+  overdagZonder: number;
+  overdagMet: number;
+  nachtZonder: number;
+  nachtMet: number;
+}
+
+/**
+ * Wat de verschuiving per jaar betekent, per seizoen: hoeveel minder je 's
+ * avonds van het net haalt, en waar die stroom vandaan komt (overdag minder
+ * teruglevering met panelen, 's nachts meer afname zonder). Uit dezelfde
+ * gemiddelde dagen als de figuur, maal het aantal dagen van het seizoen.
+ *
+ * Geëxporteerd zodat de begeleide route dezelfde getallen toont als deze
+ * figuur, zonder ze opnieuw uit te rekenen. Een seizoen zonder dagen valt weg.
+ */
+export function jaarcijfersVan(profielen: SeasonProfile[]): {
+  jaarcijfers: Jaarcijfers[];
+  /** Het hoofdcijfer van de titel: de avondafname die over het hele jaar wegvalt. */
+  avondMinder: number;
+} {
+  const jaarcijfers = profielen
+    .filter((p) => p.days > 0)
+    .map((p) => {
+      const s = p.season;
+      return {
+        seizoen: s,
+        avondZonder: perJaar(p.importBaseline, AVOND, s),
+        avondMet: perJaar(p.importBattery, AVOND, s),
+        overdagZonder: perJaar(p.exportBaseline, OVERDAG, s),
+        overdagMet: perJaar(p.exportBattery, OVERDAG, s),
+        nachtZonder: perJaar(p.importBaseline, NACHT, s),
+        nachtMet: perJaar(p.importBattery, NACHT, s),
+      };
+    });
+  const avondMinder = jaarcijfers.reduce((som, j) => som + (j.avondZonder - j.avondMet), 0);
+  return { jaarcijfers, avondMinder };
+}
+
 /** "209 kWh minder": de verandering als hoofdcijfer. */
 function verschil(zonder: number, met: number): string {
   const d = met - zonder;
@@ -67,6 +110,74 @@ function aandeel(zonder: number, met: number): string | undefined {
 /** Netto uitwisseling met het net: afname positief, teruglevering negatief. */
 function netto(imp: number[], exp: number[]): number[] {
   return imp.map((v, u) => v - exp[u]!);
+}
+
+/**
+ * De vier tegels onder de figuur: 's avonds van het net, en daarnaast overdag
+ * naar het net (met panelen) of 's nachts van het net (zonder). Geëxporteerd
+ * voor de begeleide route; de figuur zelf gebruikt hem ook.
+ */
+export function jaartegels(jaarcijfers: Jaarcijfers[], zonnepanelen: boolean): ReactNode[] {
+  return [
+    ...jaarcijfers.map((j) => {
+      const naam = j.seizoen === "winter" ? "Winter" : "Zomer";
+      const maanden =
+        j.seizoen === "winter" ? "oktober tot en met maart" : "april tot en met september";
+      return (
+        <Tegel
+          key={`avond-${j.seizoen}`}
+          label={`${naam}: van het net 's avonds`}
+          vanLabel="Zonder batterij"
+          naarLabel="Met batterij"
+          van={kwh(j.avondZonder)}
+          naar={kwh(j.avondMet)}
+          nadruk={verschil(j.avondZonder, j.avondMet)}
+          delta={aandeel(j.avondZonder, j.avondMet)}
+          deltaGoed={j.avondMet < j.avondZonder}
+          uitleg={`Wat je per jaar tussen ${AVOND[0]}.00 en ${AVOND[1]}.00 uur van het net haalt, van ${maanden}.`}
+          accent={MINDER}
+        />
+      );
+    }),
+    ...jaarcijfers.map((j) => {
+      const naam = j.seizoen === "winter" ? "Winter" : "Zomer";
+      const maanden =
+        j.seizoen === "winter" ? "oktober tot en met maart" : "april tot en met september";
+      if (zonnepanelen) {
+        // Een seizoen waarin je overdag nauwelijks levert, zegt niets.
+        if (j.overdagZonder < 5) return null;
+        return (
+          <Tegel
+            key={`overdag-${j.seizoen}`}
+            label={`${naam}: naar het net overdag`}
+            vanLabel="Zonder batterij"
+            naarLabel="Met batterij"
+            van={kwh(j.overdagZonder)}
+            naar={kwh(j.overdagMet)}
+            nadruk={verschil(j.overdagZonder, j.overdagMet)}
+            delta={aandeel(j.overdagZonder, j.overdagMet)}
+            deltaGoed={j.overdagMet < j.overdagZonder}
+            uitleg={`Zonnestroom die je per jaar tussen ${OVERDAG[0]}.00 en ${OVERDAG[1]}.00 uur aan het net levert, van ${maanden}. Wat de batterij opvangt, gebruik je 's avonds zelf.`}
+            accent="var(--series-2)"
+          />
+        );
+      }
+      return (
+        <Tegel
+          key={`nacht-${j.seizoen}`}
+          label={`${naam}: van het net 's nachts`}
+          vanLabel="Zonder batterij"
+          naarLabel="Met batterij"
+          van={kwh(j.nachtZonder)}
+          naar={kwh(j.nachtMet)}
+          nadruk={verschil(j.nachtZonder, j.nachtMet)}
+          delta={aandeel(j.nachtZonder, j.nachtMet)}
+          uitleg={`Wat je per jaar tussen ${NACHT[0]}.00 en ${NACHT[1]}.00 uur van het net haalt, van ${maanden}. Hier laadt de batterij als de stroom goedkoop is.`}
+          accent={MEER}
+        />
+      );
+    }),
+  ];
 }
 
 export function Verschuiving({
@@ -107,28 +218,7 @@ export function Verschuiving({
 
   const H = MARGE.boven + reeksen.length * (PANEEL + TUSSEN) - TUSSEN + MARGE.onder;
 
-  /**
-   * Wat de verschuiving per jaar betekent, per seizoen: hoeveel minder je 's
-   * avonds van het net haalt, en waar die stroom vandaan komt (overdag minder
-   * teruglevering met panelen, 's nachts meer afname zonder). Uit dezelfde
-   * gemiddelde dagen als de figuur, maal het aantal dagen van het seizoen.
-   */
-  const jaarcijfers = reeksen.map((r) => {
-    const s = r.profiel.season;
-    const p = r.profiel;
-    return {
-      seizoen: s,
-      avondZonder: perJaar(p.importBaseline, AVOND, s),
-      avondMet: perJaar(p.importBattery, AVOND, s),
-      overdagZonder: perJaar(p.exportBaseline, OVERDAG, s),
-      overdagMet: perJaar(p.exportBattery, OVERDAG, s),
-      nachtZonder: perJaar(p.importBaseline, NACHT, s),
-      nachtMet: perJaar(p.importBattery, NACHT, s),
-    };
-  });
-
-  // Het hoofdcijfer van de titel: de avondafname die over het hele jaar wegvalt.
-  const avondMinder = jaarcijfers.reduce((som, j) => som + (j.avondZonder - j.avondMet), 0);
+  const { jaarcijfers, avondMinder } = jaarcijfersVan(profielen);
 
   // Waar de batterij de avondafname het sterkst indrukt: dat is het verhaal.
   const grootsteDaling = reeksen.map((r) => {
@@ -370,66 +460,7 @@ export function Verschuiving({
         de dagen van elk seizoen.
       </p>
 
-      <div className="stat-grid">
-        {jaarcijfers.map((j) => {
-          const naam = j.seizoen === "winter" ? "Winter" : "Zomer";
-          const maanden =
-            j.seizoen === "winter" ? "oktober tot en met maart" : "april tot en met september";
-          return (
-            <Tegel
-              key={`avond-${j.seizoen}`}
-              label={`${naam}: van het net 's avonds`}
-              vanLabel="Zonder batterij"
-              naarLabel="Met batterij"
-              van={kwh(j.avondZonder)}
-              naar={kwh(j.avondMet)}
-              nadruk={verschil(j.avondZonder, j.avondMet)}
-              delta={aandeel(j.avondZonder, j.avondMet)}
-              deltaGoed={j.avondMet < j.avondZonder}
-              uitleg={`Wat je per jaar tussen ${AVOND[0]}.00 en ${AVOND[1]}.00 uur van het net haalt, van ${maanden}.`}
-              accent={MINDER}
-            />
-          );
-        })}
-        {jaarcijfers.map((j) => {
-          const naam = j.seizoen === "winter" ? "Winter" : "Zomer";
-          const maanden =
-            j.seizoen === "winter" ? "oktober tot en met maart" : "april tot en met september";
-          if (zonnepanelen) {
-            // Een seizoen waarin je overdag nauwelijks levert, zegt niets.
-            if (j.overdagZonder < 5) return null;
-            return (
-              <Tegel
-                key={`overdag-${j.seizoen}`}
-                label={`${naam}: naar het net overdag`}
-                vanLabel="Zonder batterij"
-                naarLabel="Met batterij"
-                van={kwh(j.overdagZonder)}
-                naar={kwh(j.overdagMet)}
-                nadruk={verschil(j.overdagZonder, j.overdagMet)}
-                delta={aandeel(j.overdagZonder, j.overdagMet)}
-                deltaGoed={j.overdagMet < j.overdagZonder}
-                uitleg={`Zonnestroom die je per jaar tussen ${OVERDAG[0]}.00 en ${OVERDAG[1]}.00 uur aan het net levert, van ${maanden}. Wat de batterij opvangt, gebruik je 's avonds zelf.`}
-                accent="var(--series-2)"
-              />
-            );
-          }
-          return (
-            <Tegel
-              key={`nacht-${j.seizoen}`}
-              label={`${naam}: van het net 's nachts`}
-              vanLabel="Zonder batterij"
-              naarLabel="Met batterij"
-              van={kwh(j.nachtZonder)}
-              naar={kwh(j.nachtMet)}
-              nadruk={verschil(j.nachtZonder, j.nachtMet)}
-              delta={aandeel(j.nachtZonder, j.nachtMet)}
-              uitleg={`Wat je per jaar tussen ${NACHT[0]}.00 en ${NACHT[1]}.00 uur van het net haalt, van ${maanden}. Hier laadt de batterij als de stroom goedkoop is.`}
-              accent={MEER}
-            />
-          );
-        })}
-      </div>
+      <div className="stat-grid">{jaartegels(jaarcijfers, zonnepanelen)}</div>
 
     </Figure>
   );

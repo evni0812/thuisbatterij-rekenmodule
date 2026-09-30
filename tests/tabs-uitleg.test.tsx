@@ -288,7 +288,10 @@ describe("de teksten beweren niets wat niet klopt", () => {
     "app/page.tsx",
     "lib/uitleg.tsx",
     "lib/strategie.ts",
-    ...readdirSync("components").map((f) => `components/${f}`),
+    // Ook de begeleide stappen in components/gids: daar staan dezelfde claims.
+    ...readdirSync("components", { recursive: true })
+      .map((f) => `components/${String(f)}`)
+      .filter((f) => /\.tsx?$/.test(f)),
   ];
   const tekst = bestanden.map((f) => readFileSync(f, "utf8")).join("\n");
 

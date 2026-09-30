@@ -1,0 +1,628 @@
+/*
+ * Stap 3 van de begeleide route: de dag als film.
+ *
+ * Kleuren volgen de rest van de tool: blauw is stroom van het net, oranje stroom
+ * naar het net, groen de batterij, paars de zon. Een stroom is nooit alleen aan
+ * kleur te herkennen: er staan pijlpunten, kWh-labels en een onderschrift bij.
+ */
+
+/* ── Keuze zomer- of winterdag ────────────────────────────────────────────── */
+
+.dag-keuze {
+  display: inline-flex;
+  align-self: flex-start;
+  padding: 4px;
+  gap: 4px;
+  border-radius: 999px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+.dag-keuze-knop {
+  border: 0;
+  background: none;
+  font: inherit;
+  font-weight: 600;
+  color: var(--text-secondary);
+  padding: 9px 20px;
+  border-radius: 999px;
+  cursor: pointer;
+  transition:
+    background 0.15s,
+    color 0.15s;
+}
+
+.dag-keuze-knop:hover {
+  background: var(--acs);
+}
+
+.dag-keuze-knop[aria-pressed="true"] {
+  background: var(--ac);
+  color: #fff;
+}
+
+.dag-keuze-knop:focus-visible,
+.dagfilm-knop:focus-visible {
+  outline: 2px solid var(--ac);
+  outline-offset: 2px;
+}
+
+/* ── De film ──────────────────────────────────────────────────────────────── */
+
+.dagfilm {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(0, 1fr);
+  grid-template-areas:
+    "film bediening"
+    "tijd tijd";
+  gap: 20px 32px;
+  align-items: center;
+  padding: 20px 24px 22px;
+  border-radius: 14px;
+  background: var(--surface-2);
+  border: 1px solid var(--border);
+}
+
+.dagfilm-film {
+  grid-area: film;
+  min-width: 0;
+}
+
+.dagfilm-schema {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+}
+
+.dagfilm-bediening {
+  grid-area: bediening;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  min-width: 0;
+}
+
+.dagfilm-rij {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.dagfilm-knop {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border: 0;
+  border-radius: 999px;
+  background: var(--ac);
+  color: #fff;
+  font: inherit;
+  font-weight: 600;
+  padding: 11px 20px 11px 16px;
+  min-height: 44px;
+  cursor: pointer;
+}
+
+.dagfilm-knop:hover {
+  background: var(--ac2);
+}
+
+.dagfilm-knop svg {
+  fill: currentColor;
+  flex: none;
+}
+
+.dagfilm-klok {
+  font-size: 2.1rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  color: var(--ac);
+  font-variant-numeric: tabular-nums;
+}
+
+.dagfilm-onderschrift {
+  margin: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 14px 16px;
+  border-radius: 12px;
+  background: var(--surface-1);
+  border: 1px solid var(--border);
+  border-left: 5px solid var(--ac);
+  min-height: 7.6em;
+}
+
+.dagfilm-onderschrift[data-fase="laden-zon"] {
+  border-left-color: var(--series-5);
+}
+.dagfilm-onderschrift[data-fase="laden-net"] {
+  border-left-color: var(--series-1);
+}
+.dagfilm-onderschrift[data-fase="leveren"] {
+  border-left-color: var(--series-3);
+}
+.dagfilm-onderschrift[data-fase="zon-net"] {
+  border-left-color: var(--series-2);
+}
+
+.dagfilm-onderschrift-zin {
+  font-size: 1.08rem;
+  line-height: 1.45;
+  color: var(--text-primary);
+}
+
+/* Knooppunten */
+
+.dagfilm-cirkel {
+  fill: var(--surface-1);
+  stroke: currentColor;
+  stroke-width: 3;
+  transition: stroke 0.25s;
+}
+
+.dagfilm-knoop path,
+.dagfilm-knoop line,
+.dagfilm-knoop rect {
+  stroke: currentColor;
+  stroke-width: 3.5;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.dagfilm-knoop .dagfilm-vul,
+.dagfilm-knoop circle.dagfilm-vul {
+  fill: currentColor;
+  stroke: none;
+}
+
+.dagfilm-knoop.uit {
+  opacity: 0.5;
+}
+
+.dagfilm-niveau {
+  fill: currentColor;
+  stroke: none !important;
+  transform-box: fill-box;
+  transform-origin: 50% 100%;
+  transition: transform 0.35s ease;
+}
+
+.dagfilm-stralen {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.dagfilm-zon.actief .dagfilm-stralen {
+  animation: dagfilm-draai 26s linear infinite;
+}
+
+@keyframes dagfilm-draai {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.dagfilm-naam {
+  font-size: 22px;
+  font-weight: 650;
+  fill: var(--ac2);
+}
+
+.dagfilm-sub {
+  font-size: 19px;
+  fill: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* Op een telefoon is de tekening kleiner; de letters ook, maar minder. */
+.dagfilm-schema.krap .dagfilm-naam {
+  font-size: 17px;
+}
+
+.dagfilm-schema.krap .dagfilm-sub {
+  font-size: 15px;
+}
+
+.dagfilm-schema.krap .dagfilm-waarde {
+  font-size: 16px;
+  stroke-width: 5px;
+}
+
+.dagfilm-schema.krap .dagfilm-cirkel {
+  stroke-width: 2.5;
+}
+
+/* Stromen */
+
+.dagfilm-rail-uit {
+  stroke: var(--border-strong);
+  stroke-width: 3;
+  stroke-dasharray: 2 9;
+  stroke-linecap: round;
+}
+
+.dagfilm-rail {
+  stroke: currentColor;
+  stroke-opacity: 0.2;
+  stroke-linecap: round;
+}
+
+.dagfilm-stippen {
+  stroke: currentColor;
+  stroke-linecap: round;
+  animation: dagfilm-stroom 0.9s linear infinite;
+}
+
+@keyframes dagfilm-stroom {
+  to {
+    stroke-dashoffset: var(--periode);
+  }
+}
+
+.dagfilm-pijl {
+  fill: currentColor;
+}
+
+.dagfilm-waarde {
+  font-size: 20px;
+  font-weight: 650;
+  fill: var(--text-primary);
+  stroke: var(--surface-2);
+  stroke-width: 6px;
+  paint-order: stroke;
+  stroke-linejoin: round;
+  font-variant-numeric: tabular-nums;
+}
+
+/* ── Tijdlijn en schuif ───────────────────────────────────────────────────── */
+
+.dagfilm-tijd {
+  grid-area: tijd;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.dagfilm-tijdlijn-vak {
+  width: 100%;
+}
+
+/* De breedte komt uit de meting in de component: tekst blijft zo op leesmaat. */
+.dagfilm-tijdlijn {
+  display: block;
+  max-width: 100%;
+  overflow: visible;
+}
+
+.dagfilm-lading {
+  fill: var(--series-3);
+  fill-opacity: 0.16;
+}
+
+.dagfilm-as {
+  stroke: var(--axis);
+  stroke-width: 2;
+}
+
+.dagfilm-prijslijn {
+  fill: none;
+  stroke: var(--series-1);
+  stroke-width: 2;
+  stroke-linejoin: round;
+}
+
+.dagfilm-markering {
+  stroke: var(--ac);
+  stroke-width: 2;
+  stroke-dasharray: 4 4;
+}
+
+.dagfilm-punt {
+  fill: var(--surface-1);
+  stroke: var(--series-1);
+  stroke-width: 3.5;
+}
+
+.dagfilm-prijs {
+  font-size: 16px;
+  font-weight: 650;
+  fill: var(--series-1);
+}
+
+.dagfilm-uur {
+  font-size: 13px;
+  fill: var(--text-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/*
+ * De schuif is 22 px dik en steekt aan beide kanten 11 px buiten de tijdlijn,
+ * zodat het midden van de knop precies onder het begin en het einde van de
+ * dag valt.
+ */
+.dagfilm-schuif {
+  --duim: 24px;
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  width: calc(100% + var(--duim));
+  margin: 4px calc(var(--duim) / -2) 0;
+  height: 32px;
+  background: transparent;
+  cursor: pointer;
+  touch-action: pan-y;
+}
+
+.dagfilm-schuif::-webkit-slider-runnable-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--seq-200);
+}
+
+.dagfilm-schuif::-moz-range-track {
+  height: 6px;
+  border-radius: 999px;
+  background: var(--seq-200);
+}
+
+.dagfilm-schuif::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  width: var(--duim);
+  height: var(--duim);
+  margin-top: calc((6px - var(--duim)) / 2);
+  border-radius: 50%;
+  background: var(--ac);
+  border: 3px solid #fff;
+  box-shadow: 0 1px 4px rgba(26, 31, 30, 0.35);
+}
+
+.dagfilm-schuif::-moz-range-thumb {
+  width: calc(var(--duim) - 6px);
+  height: calc(var(--duim) - 6px);
+  border-radius: 50%;
+  background: var(--ac);
+  border: 3px solid #fff;
+  box-shadow: 0 1px 4px rgba(26, 31, 30, 0.35);
+}
+
+.dagfilm-schuif:focus-visible {
+  outline: none;
+}
+
+.dagfilm-schuif:focus-visible::-webkit-slider-thumb {
+  box-shadow:
+    0 0 0 3px var(--surface-2),
+    0 0 0 5px var(--ac);
+}
+
+.dagfilm-schuif:focus-visible::-moz-range-thumb {
+  box-shadow:
+    0 0 0 3px var(--surface-2),
+    0 0 0 5px var(--ac);
+}
+
+.dagfilm-legenda {
+  list-style: none;
+  margin: 2px 0 0;
+  padding: 0;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 20px;
+  font-size: 0.84rem;
+  color: var(--text-muted);
+}
+
+.dagfilm-legenda li {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.dagfilm-swatch {
+  display: inline-block;
+  width: 22px;
+}
+
+.dagfilm-swatch.lijn {
+  height: 0;
+  border-top: 2.5px solid var(--series-1);
+}
+
+.dagfilm-swatch.vlak {
+  height: 12px;
+  background: var(--series-3);
+  opacity: 0.25;
+  border-radius: 2px;
+}
+
+/* ── Wat de dag opleverde ─────────────────────────────────────────────────── */
+
+.dag-noot {
+  margin: -6px 0 0;
+  font-size: 0.86rem;
+  color: var(--text-muted);
+  max-width: var(--maat-tekst, 48rem);
+}
+
+.dag-getallen {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.dag-getal {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 18px 20px;
+  border-radius: 12px;
+  border: 1px solid var(--border);
+  background: var(--surface-1);
+  min-width: 0;
+}
+
+.dag-getal-hoofd {
+  background: var(--acs);
+  border-color: var(--seq-200);
+}
+
+.dag-getal-waarde {
+  font-size: clamp(1.9rem, 4.6vw, 2.6rem);
+  font-weight: 700;
+  line-height: 1.05;
+  letter-spacing: -0.02em;
+  color: var(--ac);
+  font-variant-numeric: tabular-nums;
+}
+
+.dag-getal-label {
+  font-size: 1rem;
+  font-weight: 650;
+  color: var(--text-primary);
+}
+
+.dag-getal-noot {
+  font-size: 0.86rem;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+/* ── De brug naar het jaar ────────────────────────────────────────────────── */
+
+.dag-jaar {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  padding-top: 24px;
+  border-top: 1px solid var(--border);
+}
+
+.dag-jaar-kop {
+  font-size: 1.25rem;
+  line-height: 1.3;
+  color: var(--ac2);
+  max-width: var(--maat-tekst, 48rem);
+}
+
+.dag-jaar-groot {
+  margin: 2px 0 0;
+}
+
+.dag-jaar-uitleg {
+  margin: 0 0 6px;
+  font-size: 1rem;
+  line-height: 1.5;
+  color: var(--text-secondary);
+  max-width: var(--maat-tekst, 48rem);
+}
+
+.dag-jaartegels {
+  margin-top: 4px;
+}
+
+/* ── Wachten op het antwoord ──────────────────────────────────────────────── */
+
+.dag-skelet {
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+}
+
+.dag-skelet-film,
+.dag-skelet-rij span {
+  border-radius: 14px;
+  background: linear-gradient(90deg, var(--surface-2) 0%, var(--acs) 50%, var(--surface-2) 100%);
+  background-size: 200% 100%;
+  animation: dag-glans 1.6s ease-in-out infinite;
+}
+
+.dag-skelet-film {
+  height: 300px;
+}
+
+.dag-skelet-rij {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.dag-skelet-rij span {
+  height: 110px;
+}
+
+@keyframes dag-glans {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: -100% 0;
+  }
+}
+
+/* ── Smal scherm ──────────────────────────────────────────────────────────── */
+
+@media (max-width: 820px) {
+  .dagfilm {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      "film"
+      "bediening"
+      "tijd";
+    padding: 14px 14px 18px;
+    gap: 16px;
+  }
+
+  .dagfilm-onderschrift {
+    min-height: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .dag-getallen,
+  .dag-skelet-rij {
+    grid-template-columns: minmax(0, 1fr);
+  }
+
+  .dag-keuze {
+    align-self: stretch;
+  }
+
+  .dag-keuze-knop {
+    flex: 1;
+  }
+
+  .dagfilm-klok {
+    font-size: 1.8rem;
+  }
+
+  .dag-skelet-film {
+    height: 220px;
+  }
+}
+
+@media (pointer: coarse) {
+  .dag-keuze-knop {
+    min-height: 44px;
+  }
+}
+
+/* Minder beweging: de stippen en de zon staan stil; de film speelt alleen als jij dat wilt. */
+@media (prefers-reduced-motion: reduce) {
+  .dagfilm-stippen,
+  .dagfilm-zon.actief .dagfilm-stralen,
+  .dag-skelet-film,
+  .dag-skelet-rij span {
+    animation: none;
+  }
+
+  .dagfilm-niveau,
+  .dagfilm-cirkel,
+  .dag-keuze-knop {
+    transition: none;
+  }
+}

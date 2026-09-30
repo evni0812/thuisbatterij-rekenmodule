@@ -20,6 +20,8 @@ import { Nettarief } from "../components/Nettarief";
 import { Prijskloof } from "../components/Prijskloof";
 import { Statistieken } from "../components/Statistieken";
 import { FiguurNaam } from "../components/chart-parts";
+import { Gids } from "../components/gids/Gids";
+import { STAPPEN } from "../components/gids/types";
 import {
   OpDitTabblad,
   Paneel,
@@ -81,6 +83,23 @@ export default function Page() {
   const [geladen, setGeladen] = useState(false);
   const [tab, setTab] = useState<TabId>(STANDAARD_TAB);
   /**
+   * Stap voor stap (de begeleide route, standaard) of alle cijfers (de zeven
+   * tabbladen). Een link met een tabblad of een figuuranker opent alle cijfers:
+   * die links komen van mensen die een bepaalde figuur willen laten zien.
+   */
+  const [weergave, setWeergave] = useState<"stappen" | "alles">("stappen");
+  /** De stap in de begeleide route, 0 tot en met 4. */
+  const [stap, setStap] = useState(0);
+  const weergaveRef = useRef(weergave);
+  weergaveRef.current = weergave;
+  const stapRef = useRef(stap);
+  stapRef.current = stap;
+  const kiesStap = useCallback((s: number) => {
+    if (s !== stapRef.current || weergaveRef.current !== "stappen") duwTab.current = true;
+    setWeergave("stappen");
+    setStap(s);
+  }, []);
+  /**
    * De volgende URL-update hoort bij een tabwissel door de gebruiker en krijgt
    * een eigen stap in de geschiedenis (de terugknop gaat dan naar het vorige
    * tabblad). Invoer wijzigen vervangt alleen de huidige stap.
@@ -89,7 +108,8 @@ export default function Page() {
   const tabRef = useRef(tab);
   tabRef.current = tab;
   const kiesTab = useCallback((id: TabId) => {
-    if (id !== tabRef.current) duwTab.current = true;
+    if (id !== tabRef.current || weergaveRef.current !== "alles") duwTab.current = true;
+    setWeergave("alles");
     setTab(id);
   }, []);
   /**
@@ -117,14 +137,24 @@ export default function Page() {
     const p = new URLSearchParams(window.location.search);
     // Ook een tabblad van vóór de herindeling (?tab=wat-als) komt goed uit.
     const tabUrl = leesTab(p.get("tab"));
-    if (tabUrl) setTab(tabUrl);
+    if (tabUrl) {
+      setTab(tabUrl);
+      setWeergave("alles");
+    }
     // Een anker wint van het tabblad: het wijst een figuur aan, en die staat
     // maar op één tabblad.
     const anker = window.location.hash.slice(1);
     const tabAnker = tabVanAnker(anker);
     if (tabAnker) {
       setTab(tabAnker);
+      setWeergave("alles");
       wachtendAnker.current = anker;
+    }
+    if (!tabUrl && !tabAnker) {
+      // Een gedeelde doorrekening zonder stap opent bij het antwoord: de
+      // afzender wil laten zien wat eruit kwam, niet de invoer opnieuw vragen.
+      const s = leesStap(p.get("stap"));
+      setStap(s ?? (Object.keys(uitUrl).length > 0 ? STAP_OPBRENGST : 0));
     }
 
     const laatste = leesLaatste();
@@ -149,6 +179,7 @@ export default function Page() {
       const anker = window.location.hash.slice(1);
       const tabAnker = tabVanAnker(anker);
       if (!tabAnker) return;
+      setWeergave("alles");
       setTab(tabAnker);
       wachtendAnker.current = anker;
     };
@@ -160,7 +191,14 @@ export default function Page() {
       const anker = window.location.hash.slice(1);
       const tabAnker = tabVanAnker(anker);
       if (tabAnker) wachtendAnker.current = anker;
-      setTab(tabAnker ?? leesTab(p.get("tab")) ?? STANDAARD_TAB);
+      const tabUrl = tabAnker ?? leesTab(p.get("tab"));
+      if (tabUrl) {
+        setWeergave("alles");
+        setTab(tabUrl);
+      } else {
+        setWeergave("stappen");
+        setStap(leesStap(p.get("stap")) ?? 0);
+      }
     };
     window.addEventListener("hashchange", opHash);
     window.addEventListener("popstate", opTerug);
@@ -181,11 +219,11 @@ export default function Page() {
     schrijfUrl(
       inst,
       STANDAARD,
-      tab === STANDAARD_TAB ? {} : { tab },
-      tabVanAnker(anker) === tab ? anker : undefined,
+      weergave === "alles" ? { tab } : stap > 0 ? { stap: String(stap + 1) } : {},
+      weergave === "alles" && tabVanAnker(anker) === tab ? anker : undefined,
       modus,
     );
-  }, [inst, geladen, tab]);
+  }, [inst, geladen, tab, weergave, stap]);
 
   const preset = kiesPreset(inst.presetId);
   // Eén bron voor wat er bij de batterij staat en wat er gerekend wordt: de
@@ -203,7 +241,10 @@ export default function Page() {
     ),
     // Het raster en de huishoudens staan alleen op "Welke batterij"; zolang dat
     // tabblad dicht is, rekent de telefoon er niet aan.
-    { rasterNodig: tab === "welke-batterij" },
+    {
+      rasterNodig:
+        weergave === "alles" ? tab === "welke-batterij" : STAPPEN[stap]?.id === "past",
+    },
   );
 
   const {
@@ -362,7 +403,53 @@ export default function Page() {
     if (!el || el.closest("[hidden]")) return;
     wachtendAnker.current = null;
     el.scrollIntoView({ block: "start" });
-  }, [tab, result]);
+  }, [tab, result, weergave]);
+
+  // Wat er met de invoer uit de link of de opslag is gebeurd: in beide
+  // weergaven bovenaan, want het verandert wat je ziet.
+  const meldingen = (
+    <>
+    {uitOpslag ? (
+      <div className="notitie" role="status">
+        <p>
+          <b>Je bewaarde instellingen zijn geladen.</b> Wil je toch met de
+          standaardwaarden beginnen? Dan kan dat hier.
+        </p>
+        <button
+          type="button"
+          className="knop licht klein"
+          onClick={() => {
+            setInst(STANDAARD);
+            setUitOpslag(false);
+          }}
+        >
+          Standaardwaarden
+        </button>
+      </div>
+    ) : null}
+
+    {aangepast.length > 0 ? (
+      <div className="notitie" role="status">
+        <p>
+          <b>Niet alles uit de link was bruikbaar.</b>{" "}
+          {aangepast.length === 1 ? "Deze instelling stond" : "Deze instellingen stonden"}{" "}
+          er niet goed in en {aangepast.length === 1 ? "is" : "zijn"} vervangen door
+          een geldige waarde: {opsomming(aangepast.map((k) => VELDNAAM[k]))}. De
+          uitkomst hieronder rekent daarmee.
+          {aangepast.includes("van") || aangepast.includes("tot")
+            ? " Een periode moet beginnen vóór hij eindigt en binnen de beschikbare data vallen."
+            : ""}{" "}
+          Kijk{" "}
+          {aangepast.length === 1 ? "hem" : "ze"} na bij de instellingen als je
+          iets anders bedoelde.
+        </p>
+        <button type="button" className="knop licht klein" onClick={() => setAangepast([])}>
+          Begrepen
+        </button>
+      </div>
+    ) : null}
+    </>
+  );
 
   const wachtOpResultaat = !result ? (
     <div className="notitie">
@@ -391,20 +478,85 @@ export default function Page() {
         <a className="balk-merk" href="/">
           Thuisbatterij <span>Rekentool</span>
         </a>
-        <Tabs actief={tab} onKies={kiesTab} />
+        <div className="weergave-wissel" role="group" aria-label="Weergave">
+          <button
+            type="button"
+            aria-pressed={weergave === "stappen"}
+            onClick={() => kiesStap(stap)}
+          >
+            Stap voor stap
+          </button>
+          <button
+            type="button"
+            aria-pressed={weergave === "alles"}
+            onClick={() => kiesTab(tab)}
+          >
+            Alle cijfers
+          </button>
+        </div>
+        {weergave === "alles" ? <Tabs actief={tab} onKies={kiesTab} /> : <span className="balk-vul" />}
         {datadekking ? <span className="balk-meta">{datadekking}</span> : null}
       </header>
 
-      <main className="pagina">
+      {weergave === "stappen" ? (
+        <main className="pagina">
+          {meldingen}
+          <Gids
+            stap={stap}
+            onStap={kiesStap}
+            wachtscherm={
+              <Wachtscherm
+                voortgang={voortgang}
+                bezig={busy}
+                verouderd={verouderd}
+                eersteKeer={!result}
+                onBereken={herbereken}
+              />
+            }
+            data={{
+              inst,
+              zetInst: (patch) => setInst((s) => ({ ...s, ...patch })),
+              manifest,
+              preset,
+              capaciteitKwh: capaciteit,
+              vermogenKw: vermogen,
+              prijsEur: prijs,
+              result,
+              toon,
+              scenario,
+              overgang,
+              scenarioFout,
+              grid,
+              huishoudens,
+              toonZonnepanelen,
+              bedragJarenTekst,
+              bezig: busy,
+              verouderd,
+              herbereken,
+              uitleg,
+              naarVerdieping: (id, anker) => {
+                if (anker) wachtendAnker.current = anker;
+                kiesTab(id);
+                window.scrollTo({ top: 0 });
+              },
+              volgende: () => kiesStap(stap + 1),
+            }}
+          />
+        </main>
+      ) : null}
+
+      <main className="pagina" hidden={weergave !== "alles"}>
         {/* Eén plek, op elk tabblad: wat er gebeurt terwijl er gerekend wordt,
             of dat er nog gerekend móet worden. */}
-        <Wachtscherm
-          voortgang={voortgang}
-          bezig={busy}
-          verouderd={verouderd}
-          eersteKeer={!result}
-          onBereken={herbereken}
-        />
+        {weergave === "alles" ? (
+          <Wachtscherm
+            voortgang={voortgang}
+            bezig={busy}
+            verouderd={verouderd}
+            eersteKeer={!result}
+            onBereken={herbereken}
+          />
+        ) : null}
 
         {/* ── Uitkomst ───────────────────────────────────────────────────── */}
         <Paneel id="uitkomst" actief={tab}>
@@ -423,45 +575,7 @@ export default function Page() {
           </div>
           <OpDitTabblad id="uitkomst" />
 
-          {uitOpslag ? (
-            <div className="notitie" role="status">
-              <p>
-                <b>Je bewaarde instellingen zijn geladen.</b> Wil je toch met de
-                standaardwaarden beginnen? Dan kan dat hier.
-              </p>
-              <button
-                type="button"
-                className="knop licht klein"
-                onClick={() => {
-                  setInst(STANDAARD);
-                  setUitOpslag(false);
-                }}
-              >
-                Standaardwaarden
-              </button>
-            </div>
-          ) : null}
-
-          {aangepast.length > 0 ? (
-            <div className="notitie" role="status">
-              <p>
-                <b>Niet alles uit de link was bruikbaar.</b>{" "}
-                {aangepast.length === 1 ? "Deze instelling stond" : "Deze instellingen stonden"}{" "}
-                er niet goed in en {aangepast.length === 1 ? "is" : "zijn"} vervangen door
-                een geldige waarde: {opsomming(aangepast.map((k) => VELDNAAM[k]))}. De
-                uitkomst hieronder rekent daarmee.
-                {aangepast.includes("van") || aangepast.includes("tot")
-                  ? " Een periode moet beginnen vóór hij eindigt en binnen de beschikbare data vallen."
-                  : ""}{" "}
-                Kijk{" "}
-                {aangepast.length === 1 ? "hem" : "ze"} na bij de instellingen als je
-                iets anders bedoelde.
-              </p>
-              <button type="button" className="knop licht klein" onClick={() => setAangepast([])}>
-                Begrepen
-              </button>
-            </div>
-          ) : null}
+          {weergave === "alles" ? meldingen : null}
 
           <Invoer
             afnameKwh={inst.afnameKwh}
@@ -1146,7 +1260,7 @@ export default function Page() {
       {/* Verder lezen: de tablist bovenin is om ergens naartoe te springen,
           deze is om door te stappen. Eén keer, na de panelen — alleen het
           actieve paneel is zichtbaar, dus hij staat altijd onder wat je leest. */}
-      <TabStapper actief={tab} onKies={kiesTab} />
+      {weergave === "alles" ? <TabStapper actief={tab} onKies={kiesTab} /> : null}
 
       <footer className="voet">
         <span>
@@ -1160,4 +1274,14 @@ export default function Page() {
       </footer>
     </div>
   );
+}
+
+/** De stap met het antwoord: waar een gedeelde doorrekening opent. */
+const STAP_OPBRENGST = STAPPEN.findIndex((s) => s.id === "opbrengst");
+
+/** `?stap=3` als index 2; onzin of buiten bereik is null. */
+function leesStap(v: string | null): number | null {
+  if (!v || !/^\d$/.test(v)) return null;
+  const n = Number(v) - 1;
+  return n >= 0 && n < STAPPEN.length ? n : null;
 }

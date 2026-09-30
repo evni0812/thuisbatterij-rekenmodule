@@ -1,0 +1,375 @@
+/*
+ * Stap 1 en 2 van de begeleide route: jouw huis en jouw batterij.
+ * Bouwstenen uit gids.css (.gids-keuzes, .gids-keuze, .gids-verdieping);
+ * hier alleen wat deze twee stappen erbij nodig hebben.
+ */
+
+/* ── Keuzekaarten ─────────────────────────────────────────────────────────── */
+
+.invoer-kaart {
+  gap: 4px;
+  padding: 18px 20px 20px;
+  min-width: 0;
+}
+
+/* Een vinkje naast de kleur: gekozen is ook zichtbaar zonder kleur te zien. */
+.invoer-kaart[aria-pressed="true"]::after {
+  content: "✓";
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  display: grid;
+  place-items: center;
+  background: var(--ac);
+  color: #fff;
+  font-size: 0.85rem;
+  font-weight: 700;
+}
+
+.kaart-titel {
+  font-size: 1.05rem;
+  font-weight: 650;
+  line-height: 1.25;
+  color: var(--text-primary);
+}
+
+.kaart-uitleg {
+  font-size: 0.9rem;
+  line-height: 1.4;
+  color: var(--text-secondary);
+}
+
+.kaart-noot {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+}
+
+/* ── Stap 1: het huis ─────────────────────────────────────────────────────── */
+
+.huis-kaart {
+  align-items: flex-start;
+}
+
+.huis-plaatje {
+  width: min(100%, 220px);
+  height: auto;
+  margin-bottom: 8px;
+}
+
+.huis-kaart .kaart-titel {
+  font-size: 1.25rem;
+}
+
+.huis-zon {
+  transform-origin: 132px 26px;
+  animation: huis-zon 30s linear infinite;
+}
+
+.huis-lijn {
+  animation: huis-lijn 1.2s linear infinite;
+}
+
+@keyframes huis-zon {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes huis-lijn {
+  to {
+    stroke-dashoffset: -16;
+  }
+}
+
+.huis-velden {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 22px 28px;
+}
+
+.huis-veld {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  min-width: 0;
+}
+
+.huis-label {
+  font-size: 1rem;
+  font-weight: 620;
+  line-height: 1.3;
+}
+
+.huis-hint {
+  margin: 0;
+  font-size: 0.85rem;
+  line-height: 1.45;
+  color: var(--text-muted);
+}
+
+/* Het getal is de hoofdzaak: groot, zoals de cijfers verderop. */
+.huis-veld .getal-veld {
+  padding: 4px 16px;
+  border-radius: 10px;
+  background: var(--surface-1);
+  border-width: 1.5px;
+}
+
+.huis-veld .getal-veld input {
+  font-size: 1.9rem;
+  font-weight: 700;
+  color: var(--ac);
+  padding: 8px 0;
+  min-width: 0;
+}
+
+.huis-veld .eenheid {
+  font-size: 1.05rem;
+  font-weight: 560;
+}
+
+.huis-voorbeeld {
+  margin: -8px 0 0;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+}
+
+.huis-samenvatting {
+  margin: 0;
+  padding: 14px 18px;
+  border-radius: 12px;
+  background: var(--acs);
+  color: var(--ac2);
+  font-size: 1.15rem;
+  line-height: 1.45;
+  max-width: var(--maat-tekst, 48rem);
+}
+
+.huis-samenvatting strong {
+  font-weight: 700;
+  white-space: nowrap;
+}
+
+.huis-waarschuwingen {
+  margin: 0;
+}
+
+.huis-net {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.huis-net-regel {
+  margin: 0;
+  font-size: 0.95rem;
+  color: var(--text-secondary);
+}
+
+.huis-net-regel strong {
+  color: var(--text-primary);
+}
+
+.huis-net-kies {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  max-width: 24rem;
+}
+
+/* ── Stap 2: de batterij ──────────────────────────────────────────────────── */
+
+.batterij-keuzes {
+  grid-template-columns: repeat(auto-fill, minmax(210px, 1fr));
+}
+
+.batterij-kaart {
+  align-items: flex-start;
+}
+
+.batterij-plaatje {
+  width: 48px;
+  height: 100px;
+  flex: none;
+  margin-bottom: 6px;
+}
+
+.batterij-vulling {
+  transform-box: fill-box;
+  transform-origin: bottom;
+  animation: batterij-vul 0.7s ease-out;
+}
+
+@keyframes batterij-vul {
+  from {
+    transform: scaleY(0.15);
+  }
+  to {
+    transform: none;
+  }
+}
+
+.batterij-groot {
+  margin-top: 4px;
+  font-size: 2rem;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: -0.01em;
+  color: var(--ac);
+  font-variant-numeric: tabular-nums;
+}
+
+.batterij-groot small {
+  font-size: 0.95rem;
+  font-weight: 560;
+  color: var(--text-muted);
+  letter-spacing: 0;
+}
+
+.batterij-label {
+  margin-top: 6px;
+  padding: 3px 9px;
+  border-radius: 999px;
+  background: var(--acs);
+  color: var(--ac2);
+  font-size: 0.78rem;
+  font-weight: 600;
+  line-height: 1.3;
+}
+
+.batterij-label.vast {
+  background: var(--verlies-100);
+  color: #6f3406;
+}
+
+.batterij-eigen {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 20px;
+  border: 1.5px solid var(--ac);
+  border-radius: 12px;
+  background: var(--surface-1);
+  box-shadow: 0 0 0 3px var(--acs);
+}
+
+.batterij-eigen > div {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  min-width: 0;
+}
+
+.batterij-eigen .batterij-plaatje {
+  margin: 0;
+  height: 72px;
+  width: 34px;
+}
+
+.batterij-doel {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.batterij-kop {
+  margin: 0;
+  font-size: 1.3rem;
+  line-height: 1.2;
+  color: var(--ac);
+}
+
+.batterij-doelen {
+  margin-top: 4px;
+  grid-template-columns: repeat(auto-fit, minmax(230px, 1fr));
+}
+
+.doel-kaart {
+  padding: 14px 16px 16px;
+}
+
+.doel-kaart .kaart-uitleg {
+  font-size: 0.85rem;
+}
+
+.waarschuwingen-los {
+  margin: 4px 0 0;
+  padding: 9px 12px;
+  border-left: 3px solid var(--warning);
+  border-radius: var(--radius-sm);
+  background: var(--surface-2);
+  color: var(--text-secondary);
+  font-size: 0.87rem;
+}
+
+/* ── Klein scherm en aanraking ────────────────────────────────────────────── */
+
+@media (max-width: 640px) {
+  .huis-veld .getal-veld input {
+    font-size: 1.6rem;
+  }
+
+  .huis-plaatje {
+    width: 160px;
+  }
+
+  .batterij-keuzes {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+
+  /* Eén kolom, de tekening links naast de tekst: tien kaarten blijven kort. */
+  .batterij-kaart {
+    display: grid;
+    grid-template-columns: 52px minmax(0, 1fr);
+    column-gap: 16px;
+    align-items: start;
+    padding: 14px 16px 16px;
+  }
+
+  .batterij-kaart > .batterij-plaatje {
+    grid-column: 1;
+    grid-row: 1 / span 6;
+    align-self: end;
+    margin: 0;
+  }
+
+  .batterij-kaart > :not(.batterij-plaatje) {
+    grid-column: 2;
+    justify-self: start;
+  }
+
+  .batterij-groot {
+    font-size: 1.6rem;
+  }
+
+  .batterij-eigen {
+    padding: 14px 16px;
+  }
+}
+
+@media (pointer: coarse) {
+  .gids-verdieping button,
+  .huis-net .gids-link {
+    min-height: 44px;
+    display: inline-flex;
+    align-items: center;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .huis-zon,
+  .huis-lijn,
+  .batterij-vulling {
+    animation: none;
+  }
+}
+
+/* Het vinkje rechtsboven mag de titel niet raken. */
+.batterij-kaart .kaart-titel,
+.doel-kaart .kaart-titel {
+  padding-right: 32px;
+}

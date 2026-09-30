@@ -3,6 +3,10 @@ import { IBM_Plex_Mono, IBM_Plex_Sans } from "next/font/google";
 import { Foutgrens } from "../components/Foutgrens";
 import "./theme.css";
 import "./verloop.css";
+import "./gids.css";
+import "./gids-invoer.css";
+import "./gids-dag.css";
+import "./gids-uitkomst.css";
 
 /*
  * Zelfde letters als de Energiecontract Monitor, zodat de twee tools als

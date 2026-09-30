@@ -1,7 +1,9 @@
 // @vitest-environment jsdom
 /**
  * De pagina rond de URL: een vreemde `?tab=` crasht niet, de terugknop volgt de
- * tabbladen, en een periode buiten de data wordt geklemd en gemeld.
+ * tabbladen en de stappen, en een periode buiten de data wordt geklemd en
+ * gemeld. Zonder tabblad in de link opent de begeleide route; met een tabblad
+ * of figuuranker "Alle cijfers".
  */
 import { readFileSync } from "node:fs";
 import { act, cleanup, fireEvent, render, waitFor } from "@testing-library/react";
@@ -49,10 +51,12 @@ const gekozen = (c: HTMLElement) => c.querySelector('[role="tab"][aria-selected=
 
 describe("?tab= uit de adresbalk", () => {
   it.each(["constructor", "toString", "valueOf", "hasOwnProperty", "__proto__"])(
-    "crasht niet op ?tab=%s en opent het standaardtabblad",
+    "crasht niet op ?tab=%s en opent de eerste stap",
     async (naam) => {
       const { container } = await toonPagina(`/?tab=${naam}`);
-      expect(gekozen(container)).toBe("Uitkomst");
+      expect(container.querySelector(".gids")).not.toBeNull();
+      expect(container.querySelector("#gids-kop")?.textContent).toBe("Hoe ziet jouw huis eruit?");
+      // De tabbladen blijven gemount achter "Alle cijfers".
       expect(container.querySelectorAll('[role="tabpanel"]').length).toBe(7);
     },
   );
@@ -65,7 +69,7 @@ describe("?tab= uit de adresbalk", () => {
 
 describe("de terugknop", () => {
   it("duwt een stap bij een tabwissel en volgt hem terug", async () => {
-    const { container } = await toonPagina("/");
+    const { container } = await toonPagina("/?tab=uitkomst");
     await waitFor(() => expect(gekozen(container)).toBe("Uitkomst"));
     const lengte = window.history.length;
 
@@ -90,8 +94,28 @@ describe("de terugknop", () => {
     await waitFor(() => expect(gekozen(container)).toBe("Uitkomst"));
   });
 
-  it("maakt van invoer wijzigen geen stap in de geschiedenis", async () => {
+  it("volgt de stappen terug, ook vanuit Alle cijfers", async () => {
     const { container } = await toonPagina("/");
+    await waitFor(() => expect(container.querySelector(".gids")).not.toBeNull());
+    const knop = (tekst: RegExp) =>
+      [...container.querySelectorAll<HTMLButtonElement>("button")].find((b) => tekst.test(b.textContent ?? ""))!;
+
+    fireEvent.click(knop(/Kies een batterij/));
+    await waitFor(() => expect(window.location.search).toBe("?stap=2"));
+    fireEvent.click(knop(/^Alle cijfers$/));
+    await waitFor(() => expect(window.location.search).toBe("?tab=uitkomst"));
+    expect(gekozen(container)).toBe("Uitkomst");
+
+    const terug = new Promise<void>((klaar) => window.addEventListener("popstate", () => klaar(), { once: true }));
+    act(() => window.history.back());
+    await terug;
+    await waitFor(() =>
+      expect(container.querySelector("#gids-kop")?.textContent).toBe("Welke batterij wil je doorrekenen?"),
+    );
+  });
+
+  it("maakt van invoer wijzigen geen stap in de geschiedenis", async () => {
+    const { container } = await toonPagina("/?tab=uitkomst");
     await waitFor(() => expect(gekozen(container)).toBe("Uitkomst"));
     const lengte = window.history.length;
     const afname = container.querySelector<HTMLInputElement>('input[aria-describedby="afname-hint"]')!;
@@ -100,7 +124,7 @@ describe("de terugknop", () => {
       fireEvent.change(afname, { target: { value: v } });
       fireEvent.blur(afname);
     }
-    await waitFor(() => expect(window.location.search).toBe("?af=3200"));
+    await waitFor(() => expect(window.location.search).toBe("?tab=uitkomst&af=3200"));
     expect(window.history.length).toBe(lengte);
   });
 });
@@ -118,6 +142,30 @@ describe("een periode buiten de data", () => {
     const { container } = await toonPagina("/?van=2025-09-01&tot=2025-01-01");
     await waitFor(() => expect(container.textContent).toContain("Niet alles uit de link was bruikbaar"));
     expect(container.textContent).toContain("begin van de periode en einde van de periode");
-    await waitFor(() => expect(window.location.search).toBe(""));
+    // Een link met instellingen opent bij het antwoord; wat niet klopte, is weg.
+    await waitFor(() => expect(window.location.search).toBe("?stap=4"));
+  });
+});
+
+describe("de begeleide route", () => {
+  it("opent zonder tabblad bij de eerste stap, en een gedeelde doorrekening bij het antwoord", async () => {
+    const { container } = await toonPagina("/");
+    expect(container.querySelector("#gids-kop")?.textContent).toBe("Hoe ziet jouw huis eruit?");
+    cleanup();
+    const tweede = await toonPagina("/?af=3100");
+    expect(tweede.container.querySelector("#gids-kop")?.textContent).toBe("Wat had hij je opgeleverd?");
+  });
+
+  it("opent een figuuranker in Alle cijfers", async () => {
+    const { container } = await toonPagina("/#per-maand");
+    await waitFor(() => expect(gekozen(container)).toBe("Door het jaar"));
+    expect(container.querySelector(".gids")).toBeNull();
+  });
+
+  it("laat een gecorrigeerde link ook in de stappen zien", async () => {
+    const { container } = await toonPagina("/?van=2027-03-01&stap=1");
+    await waitFor(() => expect(container.querySelector(".gids")).not.toBeNull());
+    const zichtbaar = container.querySelector("main:not([hidden])")!;
+    await waitFor(() => expect(zichtbaar.textContent).toContain("Niet alles uit de link was bruikbaar"));
   });
 });
