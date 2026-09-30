@@ -3517,3 +3517,33 @@ details.uitklap[open] > summary {
     white-space: normal;
   }
 }
+
+/* Tegel met de verandering als hoofdcijfer: groot en groen als het een
+   verbetering is; de twee standen staan er klein onder. */
+.stat-nadruk {
+  font-variant-numeric: tabular-nums;
+  font-weight: 650;
+  font-size: 1.6rem;
+  line-height: 1.15;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+
+.stat-nadruk.goed {
+  color: var(--series-3);
+}
+
+.stat-verloop.klein,
+.stat-verloop.klein .stat-van,
+.stat-verloop.klein .stat-naar {
+  font-size: 0.9rem;
+  font-weight: 500;
+}
+
+.stat-verloop.klein .stat-naar {
+  color: var(--text-primary);
+}
+
+.stat-verloop.klein.met-labels .stat-pijl {
+  padding-top: 0.95rem;
+}

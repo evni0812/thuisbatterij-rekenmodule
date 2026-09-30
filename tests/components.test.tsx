@@ -1059,7 +1059,14 @@ describe("de profielverschuiving", () => {
     // Onder de figuur: per jaar, zonder en met batterij, met de verandering.
     expect(tekst).toMatch(/Winter: van het net 's avonds/);
     expect(tekst).toMatch(/Zomer: naar het net overdag/);
-    expect(tekst).toMatch(/per jaar \(−\d+%\)/);
+    // De verandering is het hoofdcijfer, groot en groen; het aandeel staat als chipje.
+    const nadruk = [...document.querySelectorAll(".stat-nadruk")].map((e) => e.textContent);
+    expect(nadruk.length).toBe(4);
+    expect(nadruk[0]).toMatch(/^\d{1,3}(\.\d{3})* kWh minder$/);
+    expect(document.querySelector(".stat-nadruk.goed")).not.toBeNull();
+    expect(tekst).toMatch(/\d+% minder/);
+    // De titel noemt wat er per jaar 's avonds wegvalt.
+    expect(tekst).toMatch(/Met de batterij haal je 's avonds [\d.]+ kWh per jaar minder van het net/);
   });
 
   it("telt de jaartegels op tot het jaarverbruik in die uren", () => {

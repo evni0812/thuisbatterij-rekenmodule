@@ -51,12 +51,17 @@ function perJaar(reeks: number[], [van, tot]: readonly [number, number], seizoen
   return som * DAGEN_PER_JAAR[seizoen];
 }
 
-/** "−120 kWh (−35%)": de verandering, met teken en als aandeel. */
-function verandering(zonder: number, met: number): string {
+/** "209 kWh minder": de verandering als hoofdcijfer. */
+function verschil(zonder: number, met: number): string {
   const d = met - zonder;
-  const teken = d < 0 ? "−" : "+";
-  const deel = zonder > 0.5 ? ` (${teken}${procent(Math.abs(d) / zonder)})` : "";
-  return `${teken}${kwh(Math.abs(d))} per jaar${deel}`;
+  if (Math.abs(d) < 0.5) return "Nauwelijks anders";
+  return `${kwh(Math.abs(d))} ${d < 0 ? "minder" : "meer"}`;
+}
+
+/** "28% minder": dezelfde verandering als aandeel, voor het chipje. */
+function aandeel(zonder: number, met: number): string | undefined {
+  if (zonder < 0.5 || Math.abs(met - zonder) < 0.5) return undefined;
+  return `${procent(Math.abs(met - zonder) / zonder)} ${met < zonder ? "minder" : "meer"}`;
 }
 
 /** Netto uitwisseling met het net: afname positief, teruglevering negatief. */
@@ -122,6 +127,9 @@ export function Verschuiving({
     };
   });
 
+  // Het hoofdcijfer van de titel: de avondafname die over het hele jaar wegvalt.
+  const avondMinder = jaarcijfers.reduce((som, j) => som + (j.avondZonder - j.avondMet), 0);
+
   // Waar de batterij de avondafname het sterkst indrukt: dat is het verhaal.
   const grootsteDaling = reeksen.map((r) => {
     let beste = 0;
@@ -149,11 +157,9 @@ export function Verschuiving({
       anker="zomer-en-winter"
       actie={actie}
       titel={
-        zonnepanelen && grootsteDaling[1] && grootsteDaling[1].kwh > (grootsteDaling[0]?.kwh ?? 0)
-          ? "In de zomer verschuift de batterij een deel van je middagoverschot naar de avond"
-          : grootsteDaling.every((d) => d.uur >= 17)
-            ? "De batterij haalt je avondpiek van het net af"
-            : "De batterij verschuift wat je van het net haalt naar andere uren"
+        avondMinder >= 1
+          ? `Met de batterij haal je 's avonds ${kwh(avondMinder)} per jaar minder van het net`
+          : "De batterij verschuift wat je van het net haalt naar andere uren"
       }
       toelichting={
         <>
@@ -377,7 +383,8 @@ export function Verschuiving({
               naarLabel="Met batterij"
               van={kwh(j.avondZonder)}
               naar={kwh(j.avondMet)}
-              delta={verandering(j.avondZonder, j.avondMet)}
+              nadruk={verschil(j.avondZonder, j.avondMet)}
+              delta={aandeel(j.avondZonder, j.avondMet)}
               deltaGoed={j.avondMet < j.avondZonder}
               uitleg={`Wat je per jaar tussen ${AVOND[0]}.00 en ${AVOND[1]}.00 uur van het net haalt, van ${maanden}.`}
               accent={MINDER}
@@ -399,7 +406,8 @@ export function Verschuiving({
                 naarLabel="Met batterij"
                 van={kwh(j.overdagZonder)}
                 naar={kwh(j.overdagMet)}
-                delta={verandering(j.overdagZonder, j.overdagMet)}
+                nadruk={verschil(j.overdagZonder, j.overdagMet)}
+                delta={aandeel(j.overdagZonder, j.overdagMet)}
                 deltaGoed={j.overdagMet < j.overdagZonder}
                 uitleg={`Zonnestroom die je per jaar tussen ${OVERDAG[0]}.00 en ${OVERDAG[1]}.00 uur aan het net levert, van ${maanden}. Wat de batterij opvangt, gebruik je 's avonds zelf.`}
                 accent="var(--series-2)"
@@ -414,7 +422,8 @@ export function Verschuiving({
               naarLabel="Met batterij"
               van={kwh(j.nachtZonder)}
               naar={kwh(j.nachtMet)}
-              delta={verandering(j.nachtZonder, j.nachtMet)}
+              nadruk={verschil(j.nachtZonder, j.nachtMet)}
+              delta={aandeel(j.nachtZonder, j.nachtMet)}
               uitleg={`Wat je per jaar tussen ${NACHT[0]}.00 en ${NACHT[1]}.00 uur van het net haalt, van ${maanden}. Hier laadt de batterij als de stroom goedkoop is.`}
               accent={MEER}
             />

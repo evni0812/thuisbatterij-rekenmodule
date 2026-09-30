@@ -59,6 +59,7 @@ export function Tegel({
   naarLabel,
   delta,
   deltaGoed,
+  nadruk,
   uitleg,
   extra,
   accent,
@@ -76,6 +77,11 @@ export function Tegel({
   delta?: string;
   /** Is die verandering een verbetering? Bepaalt de kleur van het chipje. */
   deltaGoed?: boolean;
+  /**
+   * De verandering zelf als hoofdcijfer, bv. "209 kWh minder". Dan staan de
+   * twee waarden klein eronder: het verschil is het verhaal, niet de stand.
+   */
+  nadruk?: string;
   uitleg: string;
   /** Een derde stand, bijvoorbeeld onder het nettariefscenario. */
   extra?: ReactNode;
@@ -90,8 +96,19 @@ export function Tegel({
         <div className="stat-label">{label}</div>
         {knop}
       </div>
+      {nadruk ? (
+        <div className={deltaGoed ? "stat-nadruk goed" : "stat-nadruk"}>{nadruk}</div>
+      ) : null}
       {van !== undefined && naar !== undefined ? (
-        <div className={vanLabel || naarLabel ? "stat-verloop met-labels" : "stat-verloop"}>
+        <div
+          className={[
+            "stat-verloop",
+            vanLabel || naarLabel ? "met-labels" : "",
+            nadruk ? "klein" : "",
+          ]
+            .filter(Boolean)
+            .join(" ")}
+        >
           <span className="stat-kolom">
             {vanLabel ? <span className="stat-kolomlabel">{vanLabel}</span> : null}
             <span className="stat-van">{van}</span>
