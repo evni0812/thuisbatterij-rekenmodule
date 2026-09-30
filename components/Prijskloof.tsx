@@ -65,9 +65,8 @@ export function Prijskloof({
           Dit is waar de besparing vandaan komt: het prijsverschil waar een
           thuisbatterij van profiteert. Beide bedragen zijn gewogen naar wanneer
           je werkelijk afneemt en teruglevert. Niet het gemiddelde over alle uren
-          dus, want dat verhult juist het effect. Allebei inclusief btw. Bij
-          afname is dat wat er op je afrekening staat; bij teruglevering is het
-          een aanname.
+          dus, want dat verhult juist het effect. Allebei inclusief btw, zoals
+          ANWB Energie ze op je afrekening zet.
         </>
       }
     >

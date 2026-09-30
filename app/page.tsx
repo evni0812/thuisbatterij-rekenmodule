@@ -949,12 +949,6 @@ export default function Page() {
                 <span className="badge neutraal">aanname</span>
               </li>
               <li>
-                <b>Btw op teruglevering.</b> We nemen aan dat je de
-                terugleververgoeding inclusief btw krijgt; ANWB Energie noemt
-                alleen de kale marktprijs.
-                <span className="badge neutraal">aanname</span>
-              </li>
-              <li>
                 <b>Batterijprijzen bewegen.</b> De richtprijzen zijn van{" "}
                 {PRIJSPEILDATUM}; vul je eigen offerte in bij de geavanceerde
                 instellingen.

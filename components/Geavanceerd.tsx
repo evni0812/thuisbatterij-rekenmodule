@@ -514,7 +514,7 @@ export function Geavanceerd({
               <Getal
                 veld="terugleverkostenCt"
                 label="Terugleverkosten"
-                uitleg="Wat je leverancier per teruggeleverde kilowattuur rekent. De tool neemt aan dat ANWB Energie geen terugleverkosten rekent, daarom staat dit standaard op 0. Andere leveranciers doen het vaak wel. Voor teruglevering rekent de tool met de marktprijs inclusief btw; ook dat is een aanname."
+                uitleg="Wat je leverancier per teruggeleverde kilowattuur rekent. De tool neemt aan dat ANWB Energie geen terugleverkosten rekent, daarom staat dit standaard op 0. Andere leveranciers doen het vaak wel. Voor teruglevering krijg je bij ANWB Energie de marktprijs inclusief btw."
                 waarde={inst.terugleverkostenCt}
                 eenheid="ct/kWh"
                 onChange={(v) => v !== null && onChange({ terugleverkostenCt: v })}

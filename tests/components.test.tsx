@@ -1056,9 +1056,31 @@ describe("de profielverschuiving", () => {
     expect(tekst).toMatch(/de batterij levert/);
     // De grijze vorm heet bij naam wat hij is, niet "je profiel".
     expect(tekst).toMatch(/zonder batterij: wat er door de meter ging/);
-    // En wat het net eraan heeft, staat als piek voor en na.
-    expect(tekst).toMatch(/piek van het net/);
-    expect(tekst).toMatch(/piek naar het net/);
+    // Onder de figuur: per jaar, zonder en met batterij, met de verandering.
+    expect(tekst).toMatch(/Winter: van het net 's avonds/);
+    expect(tekst).toMatch(/Zomer: naar het net overdag/);
+    expect(tekst).toMatch(/per jaar \(−\d+%\)/);
+  });
+
+  it("telt de jaartegels op tot het jaarverbruik in die uren", () => {
+    const { container } = render(<Verschuiving profielen={result.seasonProfiles} />);
+    const tegels = [...container.querySelectorAll(".stat")];
+    expect(tegels.length).toBe(4);
+    // De avondafname zonder batterij, winter plus zomer, is een deel van de
+    // jaarafname en groter dan nul.
+    const avond = tegels
+      .filter((t) => /van het net 's avonds/.test(t.textContent ?? ""))
+      .map((t) => Number((t.querySelector(".stat-van")?.textContent ?? "").replace(/\D/g, "")));
+    const som = avond.reduce((a, b) => a + b, 0);
+    expect(som).toBeGreaterThan(0);
+    expect(som).toBeLessThan(result.stats.gridImportBaselineKwh);
+  });
+
+  it("toont zonder panelen de nacht in plaats van de teruglevering overdag", () => {
+    render(<Verschuiving profielen={result.seasonProfiles} zonnepanelen={false} />);
+    const tekst = document.body.textContent ?? "";
+    expect(tekst).toMatch(/van het net 's nachts/);
+    expect(tekst).not.toMatch(/naar het net overdag/);
   });
 
   it("verdwijnt als er geen profiel is", () => {

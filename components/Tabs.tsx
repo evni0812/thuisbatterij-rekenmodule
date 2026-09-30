@@ -85,7 +85,7 @@ export const TABS = [
     figuren: [
       { id: "jouw-co2", naam: "Jouw CO2" },
       { id: "co2-per-uur", naam: "CO2 per uur" },
-      { id: "co2-per-seizoen", naam: "CO2 per seizoen" },
+      { id: "co2-per-seizoen", naam: "CO2 per maand" },
       { id: "co2-nederland", naam: "CO2 voor Nederland" },
     ],
   },

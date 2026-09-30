@@ -792,7 +792,7 @@ export const UITLEG: Record<UitlegId, (ctx: UitlegContext) => UitlegBlok> = {
         <>Beide gemiddelden wegen mee met je volume: een kwartier telt zwaarder als er op dat moment meer door de meter ging.</>,
         <>Een huishouden met panelen neemt af als het duur is (avond, winter) en levert terug als het goedkoop is (middag, zomer). Het simpele uurgemiddelde verbergt dat; het gewogen gemiddelde laat het zien.</>,
         <>Bij afname telt de heffing mee, bij teruglevering niet: zonder saldering krijg je de kale marktprijs. Dat is het grootste deel van het prijsverschil.</>,
-        <>Beide bedragen zijn <b>inclusief 21% btw</b>. De prijsreeks van ANWB Energie staat al inclusief btw. We nemen aan dat je de terugleververgoeding ook inclusief btw krijgt; ANWB Energie noemt alleen de kale marktprijs. Dat is een aanname.</>,
+        <>Beide bedragen zijn <b>inclusief 21% btw</b>. De prijsreeks van ANWB Energie staat al inclusief btw, en ANWB Energie keert ook de terugleververgoeding inclusief btw uit.</>,
       ],
       voorbeeld: {
         regels: [
@@ -1287,7 +1287,7 @@ export const UITLEG: Record<UitlegId, (ctx: UitlegContext) => UitlegBlok> = {
   }),
 
   co2maanden: ({ config }) => ({
-    titel: "CO2 per seizoen: hoeveel minder CO2 per maand",
+    titel: "CO2 per maand: hoeveel minder CO2 elke maand",
     watZieJe: <>Hoeveel minder CO2 je netafname per maand kost met batterij, gemiddeld over de volledige jaren.</>,
     bronnen: [NED_BRON],
     stappen: [

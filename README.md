@@ -29,7 +29,7 @@ gebruik, alles vanaf de CDN.
 ```bash
 npm install
 npm run dev          # http://localhost:3000
-npm test             # 588 tests, waaronder de modelinvarianten
+npm test             # 590 tests, waaronder de modelinvarianten
 npm run build        # statische export naar out/
 npm run clean        # bij een vastgelopen build-cache
 ```
@@ -62,7 +62,7 @@ dagprofiel zijn gekozen dag houdt.
 | **Door het jaar** | Wanneer bespaart de batterij het meest? | per jaar, per maand, zomer- en winterdag, verloop over tijd, een dag of week van dichtbij |
 | **Terugverdienen** | Verdient de batterij zichzelf terug? | over de looptijd, laadbeurten en levensduur, nettarief van 2029 |
 | **Welke batterij** | Welke batterij past bij jou? | maat en vermogen, uitbreiden, sturing, voor wie |
-| **CO2** | Wat scheelt de batterij aan CO2? | jouw CO2, CO2 per uur, CO2 per seizoen, CO2 voor Nederland |
+| **CO2** | Wat scheelt de batterij aan CO2? | jouw CO2, CO2 per uur, CO2 per maand, CO2 voor Nederland |
 | **Aannames en bronnen** | Hoe hard zijn deze cijfers? | de data en het model, wat we niet weten, bronnen |
 
 **Elk tabblad opent op dezelfde manier.** Eerst een eyebrow met het label en wat
@@ -1044,10 +1044,6 @@ zonder batterij.
   van het nettarief is daar vanaf 2029 de uitzondering op — zie hierboven.
 - Terugleverkosten-staffels per leverancier — wel als één instelbare €/kWh. Dat ANWB
   Energie geen terugleverkosten rekent (standaard 0 cent), is een aanname.
-- Btw op teruglevering. Het model rekent teruglevering tegen de marktprijs
-  inclusief btw. Dat is niet onderbouwd: ANWB Energie noemt alleen de kale
-  marktprijs. De pagina formuleert het als aanname ("We nemen aan dat je de
-  terugleververgoeding inclusief btw krijgt") en zet het in de aannameslijst.
 - Het profiel is een gemiddelde over veel huishoudens en daardoor gladder dan één
   aansluiting. Of dat de waarde van een batterij onder- of overschat, is niet
   onderbouwd; de spreidingsfactor laat zien hoe gevoelig de uitkomst ervoor is.

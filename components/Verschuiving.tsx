@@ -22,8 +22,9 @@
 
 import { useState, type ReactNode } from "react";
 import type { SeasonProfile } from "../lib/model/analysis";
-import { getal, procent } from "../lib/format";
+import { getal, kwh, procent } from "../lib/format";
 import { Figure, Grafiek, Trefvlak, useTip } from "./chart-parts";
+import { Tegel } from "./Statistieken";
 
 const B = 840;
 /** Hoogte van één seizoenspaneel, zonder de titel en de as eronder. */
@@ -34,6 +35,29 @@ const TUSSEN = 46;
 const MINDER = "var(--series-3)";
 const MEER = "var(--series-4)";
 const ZONDER = "var(--text-muted)";
+
+/** Dagen per jaar in elk seizoen: zomer is april tot en met september. */
+const DAGEN_PER_JAAR = { zomer: 183, winter: 182 } as const;
+
+/** De uren (van, tot-en-niet-met) waarover de jaartegels tellen. */
+const AVOND = [17, 23] as const;
+const OVERDAG = [10, 16] as const;
+const NACHT = [0, 6] as const;
+
+/** Kilowatturen per jaar in een blok uren, uit het gemiddelde per uur van een seizoensdag. */
+function perJaar(reeks: number[], [van, tot]: readonly [number, number], seizoen: "winter" | "zomer"): number {
+  let som = 0;
+  for (let u = van; u < tot; u++) som += reeks[u] ?? 0;
+  return som * DAGEN_PER_JAAR[seizoen];
+}
+
+/** "−120 kWh (−35%)": de verandering, met teken en als aandeel. */
+function verandering(zonder: number, met: number): string {
+  const d = met - zonder;
+  const teken = d < 0 ? "−" : "+";
+  const deel = zonder > 0.5 ? ` (${teken}${procent(Math.abs(d) / zonder)})` : "";
+  return `${teken}${kwh(Math.abs(d))} per jaar${deel}`;
+}
 
 /** Netto uitwisseling met het net: afname positief, teruglevering negatief. */
 function netto(imp: number[], exp: number[]): number[] {
@@ -79,26 +103,22 @@ export function Verschuiving({
   const H = MARGE.boven + reeksen.length * (PANEEL + TUSSEN) - TUSSEN + MARGE.onder;
 
   /**
-   * De twee uren die voor het net tellen: het hoogste afname-uur en het
-   * hoogste invoedingsuur van een gemiddelde dag. Niet het totaal — een net
-   * raakt niet vol van kilowatturen maar van gelijktijdigheid. Het uur wordt
-   * gekozen op de situatie ZONDER batterij, zodat je dezelfde piek voor en na
-   * vergelijkt in plaats van twee verschillende momenten.
+   * Wat de verschuiving per jaar betekent, per seizoen: hoeveel minder je 's
+   * avonds van het net haalt, en waar die stroom vandaan komt (overdag minder
+   * teruglevering met panelen, 's nachts meer afname zonder). Uit dezelfde
+   * gemiddelde dagen als de figuur, maal het aantal dagen van het seizoen.
    */
-  const pieken = reeksen.map((r) => {
-    let afnameUur = 0;
-    let invoedingUur = 0;
-    for (let u = 0; u < 24; u++) {
-      if (r.zonder[u]! > r.zonder[afnameUur]!) afnameUur = u;
-      if (r.zonder[u]! < r.zonder[invoedingUur]!) invoedingUur = u;
-    }
+  const jaarcijfers = reeksen.map((r) => {
+    const s = r.profiel.season;
+    const p = r.profiel;
     return {
-      afnameUur,
-      afnameZonder: Math.max(0, r.zonder[afnameUur]!),
-      afnameMet: Math.max(0, r.met[afnameUur]!),
-      invoedingUur,
-      invoedingZonder: Math.max(0, -r.zonder[invoedingUur]!),
-      invoedingMet: Math.max(0, -r.met[invoedingUur]!),
+      seizoen: s,
+      avondZonder: perJaar(p.importBaseline, AVOND, s),
+      avondMet: perJaar(p.importBattery, AVOND, s),
+      overdagZonder: perJaar(p.exportBaseline, OVERDAG, s),
+      overdagMet: perJaar(p.exportBattery, OVERDAG, s),
+      nachtZonder: perJaar(p.importBaseline, NACHT, s),
+      nachtMet: perJaar(p.importBattery, NACHT, s),
     };
   });
 
@@ -340,53 +360,67 @@ export function Verschuiving({
       </ul>
 
       <p className="verschuiving-winst">
-        <b>Wat het net ervan merkt.</b> Een net raakt niet overbelast door
-        kilowatturen maar door pieken: het hoogste uur waarop iedereen tegelijk
-        stroom van het net haalt, en het hoogste uur waarop iedereen tegelijk
-        stroom aan het net levert. Dit zijn jouw twee pieken, zonder en met
-        batterij.
+        <b>Wat dat per jaar scheelt.</b> Dezelfde gemiddelde dagen, opgeteld over
+        de dagen van elk seizoen.
       </p>
 
-      <dl className="kerncijfers">
-        {reeksen.map((r, i) => {
-          const naam = r.profiel.season === "winter" ? "Winter" : "Zomer";
-          const p = pieken[i]!;
+      <div className="stat-grid">
+        {jaarcijfers.map((j) => {
+          const naam = j.seizoen === "winter" ? "Winter" : "Zomer";
+          const maanden =
+            j.seizoen === "winter" ? "oktober tot en met maart" : "april tot en met september";
           return (
-            <div key={`af${r.profiel.season}`}>
-              <dt>{naam}: piek van het net</dt>
-              <dd>
-                {getal(p.afnameMet, 2)} kWh
-                <span className="dd-noot">
-                  om {p.afnameUur}.00 uur, zonder batterij {getal(p.afnameZonder, 2)} kWh
-                  {p.afnameZonder > 0.005
-                    ? `, ${procent(1 - p.afnameMet / p.afnameZonder)} lager`
-                    : ""}
-                </span>
-              </dd>
-            </div>
+            <Tegel
+              key={`avond-${j.seizoen}`}
+              label={`${naam}: van het net 's avonds`}
+              vanLabel="Zonder batterij"
+              naarLabel="Met batterij"
+              van={kwh(j.avondZonder)}
+              naar={kwh(j.avondMet)}
+              delta={verandering(j.avondZonder, j.avondMet)}
+              deltaGoed={j.avondMet < j.avondZonder}
+              uitleg={`Wat je per jaar tussen ${AVOND[0]}.00 en ${AVOND[1]}.00 uur van het net haalt, van ${maanden}.`}
+              accent={MINDER}
+            />
           );
         })}
-        {reeksen.map((r, i) => {
-          const naam = r.profiel.season === "winter" ? "Winter" : "Zomer";
-          const p = pieken[i]!;
+        {jaarcijfers.map((j) => {
+          const naam = j.seizoen === "winter" ? "Winter" : "Zomer";
+          const maanden =
+            j.seizoen === "winter" ? "oktober tot en met maart" : "april tot en met september";
+          if (zonnepanelen) {
+            // Een seizoen waarin je overdag nauwelijks levert, zegt niets.
+            if (j.overdagZonder < 5) return null;
+            return (
+              <Tegel
+                key={`overdag-${j.seizoen}`}
+                label={`${naam}: naar het net overdag`}
+                vanLabel="Zonder batterij"
+                naarLabel="Met batterij"
+                van={kwh(j.overdagZonder)}
+                naar={kwh(j.overdagMet)}
+                delta={verandering(j.overdagZonder, j.overdagMet)}
+                deltaGoed={j.overdagMet < j.overdagZonder}
+                uitleg={`Zonnestroom die je per jaar tussen ${OVERDAG[0]}.00 en ${OVERDAG[1]}.00 uur aan het net levert, van ${maanden}. Wat de batterij opvangt, gebruik je 's avonds zelf.`}
+                accent="var(--series-2)"
+              />
+            );
+          }
           return (
-            <div key={`in${r.profiel.season}`}>
-              <dt>{naam}: piek naar het net</dt>
-              <dd>
-                {getal(p.invoedingMet, 2)} kWh
-                <span className="dd-noot">
-                  {p.invoedingZonder > 0.005
-                    ? `om ${p.invoedingUur}.00 uur, zonder batterij ${getal(
-                        p.invoedingZonder,
-                        2,
-                      )} kWh, ${procent(1 - p.invoedingMet / p.invoedingZonder)} lager`
-                    : "je levert in dit seizoen nauwelijks aan het net"}
-                </span>
-              </dd>
-            </div>
+            <Tegel
+              key={`nacht-${j.seizoen}`}
+              label={`${naam}: van het net 's nachts`}
+              vanLabel="Zonder batterij"
+              naarLabel="Met batterij"
+              van={kwh(j.nachtZonder)}
+              naar={kwh(j.nachtMet)}
+              delta={verandering(j.nachtZonder, j.nachtMet)}
+              uitleg={`Wat je per jaar tussen ${NACHT[0]}.00 en ${NACHT[1]}.00 uur van het net haalt, van ${maanden}. Hier laadt de batterij als de stroom goedkoop is.`}
+              accent={MEER}
+            />
           );
         })}
-      </dl>
+      </div>
 
     </Figure>
   );

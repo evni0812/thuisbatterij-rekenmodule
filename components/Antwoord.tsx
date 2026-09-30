@@ -148,8 +148,7 @@ export function Antwoord({
         batterij die {stuurZin(doel)}. Bij zo'n contract betaal je per uur de
         marktprijs. Saldering, waarbij je teruggeleverde stroom verrekent met
         wat je afneemt, stopt op 1 januari 2027. Daarna krijg je voor
-        teruglevering alleen de kale marktprijs. De tool rekent die inclusief
-        btw, en dat is een aanname.
+        teruglevering de kale marktprijs, inclusief btw.
       </p>
       <p className="antwoord-grondslag">
         Heb je een vast of variabel contract, dan krijg je tot en met 2030 voor
