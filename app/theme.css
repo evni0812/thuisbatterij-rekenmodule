@@ -81,6 +81,20 @@
   --font: var(--font-plex-sans), "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   --font-mono: var(--font-plex-mono), "SFMono-Regular", Menlo, Consolas, monospace;
   --nav-h: 56px;
+
+  /*
+   * Twee leesmaten, voor alle lopende tekst en noten. Een kaart is 888 px
+   * binnenbreed; tekst hoort daarmee uit te lijnen in plaats van in de linker
+   * helft te blijven staan. In rem in plaats van ch, zodat elke alinea in een
+   * kaart op dezelfde x-positie eindigt, ongeacht haar lettergrootte.
+   *   --maat-tekst  lopende tekst (intro, toelichting, uitkomstzin): 720 px,
+   *                 ruim de helft tot vier vijfde van de kaart; laat in een
+   *                 figuurkop de knopkolom vrij.
+   *   --maat-klein  kleine noten (0,82-0,86 rem): de volle breedte van het
+   *                 blok waarin ze staan.
+   */
+  --maat-tekst: 48rem;
+  --maat-klein: 100%;
 }
 
 * {
@@ -162,7 +176,7 @@ select {
 
 .kop-uitleg {
   color: var(--text-secondary);
-  max-width: 62ch;
+  max-width: var(--maat-tekst);
   margin: 0;
 }
 
@@ -188,6 +202,12 @@ select {
   text-transform: none;
   letter-spacing: 0;
   margin-left: 10px;
+}
+
+/* De uitleg onder de drie velden hoort bij hen en heeft lucht nodig, boven en
+   onder, zodat hij niet tegen de volgende keuze aan staat. */
+.invoer-velden + .invoer-keuze-hint {
+  margin: 12px 0 20px;
 }
 
 .invoer-sprong {
@@ -218,7 +238,7 @@ select {
   background: var(--surface-1);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 20px;
+  padding: 22px;
 }
 
 .invoer-velden {
@@ -362,7 +382,9 @@ input[type="date"] {
   background: var(--surface-1);
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  padding: 28px 24px;
+  /* Zelfde binnenmarge als een figuur (22px), zodat tekst en grafieken in de
+     antwoordkaart op dezelfde x beginnen als in elke andere kaart. */
+  padding: 26px 22px;
   transition: opacity 0.2s ease;
 }
 
@@ -374,7 +396,39 @@ input[type="date"] {
   display: flex;
   justify-content: space-between;
   align-items: flex-start;
-  gap: 12px;
+  gap: 12px 16px;
+}
+
+/*
+ * Het antwoord in twee kolommen vanaf 900 px: links het bedrag met de hoofdzin,
+ * rechts de grondslagen als een rustige kolom met een dunne lijn ervoor. Op
+ * smallere schermen staat alles onder elkaar. Het nettarief-blok eronder gaat
+ * over de volle breedte.
+ */
+.antwoord-raster {
+  display: block;
+}
+
+.antwoord-hoofd .antwoord-zin {
+  max-width: none;
+}
+
+@media (min-width: 900px) {
+  .antwoord-raster {
+    display: grid;
+    grid-template-columns: minmax(0, 1.15fr) minmax(0, 1fr);
+    gap: 0 40px;
+    align-items: start;
+    margin-top: 6px;
+  }
+  .antwoord-grond {
+    border-left: 1px solid var(--border);
+    padding-left: 28px;
+    align-self: stretch;
+  }
+  .antwoord-grond .antwoord-grondslag:first-child {
+    margin-top: 6px;
+  }
 }
 
 .antwoord-aanhef {
@@ -411,7 +465,7 @@ input[type="date"] {
   margin: 10px 0 0;
   font-size: 0.82rem;
   color: var(--text-muted);
-  max-width: 62ch;
+  max-width: var(--maat-klein);
 }
 
 .antwoord-scenario {
@@ -439,7 +493,7 @@ input[type="date"] {
 
 .antwoord-zin {
   margin: 0;
-  max-width: 60ch;
+  max-width: var(--maat-tekst);
   color: var(--text-secondary);
 }
 
@@ -466,6 +520,15 @@ input[type="date"] {
   flex-wrap: wrap;
 }
 
+/* De tekstkolom neemt alle ruimte tot de knop; de toelichting eindigt dan op
+   de leesmaat of, korter, waar de knopkolom begint. */
+.figure-kop > :first-child,
+.antwoord-kop > :first-child,
+.bewaren-kop > :first-child {
+  flex: 1 1 24rem;
+  min-width: 0;
+}
+
 .figure h3 {
   font-size: 1.12rem;
   margin-bottom: 6px;
@@ -475,7 +538,7 @@ input[type="date"] {
   color: var(--text-secondary);
   font-size: 0.9rem;
   margin: 0;
-  max-width: 64ch;
+  max-width: var(--maat-tekst);
 }
 
 .chart-wrap {
@@ -798,7 +861,7 @@ input[type="date"] {
 .kloof-conclusie {
   margin: 18px 0 0;
   color: var(--text-secondary);
-  max-width: 64ch;
+  max-width: var(--maat-tekst);
 }
 
 .kloof-conclusie strong {
@@ -811,7 +874,7 @@ input[type="date"] {
   margin: 12px 0 0;
   font-size: 0.85rem;
   color: var(--text-muted);
-  max-width: 68ch;
+  max-width: var(--maat-klein);
 }
 
 /* ── Uitsplitsing ─────────────────────────────────────────────────────────── */
@@ -829,7 +892,7 @@ input[type="date"] {
   gap: 8px;
   font-size: 0.86rem;
   color: var(--text-secondary);
-  max-width: 78ch;
+  max-width: var(--maat-klein);
 }
 
 .posten-legenda li {
@@ -851,7 +914,7 @@ input[type="date"] {
   margin: 14px 0 0;
   font-size: 0.84rem;
   color: var(--text-muted);
-  max-width: 68ch;
+  max-width: var(--maat-klein);
 }
 
 /* ── Verliezen: de efficiëntie ────────────────────────────────────────────── */
@@ -894,14 +957,14 @@ input[type="date"] {
   margin: 3px 0 12px;
   font-size: 0.86rem;
   color: var(--text-muted);
-  max-width: 64ch;
+  max-width: var(--maat-tekst);
 }
 
 .efficientie-zin {
   margin: 12px 0 0;
   font-size: 0.9rem;
   color: var(--text-secondary);
-  max-width: 68ch;
+  max-width: var(--maat-tekst);
 }
 
 .efficientie-zin strong {
@@ -975,15 +1038,16 @@ input[type="date"] {
   width: 7rem;
 }
 
+/* Een th als flexbox is geen tabelcel meer: de lijn onder de rij brak dan bij
+   elke kolom en de rijen stonden een pixel uit het lood. */
 .verlies-tabel tbody th {
   font-weight: 540;
-  display: flex;
-  align-items: flex-start;
-  gap: 9px;
 }
 
 .verlies-tabel tbody th .post-vlak {
-  margin-top: 5px;
+  display: inline-block;
+  margin-right: 9px;
+  vertical-align: -1px;
 }
 
 /* De tabel staat na de kerncijfers en herhaalt ze niet: hij splitst alleen de
@@ -1161,9 +1225,11 @@ input[type="date"] {
 .dagcijfers {
   display: grid;
   grid-template-columns: repeat(auto-fit, minmax(168px, 1fr));
-  gap: 1px;
+  gap: 0;
   margin: 0 0 18px;
-  background: var(--border);
+  /* De lijnen zitten aan de cellen (rechts en onder), niet in het raster: bij
+     een oneven aantal cellen bleef er anders een grijs blok over. */
+  background: var(--surface-1);
   border: 1px solid var(--border);
   border-radius: var(--radius-sm);
   overflow: hidden;
@@ -1171,6 +1237,7 @@ input[type="date"] {
 
 .dagcijfer {
   background: var(--surface-1);
+  box-shadow: 1px 0 0 var(--border), 0 1px 0 var(--border);
   padding: 12px 14px;
   display: flex;
   flex-direction: column;
@@ -1451,7 +1518,7 @@ input[type="date"] {
   border-top: 1px solid var(--border);
   font-size: 0.85rem;
   color: var(--text-muted);
-  max-width: 68ch;
+  max-width: var(--maat-klein);
 }
 
 /* ── Geavanceerd ──────────────────────────────────────────────────────────── */
@@ -1544,7 +1611,7 @@ input[type="date"] {
   margin: -8px 0 14px;
   font-size: 0.85rem;
   color: var(--text-secondary);
-  max-width: 62ch;
+  max-width: var(--maat-tekst);
 }
 
 .instelling-grid {
@@ -1609,7 +1676,7 @@ input[type="date"] {
   margin: 10px 0 14px;
   font-size: 0.82rem;
   color: var(--text-muted);
-  max-width: 76ch;
+  max-width: var(--maat-klein);
 }
 
 /*
@@ -1657,7 +1724,7 @@ details.voetnoot-uitklap p {
   margin: 10px 0 0;
   font-size: 0.85rem;
   color: var(--text-muted);
-  max-width: 72ch;
+  max-width: var(--maat-klein);
 }
 
 details.voetnoot-uitklap .schakel {
@@ -1707,7 +1774,7 @@ details.voetnoot-uitklap .schakel {
 
 .verantwoording p {
   margin: 0 0 10px;
-  max-width: 60ch;
+  max-width: var(--maat-tekst);
 }
 
 .verantwoording ul {
@@ -1716,7 +1783,7 @@ details.voetnoot-uitklap .schakel {
   display: flex;
   flex-direction: column;
   gap: 9px;
-  max-width: 60ch;
+  max-width: var(--maat-tekst);
 }
 
 .controle {
@@ -1811,9 +1878,14 @@ details.voetnoot-uitklap .schakel {
     flex-direction: column;
     align-items: stretch;
   }
+  /* In een kolom zou de basis van 24rem een hoogte worden. */
+  .figure-kop > :first-child {
+    flex: none;
+  }
   .antwoord-bedrag {
     font-size: clamp(2.25rem, 12vw, 4rem);
   }
+
   .uitlezing {
     gap: 4px 14px;
   }
@@ -1836,6 +1908,9 @@ details.voetnoot-uitklap .schakel {
 }
 
 .heat {
+  /* De kaart van maten neemt de breedte van de kaart, zoals de grafieken
+     eronder; de cellen groeien mee. Op smal scherm scrolt de wrap. */
+  width: 100%;
   border-collapse: separate;
   border-spacing: 2px;
   font-variant-numeric: tabular-nums;
@@ -1847,6 +1922,11 @@ details.voetnoot-uitklap .schakel {
   font-weight: 540;
   padding: 4px 6px;
   white-space: nowrap;
+}
+
+.heat th[scope="row"],
+.heat-hoek {
+  width: 4.5rem;
 }
 
 .heat-hoek {
@@ -1932,6 +2012,11 @@ details.voetnoot-uitklap .schakel {
   padding: 0 6px;
 }
 
+/* De sleutel begint op de rand van de kaart, net als de tabel eronder. */
+.heat-sleutel-kop:first-child {
+  padding-left: 0;
+}
+
 /*
  * Er is één, licht thema: de seq-tokens kennen geen donkere variant. Een
  * omkering van de tekstkleur onder `prefers-color-scheme: dark` gaf daardoor
@@ -1978,12 +2063,13 @@ details.voetnoot-uitklap .schakel {
 
 .heat-voet p {
   margin: 0 0 6px;
-  max-width: 64ch;
+  max-width: var(--maat-tekst);
 }
 
-.heat-noot {
+.heat-voet p.heat-noot {
   color: var(--text-muted);
   font-size: 0.82rem;
+  max-width: var(--maat-klein);
 }
 
 /*
@@ -2026,7 +2112,9 @@ details.voetnoot-uitklap .schakel {
   border-radius: 4px;
   font-size: 0.95rem;
   color: var(--text-primary);
-  max-width: 72ch;
+  /* Het vlak loopt over de volle breedte, net als de kaart eronder; de tekst
+     erin houdt de leesmaat via de padding rechts. */
+  padding-right: max(14px, calc(100% - var(--maat-tekst)));
 }
 
 /* ── Schil: balk met tabs, voet ───────────────────────────────────────────── */
@@ -2303,13 +2391,20 @@ details.voetnoot-uitklap .schakel {
 
 .voet {
   border-top: 1px solid var(--border);
-  padding: 20px 24px;
+  /* De lijn loopt over de volle breedte, de tekst volgt de kolom van de pagina
+     (980 px, met 24 px marge), net als de stapper erboven. */
+  padding: 20px max(24px, calc((100% - 980px) / 2 + 24px));
   font-size: 0.8rem;
   color: var(--text-muted);
   display: flex;
   gap: 16px;
   flex-wrap: wrap;
   justify-content: space-between;
+}
+
+.voet > span:first-child {
+  flex: 1 1 30rem;
+  max-width: var(--maat-tekst);
 }
 
 /* ── Sectiekop: eyebrow, stelling, toelichting ────────────────────────────── */
@@ -2405,7 +2500,7 @@ details.voetnoot-uitklap .schakel {
   font-size: 0.92rem;
   color: var(--text-secondary);
   margin: 8px 0 0;
-  max-width: 68ch;
+  max-width: var(--maat-tekst);
 }
 
 /* ── Notitie ──────────────────────────────────────────────────────────────── */
@@ -2823,7 +2918,7 @@ details.uitklap[open] > summary {
   margin: 4px 0 0;
   font-size: 0.85rem;
   color: var(--text-secondary);
-  max-width: 62ch;
+  max-width: var(--maat-tekst);
 }
 
 .bewaren-rij {
@@ -2908,6 +3003,7 @@ details.uitklap[open] > summary {
 /* ── Methode: wat we niet weten ───────────────────────────────────────────── */
 
 .methode-lijst {
+  max-width: var(--maat-tekst);
   margin: 0;
   padding: 0;
   list-style: none;
@@ -3017,7 +3113,7 @@ details.uitklap[open] > summary {
   margin: 6px 0 12px;
   color: var(--text-secondary);
   font-size: 0.92rem;
-  max-width: 72ch;
+  max-width: var(--maat-tekst);
 }
 
 .voortgang {
@@ -3295,6 +3391,10 @@ details.uitklap[open] > summary {
   }
   .balk-merk {
     font-size: 0.95rem;
+  }
+  /* Zelfde zijmarge als de pagina (14px). */
+  .voet {
+    padding-inline: 14px;
   }
   .tabs {
     padding: 0 4px;

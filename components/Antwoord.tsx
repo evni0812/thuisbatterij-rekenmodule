@@ -98,63 +98,69 @@ export function Antwoord({
         </div>
         {actie}
       </div>
-      <p className="antwoord-bedrag">
-        {euro(averageSavingEur)}
-        <span className="antwoord-eenheid">per jaar</span>
-      </p>
-      <p className="antwoord-zin">
-        bespaard
-        {spreiding && jaarBereik > 1 ? (
-          <>
-, tussen {euro(minSavingEur)} en {euro(maxSavingEur)}, afhankelijk van
-            welk jaar je pakt
-          </>
-        ) : null}
-        .{" "}
-        {overgang ? (
-          <>
-            We nemen aan dat de prijzen de komende jaren zijn zoals in {jaartallen}.
-            Gaat het voorstel voor het nieuwe nettarief door, dan is de aanschaf
-            van {euro(investeringEur)}{" "}
-            <strong>{terugverdiend(overgang.finance.paybackYears)}</strong>. Blijft
-            het nettarief zoals nu, dan {terugverdiendKort(finance.paybackYears)}.
-          </>
-        ) : finance.paybackYears !== null ? (
-          <>
-            We nemen aan dat de prijzen de komende jaren zijn zoals in {jaartallen}.
-            Blijft het nettarief zoals nu, dan is de aanschaf van{" "}
-            {euro(investeringEur)}{" "}
-            <strong>terugverdiend na {jaren(finance.paybackYears)}</strong>.
-          </>
-        ) : (
-          <>
-            Ook als de prijzen de komende jaren zijn zoals in {jaartallen} en het
-            nettarief blijft zoals nu, is de aanschaf van {euro(investeringEur)}{" "}
-            <strong>niet terugverdiend binnen de looptijd</strong>.
-          </>
-        )}
-      </p>
-      <p className="antwoord-grondslag">
-        Doorgerekend op de uurprijzen van {jaartallen} met de belasting en
-        opslag van {heffingVanNu ? "nu" : "toen"}. De terugverdientijd trekt dat
-        door naar de toekomst; dat is een aanname, geen voorspelling. Het
-        stand-byverbruik van de batterij (60 tot 220 kWh per jaar) zit er niet
-        in.
-      </p>
-      {/* De contractvoorwaarde staat op Start één keer, hier bij het antwoord
-          waar hij bij hoort; de invoer verwijst ernaar. */}
-      <p className="antwoord-grondslag">
-        Deze doorrekening gaat uit van een dynamisch energiecontract en een
-        batterij die {stuurZin(doel)}. Bij zo'n contract betaal je per uur de
-        marktprijs. Saldering, waarbij je teruggeleverde stroom verrekent met
-        wat je afneemt, stopt op 1 januari 2027. Daarna krijg je voor
-        teruglevering de kale marktprijs, inclusief btw.
-      </p>
-      <p className="antwoord-grondslag">
-        Heb je een vast of variabel contract, dan krijg je tot en met 2030 voor
-        teruglevering minstens 50% van het kale leveringstarief. Die situatie
-        rekent deze tool niet door.
-      </p>
+      <div className="antwoord-raster">
+        <div className="antwoord-hoofd">
+          <p className="antwoord-bedrag">
+            {euro(averageSavingEur)}
+            <span className="antwoord-eenheid">per jaar</span>
+          </p>
+          <p className="antwoord-zin">
+            bespaard
+            {spreiding && jaarBereik > 1 ? (
+              <>
+              , tussen {euro(minSavingEur)} en {euro(maxSavingEur)}, afhankelijk van
+                welk jaar je pakt
+              </>
+            ) : null}
+            .{" "}
+            {overgang ? (
+              <>
+                We nemen aan dat de prijzen de komende jaren zijn zoals in {jaartallen}.
+                Gaat het voorstel voor het nieuwe nettarief door, dan is de aanschaf
+                van {euro(investeringEur)}{" "}
+                <strong>{terugverdiend(overgang.finance.paybackYears)}</strong>. Blijft
+                het nettarief zoals nu, dan {terugverdiendKort(finance.paybackYears)}.
+              </>
+            ) : finance.paybackYears !== null ? (
+              <>
+                We nemen aan dat de prijzen de komende jaren zijn zoals in {jaartallen}.
+                Blijft het nettarief zoals nu, dan is de aanschaf van{" "}
+                {euro(investeringEur)}{" "}
+                <strong>terugverdiend na {jaren(finance.paybackYears)}</strong>.
+              </>
+            ) : (
+              <>
+                Ook als de prijzen de komende jaren zijn zoals in {jaartallen} en het
+                nettarief blijft zoals nu, is de aanschaf van {euro(investeringEur)}{" "}
+                <strong>niet terugverdiend binnen de looptijd</strong>.
+              </>
+            )}
+          </p>
+        </div>
+        <div className="antwoord-grond">
+          <p className="antwoord-grondslag">
+            Doorgerekend op de uurprijzen van {jaartallen} met de belasting en
+            opslag van {heffingVanNu ? "nu" : "toen"}. De terugverdientijd trekt dat
+            door naar de toekomst; dat is een aanname, geen voorspelling. Het
+            stand-byverbruik van de batterij (60 tot 220 kWh per jaar) zit er niet
+            in.
+          </p>
+          {/* De contractvoorwaarde staat op Start één keer, hier bij het antwoord
+              waar hij bij hoort; de invoer verwijst ernaar. */}
+          <p className="antwoord-grondslag">
+            Deze doorrekening gaat uit van een dynamisch energiecontract en een
+            batterij die {stuurZin(doel)}. Bij zo'n contract betaal je per uur de
+            marktprijs. Saldering, waarbij je teruggeleverde stroom verrekent met
+            wat je afneemt, stopt op 1 januari 2027. Daarna krijg je voor
+            teruglevering de kale marktprijs, inclusief btw.
+          </p>
+          <p className="antwoord-grondslag">
+            Heb je een vast of variabel contract, dan krijg je tot en met 2030 voor
+            teruglevering minstens 50% van het kale leveringstarief. Die situatie
+            rekent deze tool niet door.
+          </p>
+        </div>
+      </div>
       <p className={scenario ? "antwoord-scenario" : "antwoord-scenario plaatshouder"}>
         {scenario ? (
           <>
