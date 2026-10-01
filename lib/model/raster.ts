@@ -10,7 +10,7 @@
 
 import { wearCostPerKwh } from "./battery";
 import { dispatchRolling } from "./dispatch-rolling";
-import type { AnalysisInput } from "./analysis";
+import { standbyKosten, type AnalysisInput } from "./analysis";
 import type { BatterySpec, DispatchResult, TariffSpec } from "./types";
 import type { GridPoint } from "../worker/protocol";
 
@@ -51,6 +51,10 @@ export function rasterJaar(invoer: AnalysisInput): AnalysisInput["windows"][numb
  *
  * Eén run per punt, met de slijtageprijs van die maat maal het strategiedeel
  * als drempel: dezelfde regel als in `runAnalysis`.
+ *
+ * De besparing is na stand-by, net als in het hoofdresultaat (`standbyKosten`
+ * in lib/model/analysis.ts). Alle maten rekenen met dezelfde `standbyWatt`: het
+ * raster verandert de capaciteit en het vermogen, niet het model batterij.
  */
 export function rasterPunt(
   entry: AnalysisInput["windows"][number],
@@ -61,7 +65,8 @@ export function rasterPunt(
   kw: number,
   prijsPerKwh: number,
   cycleLife: number,
-  wearFraction = 1,
+  wearFraction: number,
+  standbyWatt: number,
 ): GridPoint {
   const maat: BatterySpec = {
     ...battery,
@@ -78,7 +83,7 @@ export function rasterPunt(
   return {
     capacityKwh: cap,
     powerKw: kw,
-    savingEur: basis.totalCostEur - res.totalCostEur,
+    savingEur: basis.totalCostEur - res.totalCostEur - standbyKosten(entry.window, res, tariff, standbyWatt).eur,
     cyclesPerYear: res.equivalentCycles,
   };
 }

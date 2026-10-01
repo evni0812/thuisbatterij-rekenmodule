@@ -29,9 +29,11 @@ export interface BatterySpec {
   /**
    * Slijtagekosten per kWh doorzet, EUR/kWh. Zie wearCostPerKwh().
    *
-   * Het eigen verbruik van de omvormer (standby) zit bewust NIET in het model.
-   * Dit model gaat over wat de handel oplevert; standby is een vaste post van
-   * het bezit, net als de aanschaf, en hoort naast de businesscase, niet erin.
+   * Het stand-byverbruik van de batterij staat hier bewust NIET: de dispatch
+   * beslist over de handel en mag er niets van weten. Stand-by is een vaste
+   * post van het bezit die in de jaarbesparing en de terugverdientijd zit, via
+   * `standbyKosten` in lib/model/analysis.ts, met de waarde uit
+   * `BatteryPreset.standbyWatt`. De dag laat de handel zien.
    */
   wearCostEurPerKwh: number;
 }

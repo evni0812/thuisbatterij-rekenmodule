@@ -26,7 +26,7 @@
 import type { ReactNode } from "react";
 import type { AnalysisResult, ScenarioResult } from "../lib/model/analysis";
 import { overgangZin, type Overgang } from "../lib/overgang";
-import { euro, jaren, jarenReeks } from "../lib/format";
+import { euro, jaren, jarenReeks, standbyZin } from "../lib/format";
 import { stuurZin } from "../lib/model/doel";
 import type { Doel } from "../lib/model/types";
 import { FiguurNaam } from "./chart-parts";
@@ -50,6 +50,7 @@ export function Antwoord({
   heffingVanNu = true,
   scenarioFout = null,
   doel = "rendement",
+  standbyWatt = 0,
   actie,
 }: {
   result: AnalysisResult;
@@ -78,6 +79,8 @@ export function Antwoord({
   heffingVanNu?: boolean;
   /** Waar de batterij op stuurde; de grondslag zegt het erbij. */
   doel?: Doel;
+  /** Het stand-byverbruik waarmee gerekend is, W; de grondslag noemt het met de getallen uit het resultaat. */
+  standbyWatt?: number;
   /** De knop "Hoe is dit berekend?" rechtsboven. */
   actie?: ReactNode;
 }) {
@@ -141,9 +144,8 @@ export function Antwoord({
           <p className="antwoord-grondslag">
             Doorgerekend op de uurprijzen van {jaartallen} met de belasting en
             opslag van {heffingVanNu ? "nu" : "toen"}. De terugverdientijd trekt dat
-            door naar de toekomst; dat is een aanname, geen voorspelling. Het
-            stand-byverbruik van de batterij (60 tot 220 kWh per jaar) zit er niet
-            in.
+            door naar de toekomst; dat is een aanname, geen voorspelling.{" "}
+            {standbyZin(standbyWatt, result.breakdown.standbyKwh, -result.breakdown.standbyEur)}
           </p>
           {/* De contractvoorwaarde staat op Start één keer, hier bij het antwoord
               waar hij bij hoort; de invoer verwijst ernaar. */}

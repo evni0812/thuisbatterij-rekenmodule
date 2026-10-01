@@ -9,7 +9,7 @@
  */
 
 import type { AnalysisResult } from "../../lib/model/analysis";
-import { euro, jaren } from "../../lib/format";
+import { euro, jaren, standbyZin } from "../../lib/format";
 import { NETTARIEF_JAAR } from "../../lib/nettarief";
 import { overgangZin, type Overgang } from "../../lib/overgang";
 import type { FinanceResult } from "../../lib/model/finance";
@@ -56,8 +56,8 @@ export function StapOpbrengst(p: GidsData) {
           <p className="uk-grond">
             {grondslagZin(jarenTekst, heffingVanNu)} Uitgangspunt is een dynamisch
             energiecontract, waarbij je elk uur de marktprijs betaalt. Saldering, het verrekenen
-            van teruglevering met afname, stopt op 1 januari 2027. Het stand-byverbruik van de
-            batterij zit er niet in.
+            van teruglevering met afname, stopt op 1 januari 2027.{" "}
+            {standbyZin(toon.standbyWatt, result.breakdown.standbyKwh, -result.breakdown.standbyEur)}
           </p>
         </div>
       </section>
@@ -109,6 +109,7 @@ const POST_KLEUR: Record<Post["id"], string> = {
   zelf: "var(--series-1)",
   slim: "var(--series-2)",
   negatief: "var(--series-4)",
+  standby: "var(--series-5)",
 };
 
 function Verdeling({ result }: { result: AnalysisResult }) {

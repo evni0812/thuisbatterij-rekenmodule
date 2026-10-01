@@ -110,6 +110,15 @@ export interface Configuration {
    * ander doel is een andere batterij.
    */
   doel?: Doel;
+  /**
+   * Stand-byverbruik van de batterij in watt, voor de momenten dat hij niet
+   * laadt of ontlaadt. Staat bewust NIET in `battery` (BatterySpec): de
+   * dispatch weet er niets van. Het wordt achteraf, per kwartier, van de
+   * vensteruitkomst afgetrokken (`standbyKosten` in lib/model/analysis.ts).
+   * Daardoor verandert het wel de bundel (jaarbesparing, curve, financiën) en
+   * niet de dispatch; zie VELDKLASSE in lib/cache.ts.
+   */
+  standbyWatt: number;
 }
 
 /** Eén doorgerekende combinatie van capaciteit en vermogen. */

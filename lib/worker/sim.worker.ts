@@ -152,6 +152,7 @@ async function runGrid(
           prijsPerKwh,
           config.cycleLife,
           config.wearFraction ?? 1,
+          config.standbyWatt,
         ),
       );
       await adempauze();
@@ -471,6 +472,7 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         const uitkomst: VensterUitkomst = analyseWindow(invoer.windows[0]!, spec, invoer.tariff, {
           metOptimum: msg.metOptimum,
           wearEurPerKwh: volleSlijtage,
+          standbyWatt: invoer.standbyWatt ?? 0,
         });
         post(
           { type: "venster-uitkomst", id: msg.id, groep: msg.groep, jaarIndex: msg.jaarIndex, uitkomst },
@@ -494,7 +496,13 @@ self.onmessage = async (event: MessageEvent<WorkerRequest>) => {
         const invoer = await bron.bouwInvoer(msg.config, { alleenVenster: msg.jaarIndex });
         const { spec } = slijtageVoor(invoer);
         const basis = dispatchBaseline(invoer.windows[0]!.window, invoer.tariff);
-        const besparing = perfectVoorspellingBesparing(invoer.windows[0]!, spec, invoer.tariff, basis.totalCostEur);
+        const besparing = perfectVoorspellingBesparing(
+          invoer.windows[0]!,
+          spec,
+          invoer.tariff,
+          basis.totalCostEur,
+          invoer.standbyWatt ?? 0,
+        );
         post({ type: "perfect", id: msg.id, groep: msg.groep, besparing });
       });
       return;

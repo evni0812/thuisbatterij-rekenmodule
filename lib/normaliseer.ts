@@ -81,6 +81,9 @@ export const GRENZEN: Record<GetalVeld, Grens> = {
   prijsEur: { min: 100, max: 20000, decimalen: 0 },
   capaciteitKwh: { min: 1, max: 30, decimalen: 2 },
   vermogenKw: { min: 0.8, max: 11.5, decimalen: 2 },
+  // Een batterij die niets verbruikt bestaat niet, maar 0 is wel een bruikbare
+  // instelling (het oude gedrag); boven 100 W is het geen thuisbatterij meer.
+  standbyWatt: { min: 0, max: 100, decimalen: 0 },
 };
 
 /** Velden die leeg (null) mogen zijn: "neem de waarde van de batterij", of "onbekend". */
@@ -89,6 +92,7 @@ export const MAG_LEEG: ReadonlySet<GetalVeld> = new Set<GetalVeld>([
   "capaciteitKwh",
   "vermogenKw",
   "opwekKwh",
+  "standbyWatt",
 ]);
 
 /** Een getal binnen de grenzen van dit veld, afgerond; null of de standaard als het onleesbaar is. */
@@ -272,6 +276,7 @@ export const VELDNAAM: Record<keyof Instellingen, string> = {
   capaciteitKwh: "capaciteit",
   vermogenKw: "vermogen",
   opwekKwh: "opwek",
+  standbyWatt: "stand-byverbruik",
 };
 
 /** Een volledige set binnen de grenzen; wat niet te redden is, wordt de standaard. */

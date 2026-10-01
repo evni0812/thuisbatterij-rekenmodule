@@ -139,7 +139,8 @@ export function StapDag({ result, toonZonnepanelen, bezig, uitleg, naarVerdiepin
           <span className="dag-getal-noot">
             {som.slijtageEur >= 0.005
               ? `Na de slijtage van de batterij (${euroPrecies(som.slijtageEur)}) is dat ${euroPrecies(netto)}.`
-              : "Zonder slijtage van de batterij."}
+              : "Zonder slijtage van de batterij."}{" "}
+            De dag laat alleen de handel zien; het stand-byverbruik zit in het jaarbedrag.
           </span>
         </div>
       </section>

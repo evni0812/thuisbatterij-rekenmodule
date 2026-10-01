@@ -7,30 +7,43 @@
  * Schaalt mee met hoeveel je opslaat, en is wat "rendement heen en terug" op
  * een datasheet betekent.
  *
- * Het sluipverbruik van de omvormer stond hier eerder als tweede blok. Het zit
- * niet meer in het model: dit model gaat over wat de handel oplevert, en
- * standby loopt door of de batterij nu handelt of niet. Het is een vaste post
- * van het bezit, naast de aanschaf, en hoort niet in de dagcijfers.
+ * Het stand-byverbruik staat als aparte regel in de tabel. Het is geen
+ * omzettingsverlies: het loopt door als de batterij niet laadt of ontlaadt, en
+ * het zit NIET in de besparing verwerkt maar wordt ervan afgetrokken (zie
+ * `standbyKosten` in lib/model/analysis.ts). Het staat dus niet in de balk van
+ * de omzetting en niet in "Samen verloren", dat het omzettingsverlies telt.
  */
 
 import type { ReactNode } from "react";
 import type { EnergyLosses } from "../lib/model/analysis";
-import { euro, euroPrecies, getal, kwh, procent } from "../lib/format";
+import { euro, euroPrecies, getal, kwh, procent, standbyKengetallen } from "../lib/format";
 import { Figure, Legenda, TipLaag, useTip } from "./chart-parts";
 
 const GELEVERD = "var(--series-3)";
 const OMZETTING = "var(--series-4)";
+/** Het stand-byverbruik: een eigen kleur, want het hoort niet bij de omzetting. */
+const STANDBY = "var(--series-5)";
 /** Het verlies bij het ontladen: dezelfde amber, met een streeppatroon erover. */
 const OMZETTING_ONTLADEN =
   "repeating-linear-gradient(135deg, rgba(255,255,255,0.65) 0 2px, transparent 2px 5px), var(--series-4)";
 
 export function Verliezen({
   losses,
+  standbyKwh,
+  standbyEur,
+  standbyWatt,
   afnameKwh,
   besparingEur,
   actie,
 }: {
   losses: EnergyLosses;
+  /**
+   * Het stand-byverbruik per jaar, kWh en EUR (positief is een kostenpost), en
+   * het vermogen waarmee gerekend is. Al van de besparing afgetrokken.
+   */
+  standbyKwh: number;
+  standbyEur: number;
+  standbyWatt: number;
   /** Jaarafname zonder batterij, om het verlies tegen af te zetten. */
   afnameKwh: number;
   /** Gemiddelde jaarbesparing, om de verliezen op schaal te zetten. */
@@ -70,9 +83,8 @@ export function Verliezen({
         <>
           Stroom opslaan kost stroom: bij het laden en bij het ontladen gaat een
           deel verloren in de omzetting. Gemiddeld per jaar over de volledige
-          jaren in de gekozen periode. Het stand-byverbruik van de batterij
-          (fabrikanten noemen 7 tot 25 watt, dus 60 tot 220 kWh per jaar) staat
-          hier niet bij en is niet van de besparing afgetrokken.
+          jaren in de gekozen periode. Het stand-byverbruik van de batterij ({standbyKengetallen(standbyWatt, standbyKwh, standbyEur)})
+          staat apart in de tabel: dat is al van de besparing afgetrokken.
         </>
       }
     >
@@ -198,21 +210,32 @@ export function Verliezen({
             <td>{kwh(dischargeLossKwh)}</td>
             <td>{euroPrecies(losses.dischargeLossEur)}</td>
           </tr>
+          <tr>
+            <th scope="row">
+              <span className="post-vlak" style={{ background: STANDBY }} />
+              <span>Stand-byverbruik</span>
+            </th>
+            <td>{kwh(standbyKwh)}</td>
+            <td>{euroPrecies(standbyEur)}</td>
+          </tr>
         </tbody>
         <tfoot>
           <tr>
-            <th scope="row">Samen verloren</th>
-            <td>{kwh(totalKwh)}</td>
-            <td>{euroPrecies(losses.totalEur)}</td>
+            <th scope="row">Samen kwijt</th>
+            <td>{kwh(totalKwh + standbyKwh)}</td>
+            <td>{euroPrecies(losses.totalEur + standbyEur)}</td>
           </tr>
         </tfoot>
       </table>
 
       <p className="posten-noot">
-        Deze kilowatturen zijn geen extra kostenpost bovenop de besparing
-        hierboven: ze zitten er al in verwerkt. Je haalt minder van het
-        net dan je in de batterij stopte, en dat verschil is precies wat hier
-        staat.
+        De twee verliezen bij het laden en ontladen zijn geen extra kostenpost
+        bovenop de besparing hierboven: ze zitten er al in verwerkt. Je haalt
+        minder van het net dan je in de batterij stopte, en dat verschil is
+        precies wat daar staat. Het stand-byverbruik zit er niet in verwerkt:
+        dat is een eigen post, die van de besparing is afgetrokken. Het telt
+        alleen op de momenten dat de batterij niet laadt of ontlaadt; tijdens het
+        laden en ontladen zit het eigen verbruik al in het rendement.
       </p>
     </Figure>
   );

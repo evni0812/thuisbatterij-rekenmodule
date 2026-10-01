@@ -176,3 +176,23 @@ export function jarenReeks(lijst: readonly number[]): string {
   if (aaneengesloten && j.length > 2) return `${j[0]} tot en met ${j[j.length - 1]}`;
   return `${j.slice(0, -1).join(", ")} en ${j[j.length - 1]}`;
 }
+
+/**
+ * Wat het stand-byverbruik van de batterij per jaar is, voor in een zin:
+ * "12 W, 80 kWh per jaar, € 19". Eén opmaak voor elke plek waar het getoond
+ * wordt, zodat de zin bij het antwoord, in stap 4 en in de checklist dezelfde
+ * getallen op dezelfde manier noemt.
+ */
+export function standbyKengetallen(watt: number, kwhPerJaar: number, eurPerJaar: number): string {
+  return `${getal(watt)} W, ${kwh(kwhPerJaar)} per jaar, ${euro(eurPerJaar)}`;
+}
+
+/**
+ * De zin die zegt dat het stand-byverbruik al van de besparing is afgetrokken,
+ * of dat er niets is afgetrokken als het op 0 W staat.
+ */
+export function standbyZin(watt: number, kwhPerJaar: number, eurPerJaar: number): string {
+  return watt > 0
+    ? `De besparing is na aftrek van het stand-byverbruik van de batterij (${standbyKengetallen(watt, kwhPerJaar, eurPerJaar)}). De dagfiguren laten alleen de handel zien.`
+    : "Het stand-byverbruik van de batterij staat op 0 W: daar is niets van de besparing afgetrokken.";
+}

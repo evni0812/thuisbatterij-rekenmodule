@@ -69,6 +69,7 @@ export const STANDAARD: Instellingen = {
   capaciteitKwh: null,
   vermogenKw: null,
   opwekKwh: null,
+  standbyWatt: null,
 };
 
 /** De gekozen batterij, of de eerste uit de lijst als het id niet bestaat. */
@@ -113,6 +114,26 @@ function effectief(inst: Instellingen): EffectieveBatterij {
       prijs: prijsEur !== preset.prijsEur,
     },
   };
+}
+
+/**
+ * Het stand-byverbruik waarmee gerekend wordt, in watt: de eigen waarde, of
+ * anders die van de gekozen batterij. Voor instellingen die al door
+ * `normaliseer` zijn.
+ */
+function effectieveStandbyWatt(inst: Instellingen): number {
+  return inst.standbyWatt ?? kiesPreset(inst.presetId).standbyWatt;
+}
+
+/**
+ * Het stand-byverbruik in watt zoals het gerekend wordt, en of het van de
+ * gekozen batterij afwijkt. De enige bron voor wat het veld bij Geavanceerd
+ * toont én voor wat `maakConfiguratie` naar de worker stuurt.
+ */
+export function effectiefStandby(invoer: Instellingen): { watt: number; aangepast: boolean } {
+  const inst = normaliseer(invoer, STANDAARD);
+  const watt = effectieveStandbyWatt(inst);
+  return { watt, aangepast: watt !== kiesPreset(inst.presetId).standbyWatt };
 }
 
 /**
@@ -197,6 +218,7 @@ export function maakConfiguratie(invoer: Instellingen): Configuration {
     kostenPerKwEur: kosten.perKwEur,
     installatieEur: kosten.installatieEur,
     co2DrempelG: inst.co2Drempel,
+    standbyWatt: effectieveStandbyWatt(inst),
   };
 }
 

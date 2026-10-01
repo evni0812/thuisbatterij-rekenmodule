@@ -7,7 +7,7 @@ import { useState } from "react";
 import { cleanup, fireEvent, render } from "@testing-library/react";
 import { afterEach, describe, expect, it } from "vitest";
 import { Geavanceerd } from "../components/Geavanceerd";
-import { STANDAARD, effectieveBatterij, kiesPreset } from "../lib/configuratie";
+import { STANDAARD, effectieveBatterij, effectiefStandby, kiesPreset } from "../lib/configuratie";
 import type { Instellingen } from "../lib/url-state";
 
 afterEach(cleanup);
@@ -28,6 +28,7 @@ function Pagina({ start = STANDAARD }: { start?: Instellingen }) {
         capaciteit={b.capaciteitKwh}
         vermogen={b.vermogenKw}
         prijs={b.prijsEur}
+        standby={effectiefStandby(inst).watt}
         onChange={(patch) => setInst((s) => ({ ...s, ...patch }))}
         onReset={() => setInst(STANDAARD)}
         onBereken={() => {}}

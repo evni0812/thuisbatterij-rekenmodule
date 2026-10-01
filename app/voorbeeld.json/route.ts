@@ -101,6 +101,7 @@ export async function GET(): Promise<Response> {
           prijsPerKwh,
           config.cycleLife,
           config.wearFraction ?? 1,
+          config.standbyWatt,
         ),
       ),
     );

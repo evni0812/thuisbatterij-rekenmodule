@@ -1297,7 +1297,8 @@ function DagCijfers({ dag, zonnepanelen = true }: { dag: SampleDay; zonnepanelen
         </span>
         <span className="dagcijfer-noot">
           {euroPrecies(s.baselineCostEur)} zonder batterij,{" "}
-          {euroPrecies(s.batteryCostEur)} met
+          {euroPrecies(s.batteryCostEur)} met. De dag is zonder
+          stand-byverbruik van de batterij; dat zit in het jaarbedrag.
         </span>
       </div>
 

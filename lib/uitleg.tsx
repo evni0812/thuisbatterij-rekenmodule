@@ -12,7 +12,7 @@
 
 import type { ReactNode } from "react";
 import { netgebiedNaam } from "./data/manifest";
-import { centPerKwh, euro, euroPrecies, getal, jaren, jarenReeks, kwh, procent } from "./format";
+import { centPerKwh, euro, euroPrecies, getal, jaren, jarenReeks, kwh, procent, standbyKengetallen } from "./format";
 import { referentieJaar, type AnalysisResult, type ScenarioResult, type YearAnalysis } from "./model/analysis";
 import { usableCapacityKwh } from "./model/battery";
 import { RASTER_CAPACITEITEN, RASTER_VERMOGENS } from "./model/raster";
@@ -365,6 +365,9 @@ export const UITLEG: Record<UitlegId, (ctx: UitlegContext) => UitlegBlok> = {
         <>
           De besparing is het verschil tussen de kosten zonder en met batterij,
           per jaar, en dan gemiddeld over de volledige jaren.
+          {config.standbyWatt > 0
+            ? ` In de kosten met batterij zit het stand-byverbruik van de batterij (${standbyKengetallen(config.standbyWatt, result.breakdown.standbyKwh, -result.breakdown.standbyEur)}). Dat telt alleen op de momenten dat de batterij niet laadt of ontlaadt, tegen de prijs van dat kwartier. De aansturing weet er niets van; de dagfiguren laten alleen de handel zien.`
+            : " Het stand-byverbruik van de batterij staat op 0 W, dus daar is niets van afgetrokken."}
           {n === 0
             ? " Bevat de gekozen periode geen volledig kalenderjaar, dan tellen we de deelperioden op en schalen we ze naar een jaar: 365 gedeeld door het aantal dagen dat ze samen beslaan."
             : ""}
@@ -389,7 +392,8 @@ export const UITLEG: Record<UitlegId, (ctx: UitlegContext) => UitlegBlok> = {
       voorbeeld: {
         regels: [
           { wat: `Stroomkosten zonder batterij, ${j.year}`, waarde: euroPrecies(j.baselineCostEur) },
-          { wat: `Stroomkosten met batterij, ${j.year}`, waarde: euroPrecies(j.realisticCostEur) },
+          { wat: `Stroomkosten met batterij, ${j.year}, inclusief stand-byverbruik`, waarde: euroPrecies(j.realisticCostEur) },
+          { wat: `Daarvan stand-byverbruik, ${j.year}`, waarde: euroPrecies(j.standbyCostEur) },
           { wat: `Besparing in ${j.year}`, waarde: euroPrecies(j.realisticSavingEur) },
           {
             wat: n > 1 ? `Gemiddeld over ${n} volledige jaren` : "Besparing per jaar",
@@ -817,7 +821,7 @@ export const UITLEG: Record<UitlegId, (ctx: UitlegContext) => UitlegBlok> = {
       titel: "Opbouw van de besparing: waar de besparing vandaan komt",
       watZieJe: (
         <>
-          De besparing in {periode}, in drie posten die samen het totaal vormen.
+          De besparing in {periode}, in een paar posten die samen het totaal vormen.
         </>
       ),
       bronnen: [{ naam: "De doorrekening zelf", wat: <>Per kwartier: wat de batterij laadde, ontlaadde, en tegen welke prijs.</> }],
@@ -825,19 +829,21 @@ export const UITLEG: Record<UitlegId, (ctx: UitlegContext) => UitlegBlok> = {
         <>We splitsen elk volledig jaar apart uit. De posten tellen op tot de gemiddelde besparing die bovenaan staat.</>,
         <><b>Negatieve prijzen ontlopen</b>: op kwartieren met een negatieve terugleverprijs kost terugleveren geld. Wat de batterij dan opvangt, hoef je niet weg te geven. Staat afregelen aan (je omvormer stopt dan met terugleveren bij een negatieve prijs; standaard staat het uit), dan kost teruglevering op die momenten al niets. Deze post is dan nul en staat niet in de figuur.</>,
         <><b>Slim laden en leveren</b>: wat het ontladen opbracht, min wat de batterij ervoor van het net haalde (naar rato van dat deel van de lading). Kan negatief zijn als het laden achteraf toch duur bleek.</>,
-        <><b>Zelf gebruiken</b>: de rest, zodat de optelling altijd op het totaal uitkomt. Het omzettingsverlies zit er al in verwerkt.</>,
+        <><b>Stand-byverbruik</b>: wat de batterij zelf verbruikt in de kwartieren dat hij niet laadt of ontlaadt, tegen de prijs van dat kwartier. Dit is de enige aftrekpost; hij staat er alleen als er een stand-byverbruik is ingesteld.</>,
+        <><b>Zelf gebruiken</b>: wat overblijft van de handel, zodat de optelling altijd op het totaal uitkomt. Het omzettingsverlies zit er al in verwerkt.</>,
       ],
       voorbeeld: {
         regels: [
           { wat: "Zelf gebruiken", waarde: euroPrecies(b.selfConsumptionEur) },
           { wat: "Slim laden en leveren", waarde: euroPrecies(b.arbitrageEur) },
           { wat: "Negatieve prijzen ontlopen", waarde: euroPrecies(b.avoidedNegativeExportEur) },
+          { wat: "Stand-byverbruik", waarde: euroPrecies(b.standbyEur) },
           { wat: `Samen: de besparing in ${periode}`, waarde: euroPrecies(b.totalEur), uitkomst: true },
           { wat: "Ter info: omzettingsverlies, al verwerkt in de eerste post", waarde: `${euroPrecies(b.conversionLossEur)} (${kwh(b.conversionLossKwh)})` },
         ],
       },
       letop: [
-        <>Het omzettingsverlies staat er niet als vierde post bij: het zit al in ‘zelf gebruiken’. Apart aftrekken zou het twee keer tellen.</>,
+        <>Het omzettingsverlies staat er niet als aparte post bij: het zit al in ‘zelf gebruiken’. Apart aftrekken zou het twee keer tellen. Het stand-byverbruik zit nergens anders in verwerkt, en staat er daarom wel als post.</>,
       ],
     };
   },
@@ -852,12 +858,14 @@ export const UITLEG: Record<UitlegId, (ctx: UitlegContext) => UitlegBlok> = {
         <>Laadverlies is evenredig met wat erin gaat: {procent(1 - preset.spec.efficiency, 1)} van elke geladen kilowattuur.</>,
         <>Ontlaadverlies is evenredig met wat eruit komt, tegen hetzelfde percentage.</>,
         <>De euro's zijn wat die kilowatturen hadden opgeleverd als ze er nog waren: uit eigen overschot de terugleverprijs, van het net de afnameprijs.</>,
+        <>Het stand-byverbruik komt er apart bij: alleen in de kwartieren dat de batterij niet laadt of ontlaadt, want tijdens laden en ontladen zit het eigen verbruik al in het rendement. Het staat niet in de besparing verwerkt maar gaat ervan af.</>,
       ],
       voorbeeld: {
         regels: [
           { wat: "Laadverlies", waarde: `${kwh(l.chargeLossKwh)} · ${euroPrecies(l.chargeLossEur)}` },
           { wat: "Ontlaadverlies", waarde: `${kwh(l.dischargeLossKwh)} · ${euroPrecies(l.dischargeLossEur)}` },
           { wat: "Samen per jaar", waarde: `${kwh(l.totalKwh)} · ${euroPrecies(l.totalEur)}`, uitkomst: true },
+          { wat: "Stand-byverbruik, apart", waarde: `${kwh(result.breakdown.standbyKwh)} · ${euroPrecies(-result.breakdown.standbyEur)}` },
           { wat: "Van elke 100 kWh die je opslaat, komt er terug", waarde: `${getal(l.roundtrip * 100, 1)} kWh` },
         ],
         toelichting: (() => {

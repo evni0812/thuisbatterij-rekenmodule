@@ -254,6 +254,12 @@ export const OPSLAG_2026_INCL_BTW = 0.128848 - ENERGIEBELASTING_EXCL_BTW[2026] *
  * verhouding blijft binnen een procentpunt van de 13% (het bedrag van nu is
  * ongeveer 105 euro). tests/voorbeeld.test.ts rekent het na met de huidige
  * standaard; wijkt het af, dan klopt de tekst op de pagina niet meer.
+ *
+ * Sinds het stand-byverbruik in de jaarbesparing zit (modelversie 19, 8 W bij
+ * de standaardbatterij) is het 96,52 tegen 108,74 euro: +12,7%. Beide kanten
+ * dragen ongeveer dezelfde aftrek (8,93 en 10,61 euro; de heffing van toen is
+ * hoger en stand-by wordt tegen de afnameprijs gewaardeerd), dus de verhouding
+ * zakt een halve procentpunt en blijft op 13% afgerond.
  */
 export const BESPARING_MET_HEFFING_TOEN = 0.13;
 

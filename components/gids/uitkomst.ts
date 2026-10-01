@@ -14,7 +14,7 @@ import { advies, celFinance, rasterNiveau } from "../../lib/model/dimensionering
 import { ankerVan, isVasteAansluiting, kostenVan, kostenregelVan } from "../../lib/model/kosten";
 import { huishoudPerspectief } from "../../lib/model/co2";
 import type { FinanceResult } from "../../lib/model/finance";
-import { euro, getal, jaren, jarenReeks, kwh } from "../../lib/format";
+import { euro, getal, jaren, jarenReeks, kwh, standbyKengetallen } from "../../lib/format";
 import type { Overgang } from "../../lib/overgang";
 import type { GridState } from "../../lib/useAnalysis";
 import type { Configuration } from "../../lib/worker/protocol";
@@ -49,7 +49,7 @@ export function hoofdgetal(result: AnalysisResult): Hoofdgetal {
 }
 
 export interface Post {
-  id: "zelf" | "slim" | "negatief";
+  id: "zelf" | "slim" | "negatief" | "standby";
   label: string;
   uitleg: string;
   waardeEur: number;
@@ -59,7 +59,9 @@ export interface Post {
  * De posten van de besparing, zoals Uitsplitsing.tsx ze rekent. "Negatieve
  * prijzen ontlopen" valt weg als hij vrijwel nul is. Het omzettingsverlies is
  * geen post: het zit al in "zelf gebruiken" verwerkt (zie SavingBreakdown) en
- * nog eens aftrekken telt het dubbel.
+ * nog eens aftrekken telt het dubbel. Het stand-byverbruik is er wel een: een
+ * aftrekpost met een negatief bedrag, zodat de posten optellen tot het
+ * hoofdgetal. Bij 0 W staat hij er niet.
  */
 export function posten(b: SavingBreakdown): Post[] {
   const lijst: Post[] = [
@@ -81,8 +83,16 @@ export function posten(b: SavingBreakdown): Post[] {
       uitleg: "Op sommige zonnige uren kost leveren aan het net geld. Wat je opslaat, hoef je niet weg te geven.",
       waardeEur: b.avoidedNegativeExportEur,
     },
+    {
+      id: "standby",
+      label: "Stand-byverbruik",
+      uitleg: "Het eigen verbruik van de batterij als hij niet laadt of ontlaadt. Dat gaat van de besparing af.",
+      waardeEur: b.standbyEur,
+    },
   ];
-  return Math.abs(b.avoidedNegativeExportEur) < 0.5 ? lijst.slice(0, 2) : lijst;
+  return lijst.filter(
+    (p) => (p.id !== "negatief" || Math.abs(p.waardeEur) >= 0.5) && (p.id !== "standby" || b.standbyKwh > 0),
+  );
 }
 
 /* ── Stap 4: terugverdienen ────────────────────────────────────────────────── */
@@ -236,8 +246,16 @@ export interface Regel {
 export const CONTRACT_TEKST =
   "Je hebt een dynamisch energiecontract nodig. Met een vast of variabel contract rekent deze tool niet.";
 
-export const STANDBY_TEKST =
-  "Het stand-byverbruik van de batterij (60 tot 220 kWh per jaar) zit er niet in.";
+/**
+ * De checklistregel over het stand-byverbruik: wat het per jaar kost en dat het
+ * al van de besparing is afgetrokken. Met 0 W (door de gebruiker ingesteld) is
+ * er niets afgetrokken, en dat zegt de regel dan.
+ */
+export function standbyTekst(watt: number, b: SavingBreakdown): string {
+  return watt > 0
+    ? `Het stand-byverbruik van de batterij (${standbyKengetallen(watt, b.standbyKwh, -b.standbyEur)}) is al van de besparing afgetrokken.`
+    : "Je rekent zonder stand-byverbruik van de batterij (0 W). Een echte batterij gebruikt ook stroom als hij niets doet.";
+}
 
 /** Stekker of installateur: op het vermogen van de doorgerekende batterij. */
 export function aansluitingRegel(vermogenKw: number): Regel {
@@ -429,13 +447,14 @@ export function checklist(args: {
   grid: GridState | null;
 }): Regel[] {
   const { result, toon, toonZonnepanelen, grid } = args;
+  const watt = toon.standbyWatt;
   const regels: (Regel | null)[] = [
     { id: "contract", teken: "info", tekst: CONTRACT_TEKST },
     aansluitingRegel(toon.battery.maxDischargeKw),
     panelenRegel(result.breakdown, toonZonnepanelen),
     co2Regel(result.co2),
     maatRegel(andereMaat(grid, toon, result)),
-    { id: "standby", teken: "let-op", tekst: STANDBY_TEKST },
+    { id: "standby", teken: watt > 0 ? "info" : "let-op", tekst: standbyTekst(watt, result.breakdown) },
   ];
   return regels.filter((r): r is Regel => r !== null);
 }

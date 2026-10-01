@@ -69,12 +69,13 @@ export function StapBatterij(data: GidsData) {
   }).filter((w) => !zonderMaat.has(w.tekst));
 
   const kies = (id: string) =>
-    zetInst({ presetId: id, capaciteitKwh: null, vermogenKw: null, prijsEur: null });
+    zetInst({ presetId: id, capaciteitKwh: null, vermogenKw: null, prijsEur: null, standbyWatt: null });
 
   return (
     <>
       <p className="gids-lead">
         Capaciteit (kWh) is hoeveel stroom erin past; vermogen (kW) is hoe snel hij laadt en levert.
+        Helemaal leeg of vol gaat een batterij niet: we rekenen met het bruikbare deel.
       </p>
 
       {eigen ? (
@@ -106,6 +107,11 @@ export function StapBatterij(data: GidsData) {
               <span className="kaart-titel">{p.naam}</span>
               <span className="batterij-groot">
                 {getal(p.capaciteitKwh, 2)} <small>kWh</small>
+              </span>
+              {/* Het model gebruikt alleen het bruikbare deel (depthOfCharge);
+                  dat getal staat in stap 3 bij de batterij, dus hier ook. */}
+              <span className="kaart-noot">
+                waarvan ongeveer {getal(p.capaciteitKwh * p.spec.depthOfCharge, 1)} kWh bruikbaar
               </span>
               <span className="kaart-uitleg">
                 {getal(p.vermogenKw, 2)} kW · {euro(p.prijsEur)}

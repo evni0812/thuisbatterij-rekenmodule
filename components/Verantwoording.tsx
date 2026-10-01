@@ -80,6 +80,13 @@ export function Verantwoording({
               wél van je gedrag af. Wat dat doet, staat bij Nettarief van 2029.
             </li>
             <li>
+              Het <strong>stand-byverbruik van de batterij</strong> is van de
+              besparing afgetrokken ({getal(result.breakdown.standbyKwh)} kWh per jaar,{" "}
+              {euroPrecies(-result.breakdown.standbyEur)}), alleen op de momenten
+              dat de batterij niet laadt of ontlaadt. De aansturing weet er niets
+              van, en de dagfiguren laten alleen de handel zien.
+            </li>
+            <li>
               Het profiel is een <strong>gemiddelde over veel huishoudens</strong> en
               daardoor gladder dan één aansluiting. Of dat de uitkomst te hoog of
               te laag maakt, is niet zeker. Hoe gevoelig hij ervoor is, zie je
@@ -125,6 +132,7 @@ export function Verantwoording({
               <th>Teruglevering</th>
               <th>Zonder batterij</th>
               <th>Met batterij</th>
+              <th>Waarvan stand-by</th>
               <th>Besparing</th>
               <th>Met perfecte kennis</th>
               <th>Laadbeurten</th>
@@ -141,6 +149,7 @@ export function Verantwoording({
                 <td>{Math.round(j.gridExportKwh)} kWh</td>
                 <td>{euroPrecies(j.baselineCostEur)}</td>
                 <td>{euroPrecies(j.realisticCostEur)}</td>
+                <td>{euroPrecies(j.standbyCostEur)}</td>
                 <td>{euroPrecies(j.realisticSavingEur)}</td>
                 <td>{euroPrecies(j.optimalSavingEur)}</td>
                 <td>{getal(j.cyclesPerYear)}</td>

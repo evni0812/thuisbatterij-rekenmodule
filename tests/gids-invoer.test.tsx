@@ -159,6 +159,7 @@ describe("stap 2, jouw batterij", () => {
       capaciteitKwh: null,
       vermogenKw: null,
       prijsEur: null,
+      standbyWatt: null,
     });
   });
 
@@ -176,11 +177,13 @@ describe("stap 2, jouw batterij", () => {
     expect(screen.queryByText(/Je eigen batterij/)).toBeNull();
   });
 
-  it("legt kWh en kW uit", () => {
-    render(<StapBatterij {...maakData(STANDAARD)} />);
-    expect(
-      screen.getByText("Capaciteit (kWh) is hoeveel stroom erin past; vermogen (kW) is hoe snel hij laadt en levert."),
-    ).toBeTruthy();
+  it("legt kWh, kW en het bruikbare deel uit", () => {
+    const { container } = render(<StapBatterij {...maakData(STANDAARD)} />);
+    expect(container.querySelector(".gids-lead")?.textContent).toMatch(
+      /^Capaciteit \(kWh\) is hoeveel stroom erin past; vermogen \(kW\) is hoe snel hij laadt en levert\./,
+    );
+    // De Zendure van 1,92 kWh gebruikt 90%: dat getal staat ook in stap 3.
+    expect(container.textContent).toContain("waarvan ongeveer 1,7 kWh bruikbaar");
   });
 
   it("laat het doel kiezen, met Rendement als standaard", () => {

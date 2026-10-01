@@ -30,7 +30,7 @@ import {
 } from "../components/gids/uitkomst";
 import { STANDAARD, maakConfiguratie } from "../lib/configuratie";
 import { expandPricesToQuarters, loadManifest, loadPriceYear, loadProfileYear } from "../lib/data/loader";
-import { euro, jaren } from "../lib/format";
+import { euro, jaren, kwh } from "../lib/format";
 import { runAnalysis, type AnalysisResult } from "../lib/model/analysis";
 import { celFinance, rasterNiveau } from "../lib/model/dimensionering";
 import { co2Jaar } from "../lib/model/co2";
@@ -54,7 +54,7 @@ const INSTELLINGEN = {
   kostenPerKwh: STANDAARD.kostenPerKwh, kostenPerKw: STANDAARD.kostenPerKw,
   installatieEur: STANDAARD.installatieEur, co2Drempel: STANDAARD.co2Drempel, doel: STANDAARD.doel,
   degradatie: 0.015, prijsEur: null, capaciteitKwh: null, vermogenKw: null,
-  opwekKwh: null, zonnepanelen: true,
+  opwekKwh: null, zonnepanelen: true, standbyWatt: null,
 };
 
 let result: AnalysisResult;
@@ -379,9 +379,34 @@ describe("stap 5: de checklist", () => {
   it("noemt het dynamische contract en het stand-byverbruik altijd", () => {
     const regels = checklist({ result, toon: config, toonZonnepanelen: true, grid: null });
     expect(regels.find((x) => x.id === "contract")?.tekst).toMatch(/dynamisch energiecontract nodig.*vast of variabel/);
-    expect(regels.find((x) => x.id === "standby")?.tekst).toBe(
-      "Het stand-byverbruik van de batterij (60 tot 220 kWh per jaar) zit er niet in.",
+    // Het stand-byverbruik is van de besparing afgetrokken, met de getallen uit het resultaat.
+    const metStandby: AnalysisResult = {
+      ...result,
+      breakdown: { ...result.breakdown, standbyEur: -19.4, standbyKwh: 80 },
+    };
+    const standby = checklist({ result: metStandby, toon: { ...config, standbyWatt: 8 }, toonZonnepanelen: true, grid: null }).find(
+      (x) => x.id === "standby",
     );
+    expect(standby?.tekst).toBe(
+      `Het stand-byverbruik van de batterij (8 W, ${kwh(80)} per jaar, ${euro(19.4)}) is al van de besparing afgetrokken.`,
+    );
+    expect(standby?.teken).toBe("info");
+    // Op 0 W is er niets afgetrokken, en dat zegt de regel.
+    const nul = checklist({ result, toon: { ...config, standbyWatt: 0 }, toonZonnepanelen: true, grid: null }).find(
+      (x) => x.id === "standby",
+    );
+    expect(nul?.tekst).toMatch(/zonder stand-byverbruik/);
+    expect(nul?.teken).toBe("let-op");
+  });
+
+  it("zet het stand-byverbruik als aftrekpost bij de posten, zodat ze optellen tot het hoofdgetal", () => {
+    const b = { ...result.breakdown, standbyEur: -19.4, standbyKwh: 80, totalEur: result.breakdown.totalEur - 19.4 };
+    const lijst = posten(b);
+    expect(lijst.at(-1)?.id).toBe("standby");
+    expect(lijst.at(-1)?.waardeEur).toBe(-19.4);
+    expect(lijst.reduce((s, x) => s + x.waardeEur, 0)).toBeCloseTo(b.totalEur, 9);
+    // Bij 0 W staat de post er niet.
+    expect(posten({ ...result.breakdown, standbyEur: 0, standbyKwh: 0 }).some((x) => x.id === "standby")).toBe(false);
   });
 
   describe("CO2 met het teken van Co2Antwoord", () => {

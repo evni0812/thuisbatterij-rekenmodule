@@ -77,7 +77,7 @@ const LEGE_INSTELLINGEN = {
   kostenPerKwh: STANDAARD.kostenPerKwh, kostenPerKw: STANDAARD.kostenPerKw,
   installatieEur: STANDAARD.installatieEur, co2Drempel: STANDAARD.co2Drempel, doel: STANDAARD.doel,
   degradatie: 0.015, prijsEur: null, capaciteitKwh: null, vermogenKw: null,
-  opwekKwh: null, zonnepanelen: true,
+  opwekKwh: null, zonnepanelen: true, standbyWatt: null,
 };
 let manifest: Manifest;
 let result: AnalysisResult;
@@ -201,7 +201,7 @@ describe("de pagina toont het antwoord", () => {
     // Slijtage hoort hier niet tussen: dat is de aanschafprijs, geen extra kost.
     // Het omzettingsverlies staat naast de optelling, met uitleg waarom.
     expect(document.body.textContent).toMatch(/ging.*verloren/);
-    expect(document.body.textContent).toMatch(/Slijtage staat er evenmin tussen/);
+    expect(document.body.textContent).toMatch(/Slijtage staat er niet tussen/);
     expect(screen.getAllByText(/Zelf gebruiken/).length).toBeGreaterThan(0);
   });
 
@@ -213,7 +213,7 @@ describe("de pagina toont het antwoord", () => {
      */
     const b = result.breakdown;
     expect(
-      b.selfConsumptionEur + b.arbitrageEur + b.avoidedNegativeExportEur,
+      b.selfConsumptionEur + b.arbitrageEur + b.avoidedNegativeExportEur + b.standbyEur,
     ).toBeCloseTo(b.totalEur, 6);
     // En het totaal is hetzelfde getal als het antwoord bovenaan de pagina:
     // dezelfde grondslag, het gemiddelde over de volledige jaren.
@@ -664,6 +664,7 @@ describe("kerncijfers en herberekenen", () => {
         capaciteit={2.1}
         vermogen={0.8}
         prijs={1199}
+        standby={PRESETS[1]!.standbyWatt}
         onChange={() => {}}
         onReset={() => {}}
         onBereken={opBereken}
@@ -682,7 +683,7 @@ describe("kerncijfers en herberekenen", () => {
 
 describe("de verliezensectie", () => {
   it("noemt beide omzettingsposten met kilowatturen en een bedrag", () => {
-    render(<Verliezen losses={result.losses} afnameKwh={2500} besparingEur={result.averageSavingEur} />);
+    render(<Verliezen losses={result.losses} standbyKwh={80} standbyEur={19} standbyWatt={12} afnameKwh={2500} besparingEur={result.averageSavingEur} />);
     const tekst = document.body.textContent ?? "";
     expect(tekst).toMatch(/Verlies bij het laden/);
     expect(tekst).toMatch(/Verlies bij het ontladen/);
@@ -697,14 +698,14 @@ describe("de verliezensectie", () => {
   });
 
   it("toont in de kop een conclusie die bij de cijfers past", () => {
-    render(<Verliezen losses={result.losses} afnameKwh={2500} besparingEur={result.averageSavingEur} />);
+    render(<Verliezen losses={result.losses} standbyKwh={80} standbyEur={19} standbyWatt={12} afnameKwh={2500} besparingEur={result.averageSavingEur} />);
     const kop = screen.getByRole("heading", { level: 3 }).textContent ?? "";
     expect(kop).toMatch(/komt er \d+ weer uit/);
   });
 
   it("laat de balken binnen hun schaal blijven", () => {
     const { container } = render(
-      <Verliezen losses={result.losses} afnameKwh={2500} besparingEur={result.averageSavingEur} />,
+      <Verliezen losses={result.losses} standbyKwh={80} standbyEur={19} standbyWatt={12} afnameKwh={2500} besparingEur={result.averageSavingEur} />,
     );
     const delen = container.querySelectorAll<HTMLElement>(".verlies-deel");
     expect(delen.length).toBe(3);
@@ -717,7 +718,7 @@ describe("de verliezensectie", () => {
 
   it("verdwijnt als er nooit geladen is", () => {
     const leeg = { ...result.losses, chargedKwh: 0 };
-    const { container } = render(<Verliezen losses={leeg} afnameKwh={2500} besparingEur={100} />);
+    const { container } = render(<Verliezen losses={leeg} standbyKwh={0} standbyEur={0} standbyWatt={0} afnameKwh={2500} besparingEur={100} />);
     expect(container.textContent).toBe("");
   });
 });
@@ -863,6 +864,7 @@ describe("de instellingen zijn geordend op wat ze veranderen", () => {
         capaciteit={2.1}
         vermogen={0.8}
         prijs={1199}
+        standby={PRESETS[1]!.standbyWatt}
         onChange={() => {}}
         onReset={() => {}}
         onBereken={() => {}}
@@ -2160,10 +2162,11 @@ describe("de mobiele weergave en leesbaarheid", () => {
 
   it("noemt de verliesposten met dezelfde decimalen en geeft de omzettingsdelen een legenda", () => {
     const { container } = render(
-      <Verliezen losses={result.losses} afnameKwh={2500} besparingEur={result.averageSavingEur} />,
+      <Verliezen losses={result.losses} standbyKwh={80} standbyEur={19} standbyWatt={12} afnameKwh={2500} besparingEur={result.averageSavingEur} />,
     );
     const bedragen = [...container.querySelectorAll(".verlies-tabel td:nth-child(3)")].map((td) => td.textContent ?? "");
-    expect(bedragen.length).toBe(3);
+    // Laden, ontladen, stand-by, en de som eronder.
+    expect(bedragen.length).toBe(4);
     for (const b of bedragen) expect(b, `bedrag "${b}"`).toMatch(/,\d{2}$/);
     const legenda = [...container.querySelectorAll(".legenda li")].map((li) => li.textContent);
     expect(legenda).toEqual(

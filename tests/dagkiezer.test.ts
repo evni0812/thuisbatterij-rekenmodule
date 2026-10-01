@@ -84,6 +84,7 @@ function config(over: Partial<Configuration> = {}): Configuration {
     calendarFadePerYear: 0.015,
     residualValueEur: 0,
     useHistoricalLevy: true,
+    standbyWatt: 0,
     ...over,
   };
 }

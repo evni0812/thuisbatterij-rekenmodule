@@ -11,7 +11,7 @@
 
 import type { Invoerbron } from "../data/invoer";
 import { vensterGrenzen } from "../data/invoer";
-import { referentieIndexVan, slijtageVoor } from "./analysis";
+import { referentieIndexVan, slijtageVoor, standbyKosten } from "./analysis";
 import { dispatchBaseline } from "./dispatch-baseline";
 import { dispatchRolling } from "./dispatch-rolling";
 import type { Configuration } from "../worker/protocol";
@@ -95,7 +95,9 @@ export async function huishoudenPunt(
   return {
     ...v,
     afnameKwh: cfg.household.annualGridImportKwh,
-    savingEur: basisDispatch.totalCostEur - res.totalCostEur,
+    // Na stand-by, net als de jaarbesparing in het hoofdresultaat.
+    savingEur:
+      basisDispatch.totalCostEur - res.totalCostEur - standbyKosten(entry.window, res, invoer.tariff, cfg.standbyWatt).eur,
     cyclesPerYear: res.equivalentCycles,
   };
 }

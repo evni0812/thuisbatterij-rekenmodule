@@ -72,6 +72,14 @@ export function Uitsplitsing({
       waarde: breakdown.avoidedNegativeExportEur,
       kleur: "var(--series-4)",
     },
+    {
+      label: "Stand-byverbruik",
+      uitleg:
+        "Het eigen verbruik van de batterij als hij niet laadt of ontlaadt. " +
+        "Dat gaat van de besparing af.",
+      waarde: breakdown.standbyEur,
+      kleur: "var(--series-5)",
+    },
   ];
 
   // "Negatieve prijzen ontlopen" is nul zodra de omvormer afregelt (de
@@ -79,9 +87,15 @@ export function Uitsplitsing({
   // te ontlopen. Een staaf van € 0 zonder uitleg leest als een fout; de post
   // valt dan weg en de toelichting zegt waarom. De andere twee posten blijven
   // altijd staan.
+  // Stand-byverbruik is de enige aftrekpost en staat er alleen als er iets is
+  // afgetrokken (bij 0 W niet): zonder die post tellen de andere al op tot het
+  // totaal.
   const negatiefNul = Math.abs(breakdown.avoidedNegativeExportEur) < 0.5;
-  const zichtbaar = negatiefNul ? posten.slice(0, 2) : posten;
-  const aantal = zichtbaar.length === 2 ? "twee" : "drie";
+  const metStandby = breakdown.standbyKwh > 0;
+  const zichtbaar = posten.filter(
+    (p, i) => (i !== 2 || !negatiefNul) && (i !== 3 || metStandby),
+  );
+  const aantal = ["één", "twee", "drie", "vier"][zichtbaar.length - 1] ?? String(zichtbaar.length);
 
   // De stappen van de waterval: elke post begint waar de vorige eindigde.
   let loopt = 0;
@@ -132,6 +146,9 @@ export function Uitsplitsing({
           Elke kilowattuur die je zelf gebruikt in plaats van teruglevert, is dat
           verschil waard. De {aantal} posten stapelen op tot de besparing over{" "}
           {periodeLabel}.
+          {metStandby
+            ? " Het stand-byverbruik van de batterij gaat er als laatste post vanaf; de dagfiguren laten alleen de handel zien."
+            : null}
           {negatiefNul
             ? afregelen
               ? " Negatieve prijzen ontlopen staat er niet bij: je omvormer regelt bij een negatieve prijs af, en dan kost teruglevering op die momenten al niets."
@@ -213,7 +230,7 @@ export function Uitsplitsing({
           })}
 
           {/* De totaalkolom staat op de grond, niet op de stapel: het is geen
-              vierde post maar de som van de drie ervoor. */}
+              extra post maar de som van de posten ervoor. */}
           <rect
             x={midden(kolommen - 1) - staafB / 2}
             y={Math.min(y(0), y(breakdown.totalEur))}
@@ -306,7 +323,7 @@ export function Uitsplitsing({
         {euro(breakdown.totalEur + breakdown.conversionLossEur)} bespaard.
       </p>
       <p className="posten-noot">
-        Slijtage staat er evenmin tussen. Die is geen aparte kostenpost naast de
+        Slijtage staat er niet tussen. Die is geen aparte kostenpost naast de
         aanschafprijs: het ís die prijs, verdeeld over de laadbeurten. Je vindt
         hem terug in de terugverdientijd, waar de hele aanschaf tegen deze
         besparing wordt afgezet.

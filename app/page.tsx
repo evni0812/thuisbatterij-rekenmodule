@@ -42,10 +42,10 @@ import { Verantwoording } from "../components/Verantwoording";
 import { Verloop } from "../components/Verloop";
 import { Verliezen } from "../components/Verliezen";
 import { Verschuiving } from "../components/Verschuiving";
-import { datum, euro, jarenReeks, periode } from "../lib/format";
+import { datum, euro, getal, jarenReeks, kwh, periode } from "../lib/format";
 import { leesLaatste, leesProfielen, type Profiel } from "../lib/opslag";
 import { PRESETS, PRIJSPEILDATUM, geschatteOpwekKwh } from "../lib/presets";
-import { STANDAARD, effectieveBatterij, kiesPreset, maakConfiguratie } from "../lib/configuratie";
+import { STANDAARD, effectieveBatterij, effectiefStandby, kiesPreset, maakConfiguratie } from "../lib/configuratie";
 import { referentieJaar } from "../lib/model/analysis";
 import { STANDAARD_CO2_DREMPEL_G } from "../lib/model/co2";
 import { ankerVan, kostenVan, kostenregelVan } from "../lib/model/kosten";
@@ -233,6 +233,10 @@ export default function Page() {
     vermogenKw: vermogen,
     prijsEur: prijs,
   } = effectieveBatterij(inst);
+  // Het stand-byverbruik in de invoer (het veld bij Geavanceerd); wat bij een
+  // antwoord staat is `toon.standbyWatt`, het getal waarmee dát antwoord rekende.
+  const standbyEffectief = effectiefStandby(inst);
+  const standby = standbyEffectief.watt;
 
   const state = useAnalysis(
     useMemo<Configuration | null>(
@@ -595,6 +599,7 @@ export default function Page() {
                 capaciteitKwh: null,
                 vermogenKw: null,
                 prijsEur: null,
+                standbyWatt: null,
               }))
             }
             doel={inst.doel}
@@ -653,6 +658,7 @@ export default function Page() {
                 heffingVanNu={toon?.useHistoricalLevy === false}
                 scenarioFout={scenarioFout}
                 doel={toon?.doel}
+                standbyWatt={toon?.standbyWatt ?? standby}
                 actie={uitleg("antwoord")}
               />
 
@@ -674,6 +680,7 @@ export default function Page() {
             capaciteit={capaciteit}
             vermogen={vermogen}
             prijs={prijs}
+            standby={standby}
             onChange={(patch) => setInst((s) => ({ ...s, ...patch }))}
             onReset={() => setInst(STANDAARD)}
             onBereken={herbereken}
@@ -728,6 +735,9 @@ export default function Page() {
               />
               <Verliezen
                 losses={result.losses}
+                standbyKwh={result.breakdown.standbyKwh}
+                standbyEur={-result.breakdown.standbyEur}
+                standbyWatt={toon?.standbyWatt ?? standby}
                 afnameKwh={toonAfname}
                 besparingEur={result.averageSavingEur}
                 actie={uitleg("verliezen")}
@@ -984,12 +994,28 @@ export default function Page() {
                 <span className="badge neutraal">aanname</span>
               </li>
               <li>
-                <b>Het stand-byverbruik van de batterij zit er niet in.</b> Een
-                thuisbatterij gebruikt ook stroom als hij niets doet. Fabrikanten
-                en testers noemen 7 tot 25 watt. Dat is 60 tot 220 kWh per jaar.
-                Dat is een indicatie, en we trekken het niet van de besparing af.
-                De besparing valt daardoor lager uit.
-                <span className="badge neutraal">aanname</span>
+                <b>Het stand-byverbruik van de batterij.</b> Een thuisbatterij
+                gebruikt ook stroom als hij niets doet. Dat trekken we af van de
+                besparing, alleen op de momenten dat hij niet laadt of ontlaadt:
+                tijdens het laden en ontladen zit het eigen verbruik al in het
+                rendement. Voor {preset.naam} rekenen we met{" "}
+                {getal(standbyEffectief.watt)} watt:{" "}
+                {standbyEffectief.aangepast
+                  ? "een waarde die je zelf hebt ingevuld"
+                  : preset.standbyNoot}
+                .{" "}
+                {result
+                  ? `Dat is ${kwh(result.breakdown.standbyKwh)} per jaar, goed voor ${euro(-result.breakdown.standbyEur)}. `
+                  : ""}
+                De dagfiguren laten alleen de handel zien. Je past het aan bij de
+                geavanceerde instellingen.
+                <span className={standbyEffectief.aangepast || preset.standbyBron === "schatting" ? "badge neutraal" : "badge goed"}>
+                  {standbyEffectief.aangepast
+                    ? "zelf ingevuld"
+                    : preset.standbyBron === "gemeten"
+                      ? "gemeten"
+                      : "schatting"}
+                </span>
               </li>
               <li>
                 <b>De belasting van nu.</b> De uurprijzen zijn van toen, de
@@ -1233,9 +1259,11 @@ export default function Page() {
                 ).
               </li>
               <li>
-                <b>Stand-byverbruik:</b> een indicatie uit fabrikantopgaven en
-                tests, bijvoorbeeld Indevolt (7 watt in diepe stand-by, 20 watt
-                voor de hoofdunit;{" "}
+                <b>Stand-byverbruik:</b> gemeten waar er een test van is
+                (Marstek 7 watt met een slimme stekker; HomeWizard ongeveer 6
+                watt), anders een schatting voor de omvormerklasse op basis van
+                fabrikantopgaven en tests, bijvoorbeeld Indevolt (7 watt in diepe
+                stand-by, 20 watt voor de hoofdunit;{" "}
                 <a href="https://blog.indevolt.com/nl/wat-is-standby-verbruik-waarom-verbruikt-een-plug-in-thuisbatterij-ook-stroom-in-stand-by/">
                   indevolt.com
                 </a>

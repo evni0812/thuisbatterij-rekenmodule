@@ -47,6 +47,7 @@ describe("de knoppen in de instellingen", () => {
         capaciteit={PRESETS[0]!.capaciteitKwh}
         vermogen={PRESETS[0]!.vermogenKw}
         prijs={PRESETS[0]!.prijsEur}
+        standby={PRESETS[0]!.standbyWatt}
         onChange={onChange}
         onReset={() => {}}
         onBereken={() => {}}

@@ -58,6 +58,13 @@ export interface Instellingen {
   vermogenKw: number | null;
   /** Bruto jaaropwek van de panelen; null als onbekend. */
   opwekKwh: number | null;
+  /**
+   * Stand-byverbruik van de batterij in watt, 0–100. Null betekent: neem de
+   * waarde van de gekozen batterij over (`standbyWatt` in lib/presets.ts).
+   * Raakt alleen de jaarbesparing en de terugverdientijd, niet de dispatch en
+   * niet de dagfiguren.
+   */
+  standbyWatt: number | null;
 }
 
 /** Korte sleutels, zodat een gedeelde link leesbaar blijft. */
@@ -87,6 +94,7 @@ const SLEUTELS: Record<keyof Instellingen, string> = {
   capaciteitKwh: "cap",
   vermogenKw: "kw",
   opwekKwh: "opwek",
+  standbyWatt: "sb",
 };
 
 /**
@@ -127,6 +135,7 @@ export function leesUrl(gecorrigeerd?: (keyof Instellingen)[]): Partial<Instelli
     "capaciteitKwh",
     "vermogenKw",
     "opwekKwh",
+    "standbyWatt",
   ];
   for (const k of getalVelden) {
     const v = p.get(SLEUTELS[k]);

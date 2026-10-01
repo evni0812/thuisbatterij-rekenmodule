@@ -29,7 +29,7 @@ gebruik, alles vanaf de CDN.
 ```bash
 npm install
 npm run dev          # http://localhost:3000
-npm test             # 661 tests, waaronder de modelinvarianten
+npm test             # 689 tests, waaronder de modelinvarianten
 npm run build        # statische export naar out/
 npm run clean        # bij een vastgelopen build-cache
 ```
@@ -457,12 +457,57 @@ wordt naarmate hij onzekerder is, zou deze dip niet hebben. Onze regelaar hedget
 niet en voert zijn plan op vol vermogen uit; de tool rekent daarmee aan de
 voorzichtige kant.
 
-**Stand-by zit niet in het model.** Het eigen verbruik van de omvormer (7 tot
-25 W bij de modellen in de catalogus, bij de Zendure ruim € 20 per jaar) loopt
-door of de batterij nu handelt of niet. Het is een vaste post van het bezit,
-zoals de aanschaf, en hoort daarom naast de businesscase en niet in de
-dagcijfers. Eerder zat het er wél in, en dan trok het elke dag een paar cent van
-het resultaat af, ook op dagen waarop de handel winst maakte.
+**Stand-by zit in de jaarbesparing en de terugverdientijd, niet in de dispatch
+en niet in de dag.** Het eigen verbruik van de batterij als hij niet laadt of
+ontlaadt (6 tot 25 W bij de modellen in de catalogus; `standbyWatt` per preset in
+`lib/presets.ts`) is een vaste post van het bezit. De eigenaar wil het in de
+terugverdientijd en de jaarlijkse besparing, alleen niet in het handelsalgoritme
+op een dag. Daarom rekent `standbyKosten` (`lib/model/analysis.ts`) het achteraf,
+per kwartier, op de dispatch die er al is, en trekt het af van de vensteruitkomst:
+
+- Alleen in kwartieren waarin de batterij niet laadt en niet ontlaadt. Tijdens
+  laden en ontladen zit het eigen verbruik al in het gemeten
+  rondgangsrendement; de rendementen komen uit losse laad-ontlaadrondes bij een
+  vast vermogen (energienerds.nl: HomeWizard 78,4% over vier rondes, Marstek
+  ongeveer 83%) en bevatten de stand-by bij stilstand dus niet. Zo is er geen
+  dubbeltelling.
+- Gewaardeerd op de situatie met batterij, met dezelfde prijzen als de dispatch
+  (all-in afnameprijs inclusief heffing en, in het scenario, het nettarief): haalt
+  het huis dat kwartier stroom van het net, dan tegen de afnameprijs, anders
+  tegen de terugleverprijs (de stroom die je anders had geleverd; een negatieve
+  prijs mag, dan levert stand-by iets op). Met afregelen aan en een negatieve
+  prijs was dat overschot toch weggegooid en kost het niets.
+- Het resultaat staat in `YearKern.standbyKwh` en `standbyCostEur`, als negatieve
+  post `standbyEur` in `SavingBreakdown` (zodat de posten optellen tot
+  `totalEur`), in de maandtotalen en in `realisticSavingEur`. Het optimum draagt
+  zijn eigen stand-by, zodat het ideale geval en de capture rate vergelijkbaar
+  blijven. Alles wat erop rust erft het: jaarschaling bij deelperiodes, het
+  gemiddelde, de bandbreedte, de besparingscurve (kleinere capaciteiten met
+  dezelfde watt), de financiën en de terugverdientijd, het nettariefscenario, de
+  overgang, het raster en de huishoudens.
+- NIET: de dispatch, de dagstatistieken (`dayStats`, de voorbeelddagen), de
+  periodereeksen voor Verloop, de CO2-balans en de kWh-kerncijfers. De dag laat
+  de handel zien; stand-by is een vaste post van het bezit die in het jaar en de
+  terugverdientijd zit. Een dag zonder stand-by kan zo nooit meer op € 0,00
+  uitkomen door iets dat er niet bij hoort.
+
+De waarden: Zendure 800 Pro 2 8 W (schatting; energienerds.nl schat 6 tot 9 W voor
+de SolarFlow 800 Pro en mat de stand-by niet apart), HomeWizard Plug-In 6 W
+(gemeten door energienerds.nl in de standaardstand met AC aangesloten; 0,52 W in
+de API-stand-by), Anker Solarbank 3 12 W (schatting), Zendure 1600 AC+ en 2400
+AC+ 15 W (schatting), Marstek Venus E 3.0 7 W (gemeten door energienerds.nl met
+een HomeWizard-slimme stekker), Anker Solarbank Max AC 20 W (schatting) en de
+generieke thuisaccu's van 5 en 10 kWh 20 en 25 W (schatting). De gebruiker kan
+het overschrijven bij de geavanceerde instellingen (`Instellingen.standbyWatt`,
+URL-sleutel `sb`, 0 tot 100 W, leeg is de waarde van de batterij; een
+batterijwissel zet het terug op leeg). Bij 8 W en de standaardinvoer is het 47,5
+kWh per jaar (de batterij staat ongeveer twee derde van de kwartieren stil) en
+€ 8,93; de besparing gaat van € 105,45 naar € 96,52 per jaar en de
+terugverdientijd met de overgang naar het nettarief van 5,0 naar 5,3 jaar (zonder
+overgang van 6,9 naar 7,6 jaar). In de cache is `standbyWatt` een
+dispatch-veld (`VELDKLASSE` in `lib/cache.ts`): de dispatch verandert niet, maar
+de bewaarde bundel bevat de aftrek, en die moet bij een andere waarde opnieuw
+berekend worden.
 
 **Waar dat gat vandaan komt.** Twee dingen weet een echte batterij niet: de
 prijzen van morgen vóór de publicatie om 13:00, en hoeveel zon en verbruik
@@ -687,7 +732,7 @@ dat dan met die getallen.
 
 De balans zit in elk jaar (`YearKern.co2`) en gemiddeld over de volledige
 jaren in het resultaat (`co2`), dus in cache en preload; daarom ging bij de
-invoering het modelversienummer omhoog (`MODEL_VERSIE` in `lib/cache.ts`, nu 18).
+invoering het modelversienummer omhoog (`MODEL_VERSIE` in `lib/cache.ts`, nu 19).
 De dispatch rekent er niet mee, dus de bedragen en het solver-harnas zijn
 ongewijzigd. Het tabblad CO2 toont het antwoord met tegels
 (`Co2Antwoord`), de factor per uur van de dag in winter en zomer met de afname
@@ -696,8 +741,16 @@ die de batterij per uur weghaalt (`Co2Uren`), de winst per maand
 
 ### Gedrag sinds 30 september 2026
 
-Vijf dingen die sinds de review van eind september anders werken dan je uit de
+Zes dingen die sinds de review van eind september anders werken dan je uit de
 oudere alinea's zou verwachten:
+
+**Stand-by zit in de jaarbesparing en de terugverdientijd.** Sinds modelversie 19
+trekt `standbyKosten` het eigen verbruik van de batterij af, per batterij 6 tot
+25 W, alleen in kwartieren zonder laden of ontladen. Dat staat niet in de
+dispatch en niet in de dagfiguren (zie "Stand-by zit in de jaarbesparing"
+hierboven). Bedragen in oudere alinea's, zoals € 105,45 per jaar voor de
+standaardbatterij, zijn zonder die aftrek gemeten; met 8 W is het € 96,52. De
+standaardinvoer verliest daardoor ongeveer € 9 per jaar.
 
 **Afregelen staat standaard uit.** Een omvormer die bij een negatieve prijs
 stopt met terugleveren (`Instellingen.curtailment`, `lib/configuratie.ts`) is
@@ -874,9 +927,10 @@ nettarief te kijken, want dat legt zijn piek juist in de winteravond.
 kocht de Zendure 's nachts 1,8 kWh in bij 19 cent en leverde er 1,6 aan het huis
 bij 26 cent. Na het omzettingsverlies bleef er **€ 0,067** over, terwijl de
 slijtage van die beurt € 0,12 was tegen de volle aanschafprijs per kWh. Toen het
-standby-verbruik nog in het model zat, kwam de dag op € 0,00 uit en las hij als
-slijtage voor niets; dat was de reden om standby eruit te halen en de slijtage
-apart te tonen. En het was de reden om de planner met de volle slijtageprijs te
+standby-verbruik nog in de dispatch zat, kwam de dag op € 0,00 uit en las hij als
+slijtage voor niets; dat was de reden om standby uit de dispatch te halen en de
+slijtage apart te tonen. Sinds modelversie 19 zit stand-by wel in de jaarbesparing
+en de terugverdientijd, maar nog steeds niet in de dag. En het was de reden om de planner met de volle slijtageprijs te
 laten rekenen: sinds die wijziging laat hij zo'n dag voorbijgaan.
 
 **Geen prijsstijging als uitgangspunt.** De standaard voor de jaarlijkse
@@ -1072,12 +1126,14 @@ zonder batterij.
 - Het profiel is een gemiddelde over veel huishoudens en daardoor gladder dan één
   aansluiting. Of dat de waarde van een batterij onder- of overschat, is niet
   onderbouwd; de spreidingsfactor laat zien hoe gevoelig de uitkomst ervoor is.
-- Het eigen stroomverbruik van de batterij (stand-by). Fabrikanten en testers
-  noemen enkele watts tot zo'n 25 W; 7 tot 25 W is 60 tot 220 kWh per jaar
-  (Indevolt: 7 W in diepe stand-by, 20 W voor de hoofdunit; energienerds.nl mat
-  ongeveer 6 W aan de HomeWizard). Een indicatie, bewust niet gemodelleerd; de
-  pagina zegt dat bij het antwoord en in de lijst op Aannames en bronnen, en
-  nergens anders.
+- Het eigen stroomverbruik van de batterij (stand-by) is een waarde per batterij,
+  geen meting aan jouw batterij. Gemeten waar er een test van is (HomeWizard 6 W,
+  Marstek 7 W; energienerds.nl), anders een schatting voor de omvormerklasse
+  (Indevolt: 7 W in diepe stand-by, 20 W voor de hoofdunit). Het is van de
+  besparing afgetrokken, alleen op de momenten dat de batterij niet laadt of
+  ontlaadt, en met dezelfde watt voor elke maat in het raster en de curve. Het
+  staat niet in de dagfiguren. Een stand-by die per uur of per standen
+  verschilt (de API-stand-by van de HomeWizard is 0,52 W) is niet gemodelleerd.
 - De uitstoot van het maken van de batterij. De CO2-cijfers zijn een
   toerekening met de gemiddelde (niet de marginale) uitstoot per uur.
 - Kwartierprijzen. Sinds 1 oktober 2025 zijn day-ahead-prijzen per kwartier;

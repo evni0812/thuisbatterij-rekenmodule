@@ -188,6 +188,7 @@ export function Geavanceerd({
   capaciteit,
   vermogen,
   prijs,
+  standby,
   onChange,
   onReset,
   onBereken,
@@ -201,6 +202,8 @@ export function Geavanceerd({
   capaciteit: number;
   vermogen: number;
   prijs: number;
+  /** Het stand-byverbruik waarmee gerekend wordt, W: de eigen waarde of die van de batterij. */
+  standby: number;
   onChange: (patch: Partial<Instellingen>) => void;
   onReset: () => void;
   /** Reken door met de huidige instellingen. */
@@ -386,9 +389,9 @@ export function Geavanceerd({
           <section>
             <h3>De batterij</h3>
             <p className="groep-uitleg">
-              Wat de batterij kan en kost. Maat, vermogen en de keuze voor de
-              laadbeurten veranderen de jaarbesparing; prijs en veroudering alleen de
-              terugverdientijd.
+              Wat de batterij kan en kost. Maat, vermogen, de keuze voor de
+              laadbeurten en het stand-byverbruik veranderen de jaarbesparing; prijs
+              en veroudering alleen de terugverdientijd.
             </p>
             <div className="instelling-grid">
               <Getal
@@ -406,6 +409,16 @@ export function Geavanceerd({
                 waarde={vermogen}
                 eenheid="kW"
                 onChange={(v) => onChange({ vermogenKw: v })}
+              />
+              <Getal
+                veld="standbyWatt"
+                label="Stand-byverbruik"
+                uitleg={`Wat de batterij zelf verbruikt als hij niet laadt of ontlaadt. Standaard ${getal(preset.standbyWatt)} W voor deze batterij: ${preset.standbyNoot}. Het gaat van de jaarbesparing af en raakt daarmee de terugverdientijd, maar niet de dagfiguren.`}
+                waarde={standby}
+                eenheid="W"
+                onChange={(v) =>
+                  onChange({ standbyWatt: v === null || v === preset.standbyWatt ? null : v })
+                }
               />
               <Getal
                 veld="prijsEur"

@@ -45,6 +45,7 @@ function Pagina() {
         capaciteit={inst.capaciteitKwh ?? p.capaciteitKwh}
         vermogen={inst.vermogenKw ?? p.vermogenKw}
         prijs={inst.prijsEur ?? p.prijsEur}
+        standby={inst.standbyWatt ?? p.standbyWatt}
         onChange={(patch) => setInst((s) => ({ ...s, ...patch }))}
         onReset={() => {}}
         onBereken={() => {}}

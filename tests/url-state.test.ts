@@ -155,3 +155,48 @@ describe("normaliseer", () => {
     expect(uit.presetId).toBe(STANDAARD.presetId);
   });
 });
+
+describe("het stand-byverbruik in de URL (sb)", () => {
+  it("staat er niet in zolang het de waarde van de batterij volgt (null)", () => {
+    schrijfUrl({ ...STANDAARD }, STANDAARD);
+    expect(window.location.search).toBe("");
+    expect(STANDAARD.standbyWatt).toBeNull();
+  });
+
+  it("komt terug zoals het is weggeschreven, ook 0 W", () => {
+    schrijfUrl({ ...STANDAARD, standbyWatt: 30 }, STANDAARD);
+    expect(window.location.search).toContain("sb=30");
+    expect(leesUrl().standbyWatt).toBe(30);
+    schrijfUrl({ ...STANDAARD, standbyWatt: 0 }, STANDAARD);
+    expect(window.location.search).toContain("sb=0");
+    expect(leesUrl().standbyWatt).toBe(0);
+    // Wat niet afwijkt, staat er niet in.
+    expect(leesUrl().prijsEur).toBeUndefined();
+  });
+
+  it("klemt op 0 tot 100 W en meldt dat de link is aangepast", () => {
+    const hoog = lees("?sb=500");
+    expect(hoog.uit.standbyWatt).toBe(100);
+    expect(hoog.gecorrigeerd).toContain("standbyWatt");
+    expect(lees("?sb=-5").uit.standbyWatt).toBe(0);
+    // Afgerond op hele watts.
+    expect(lees("?sb=12.6").uit.standbyWatt).toBe(13);
+    // Onleesbaar: weg, de pagina neemt de waarde van de batterij.
+    const onzin = lees("?sb=veel");
+    expect(onzin.uit.standbyWatt).toBeUndefined();
+    expect(onzin.gecorrigeerd).toContain("standbyWatt");
+    expect(lees("?sb=1e3").uit.standbyWatt).toBeUndefined();
+  });
+
+  it("is leeg (null) bij een bewaarde set en wordt geklemd bij een waarde buiten de grenzen", () => {
+    expect(normaliseer({ ...STANDAARD, standbyWatt: null }, STANDAARD).standbyWatt).toBeNull();
+    expect(normaliseer({ ...STANDAARD, standbyWatt: 250 }, STANDAARD).standbyWatt).toBe(100);
+    expect(GRENZEN.standbyWatt).toEqual({ min: 0, max: 100, decimalen: 0 });
+    expect(klem("standbyWatt", 7.4)).toBe(7);
+  });
+
+  it("de configuratie krijgt de waarde van de gekozen batterij, of de eigen waarde", () => {
+    expect(maakConfiguratie({ ...STANDAARD, presetId: "homewizard-plugin" }).standbyWatt).toBe(6);
+    expect(maakConfiguratie({ ...STANDAARD, presetId: "homewizard-plugin", standbyWatt: 25 }).standbyWatt).toBe(25);
+  });
+});

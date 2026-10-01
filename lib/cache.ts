@@ -47,6 +47,12 @@ export interface Bundel {
  * "Cannot read properties of undefined". Een nieuw veld is dus net zo goed een
  * reden om deze teller te verhogen als een nieuw getal.
  *
+ * Versie 19: het stand-byverbruik van de batterij zit in de jaarbesparing en de
+ * terugverdientijd (`standbyKwh`, `standbyCostEur` in de kern, een post
+ * `standbyEur` in de uitsplitsing, en `standbyWatt` in de configuratie). Niet
+ * in de dispatch en niet in de dagcijfers. Bedragen en vorm van het resultaat
+ * veranderen, ook in het scenario, het raster en de huishoudens.
+ *
  * Versie 12: het standby-verbruik van de omvormer is uit het model. Het trok
  * elke dag een paar cent van het resultaat af, ongeacht of de batterij
  * handelde; dat hoort bij het bezit en niet bij de handel. Alle bedragen,
@@ -104,7 +110,7 @@ export interface Bundel {
  * heffing per uur in plaats van een jaarconstante, en de uitvoerder die bewuste
  * verkoop aan het net doorlaat. Alle drie veranderen de bedragen.
  */
-export const MODEL_VERSIE = 18;
+export const MODEL_VERSIE = 19;
 
 /**
  * Alles van de cache staat onder zijn eigen voorvoegsel, `tbat:cache:`.
@@ -208,6 +214,15 @@ export const VELDKLASSE: Record<keyof Configuration, "dispatch" | "afleiding"> =
   installatieEur: "afleiding",
   co2DrempelG: "afleiding",
   doel: "dispatch",
+  // Stand-by verandert de dispatch NIET: de planner weet er niets van. Toch is
+  // het hier "dispatch" en niet "afleiding". De klasse zegt wat er bij een
+  // wijziging met een bewaard antwoord moet gebeuren, en `pasAfleidingToe` doet
+  // alleen de financiën en de zelfvoorziening opnieuw uit de bewaarde curve en
+  // netcijfers. De stand-bykosten zitten al in de vensteruitkomst (kern, maanden,
+  // curve) die in de bundel staat; een bundel met 12 W bij een gevraagde 25 W
+  // zou een verkeerde jaarbesparing tonen. De cachesleutel moet dus meeveranderen,
+  // en dan wordt de bundel opnieuw gerekend.
+  standbyWatt: "dispatch",
 };
 
 /** De configuratie zonder de afleidingsvelden. */

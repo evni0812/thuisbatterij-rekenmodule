@@ -29,19 +29,36 @@
  * RENDEMENT — het rondgangsrendement is waar mogelijk een gemeten waarde uit
  * onafhankelijke tests, niet het getal van het datasheet. Die twee lopen flink
  * uiteen: fabrikanten meten de cel, de praktijk meet de wandcontactdoos.
+ * Die rondgangsrendementen komen uit losse laad-ontlaadrondes bij een vast
+ * vermogen (energienerds.nl: HomeWizard 78,4% over vier rondes van 10 naar
+ * 100% bij 800 W; Marstek ongeveer 83% bij 800 en bij 2.500 W; HomeWizard
+ * noemt zelf 70 tot 85% voor de verliezen bij laden en ontladen en geeft de
+ * stand-by apart op). Het stand-byverbruik bij stilstand zit daar dus NIET in;
+ * het eigen verbruik tijdens laden en ontladen wel. Daarom is er geen
+ * dubbeltelling met `standbyWatt` (zie STAND-BY hieronder), en telt de tool
+ * stand-by alleen in kwartieren zonder laden of ontladen.
  *
  * BRUIKBAAR DEEL — 90% voor de stekkerbatterijen en 95% voor de vaste accu's,
  * als modelaanname. Fabrikanten definiëren "bruikbaar" onderling verschillend
  * (de een noemt de celcapaciteit, de ander wat eruit komt), dus een uniforme
  * aanname vergelijkt eerlijker dan de opgaves door elkaar gebruiken.
  *
- * STANDBY — het eigen verbruik van de omvormer zit bewust NIET in het model.
- * Dit model gaat over wat de handel oplevert. Standby (7 tot 25 W bij deze
- * modellen, 60 tot 220 kWh per jaar) is een vaste post van het bezit, net als
- * de aanschaf, en loopt door of de batterij nu handelt of niet; hij hoort dus
- * naast de businesscase en niet in de dagcijfers. Eerder zat hij er wél in en
- * trok hij elke dag een paar cent van het resultaat af, waardoor een dag met een
- * winstgevende handel op nul uitkwam en als "slijtage voor niets" las.
+ * STAND-BY — het eigen verbruik van de batterij als hij niet laadt of ontlaadt
+ * (`standbyWatt`, hieronder per model). Gemeten waar er een test van is:
+ * HomeWizard 6 W in de standaardstand (energienerds.nl; in de API-stand-by
+ * 0,52 W) en Marstek 7 W (energienerds.nl, met een HomeWizard-slimme stekker).
+ * Voor de Zendure SolarFlow 800 Pro 2 schat energienerds.nl 6 tot 9 W zonder het
+ * apart te meten (8 W). De rest is een schatting die past bij de omvormerklasse
+ * (Indevolt noemt 7 W in diepe stand-by en 20 W voor de hoofdunit). Dat is 50
+ * tot 220 kWh per jaar, als hij het hele jaar stilstond.
+ *
+ * Het veld zit hier en niet in `spec`: de dispatch mag er niets van weten. De
+ * planner beslist per dag over de handel; stand-by is een vaste post van het
+ * bezit die loopt of de batterij nu handelt of niet. Eerder zat hij in de
+ * dispatch, en dan kwam een dag met een winstgevende handel op € 0,00 uit en
+ * las hij als "slijtage voor niets". Nu telt hij mee in de jaarbesparing en de
+ * terugverdientijd, buiten de dispatch en de dagcijfers om
+ * (`standbyKosten` in lib/model/analysis.ts).
  */
 
 import type { BatterySpec } from "./model/types";
@@ -55,6 +72,16 @@ export interface BatteryPreset {
   prijsEur: number;
   /** Waar de prijs vandaan komt: wat er wel en niet in zit. */
   prijsNoot: string;
+  /**
+   * Eigen verbruik als de batterij niet laadt of ontlaadt, in watt. De
+   * gebruiker kan het overschrijven (Geavanceerd, `standbyWatt` in de
+   * instellingen); `null` daar betekent deze waarde.
+   */
+  standbyWatt: number;
+  /** Is `standbyWatt` gemeten, of een schatting voor deze omvormerklasse? */
+  standbyBron: "gemeten" | "schatting";
+  /** Waar het getal vandaan komt, in een zin voor onder het veld. */
+  standbyNoot: string;
   /** Bron van prijs en specificaties. */
   bron: string;
   /** Wanneer de prijs is nagekeken, JJJJ-MM-DD. */
@@ -108,6 +135,11 @@ export const PRESETS: BatteryPreset[] = [
     // (marktcheck 24-09-2026). De standaardconfiguratie rekent met de prijs
     // waarvoor hij nu te koop is.
     prijsNoot: "actieprijs in de ANWB-webwinkel, compleet met de uitlezer van de slimme-meterpoort (P1); adviesprijs 789 euro",
+    // Stand-by: geschat, niet gemeten. energienerds.nl schat 6 tot 9 W voor de
+    // SolarFlow 800 Pro en meet de stand-by niet apart; 8 W ligt in die band.
+    standbyWatt: 8,
+    standbyBron: "schatting",
+    standbyNoot: "schatting; energienerds.nl schat 6 tot 9 W voor de SolarFlow 800 Pro en mat de stand-by niet apart",
     bron: "https://www.zendure.nl/products/solarflow-800-pro2",
     peildatum: "2026-09-24",
     spec: spec(1.92, 0.8, 0.88, 0.9),
@@ -122,6 +154,12 @@ export const PRESETS: BatteryPreset[] = [
     vermogenKw: 0.8,
     prijsEur: 1220,
     prijsNoot: "1.195 euro plus 25 euro voor de uitlezer van de slimme-meterpoort (P1)",
+    // Stand-by: gemeten, niet geschat. energienerds.nl mat 6 W in de
+    // standaardstand (AC aangesloten); in de API-stand-by is het 0,52 W. We
+    // rekenen met de standaardstand, want zo staat hij als hij handelt.
+    standbyWatt: 6,
+    standbyBron: "gemeten",
+    standbyNoot: "gemeten door energienerds.nl: 6 W in de standaardstand (AC aangesloten), 0,52 W in de API-stand-by",
     bron: "https://www.homewizard.com/shop/plug-in-battery/",
     peildatum: "2026-09-24",
     // HomeWizard noemt zelf een rendement in de praktijk van 70 tot 85%;
@@ -140,6 +178,10 @@ export const PRESETS: BatteryPreset[] = [
     vermogenKw: 0.8,
     prijsEur: 1134,
     prijsNoot: "1.099 euro plus 35 euro voor de uitlezer van de slimme-meterpoort (P1)",
+    // Stand-by: schatting voor deze omvormerklasse; er is geen test van gevonden.
+    standbyWatt: 12,
+    standbyBron: "schatting",
+    standbyNoot: "schatting voor deze omvormerklasse (stekkerbatterij)",
     bron: "https://www.ankersolix.com/nl/products/a17c5",
     peildatum: "2026-09-24",
     // Laadt én levert tot 1.200 W, maar alleen aan een eigen groep; aan een
@@ -163,6 +205,10 @@ export const PRESETS: BatteryPreset[] = [
     vermogenKw: 1.4,
     prijsEur: 1119,
     prijsNoot: "789 euro adviesprijs bij Zendure, plus 30 euro voor de uitlezer van de slimme-meterpoort (P1) en 300 euro voor een eigen groep door een installateur, want aan het stopcontact levert hij maar 800 W",
+    // Stand-by: schatting voor deze omvormerklasse; er is geen test van gevonden.
+    standbyWatt: 15,
+    standbyBron: "schatting",
+    standbyNoot: "schatting voor deze omvormerklasse, gelijk aan de Zendure 2400 AC+ (AC-gekoppeld)",
     bron: "https://www.zendure.nl/products/zendure-solarflow-1600-ac",
     peildatum: "2026-09-24",
     spec: spec(1.92, 1.4, 0.88, 0.9),
@@ -177,6 +223,10 @@ export const PRESETS: BatteryPreset[] = [
     vermogenKw: 2.4,
     prijsEur: 1179,
     prijsNoot: "849 euro, plus 30 euro voor de uitlezer van de slimme-meterpoort (P1) en 300 euro voor een eigen groep door een installateur, want aan het stopcontact levert hij maar 800 W",
+    // Stand-by: schatting voor deze omvormerklasse; er is geen test van gevonden.
+    standbyWatt: 15,
+    standbyBron: "schatting",
+    standbyNoot: "schatting voor deze omvormerklasse (AC-gekoppeld, eigen groep)",
     bron: "https://www.zendure.nl/collections/solarflow-series",
     peildatum: "2026-09-24",
     spec: spec(2.4, 2.4, 0.88, 0.9),
@@ -191,6 +241,11 @@ export const PRESETS: BatteryPreset[] = [
     vermogenKw: 2.5,
     prijsEur: 1499,
     prijsNoot: "1.199 euro inclusief de uitlezer van de slimme-meterpoort (P1), plus 300 euro voor een eigen groep door een installateur, want aan het stopcontact levert hij maar 800 W",
+    // Stand-by: gemeten, niet geschat. energienerds.nl mat 7 W met een
+    // HomeWizard-slimme stekker.
+    standbyWatt: 7,
+    standbyBron: "gemeten",
+    standbyNoot: "gemeten door energienerds.nl met een HomeWizard-slimme stekker",
     bron: "https://www.marstek.nl/product/marstek-venus-e-3-0-plug-charge-thuisbatterij-5-12-kwh-incl-p1-meter/",
     peildatum: "2026-09-24",
     spec: spec(5.12, 2.5, 0.83, 0.9),
@@ -205,6 +260,10 @@ export const PRESETS: BatteryPreset[] = [
     vermogenKw: 3.5,
     prijsEur: 2434,
     prijsNoot: "2.099 euro, plus 35 euro voor de uitlezer van de slimme-meterpoort (P1) en 300 euro voor een eigen groep door een installateur, want aan het stopcontact levert hij maar 800 W",
+    // Stand-by: schatting voor deze omvormerklasse; er is geen test van gevonden.
+    standbyWatt: 20,
+    standbyBron: "schatting",
+    standbyNoot: "schatting voor deze omvormerklasse (AC-gekoppeld, 3,5 kW)",
     bron: "https://www.ankersolix.com/nl",
     peildatum: "2026-09-24",
     spec: spec(7, 3.5, 0.85, 0.9),
@@ -219,6 +278,10 @@ export const PRESETS: BatteryPreset[] = [
     vermogenKw: 2.5,
     prijsEur: 3750,
     prijsNoot: "inclusief omvormer en installatie",
+    // Stand-by: schatting voor deze omvormerklasse; er is geen test van gevonden.
+    standbyWatt: 20,
+    standbyBron: "schatting",
+    standbyNoot: "schatting voor een vaste thuisaccu met omvormer",
     bron: "https://thuisbatterijgids.net/",
     peildatum: "2026-09-24",
     spec: spec(5, 2.5, 0.9, 0.95),
@@ -233,6 +296,10 @@ export const PRESETS: BatteryPreset[] = [
     vermogenKw: 3.6,
     prijsEur: 5750,
     prijsNoot: "inclusief omvormer en installatie",
+    // Stand-by: schatting voor deze omvormerklasse; er is geen test van gevonden.
+    standbyWatt: 25,
+    standbyBron: "schatting",
+    standbyNoot: "schatting voor een vaste thuisaccu met omvormer",
     bron: "https://thuisbatterijgids.net/",
     peildatum: "2026-09-24",
     spec: spec(10, 3.6, 0.9, 0.95),

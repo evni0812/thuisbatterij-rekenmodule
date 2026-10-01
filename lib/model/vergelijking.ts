@@ -118,7 +118,7 @@ export function dagUitVensters(
 export function rekenDeel(input: AnalysisInput, datum: string | null): VergelijkingDeel {
   const { spec, volleSlijtage } = slijtageVoor(input);
   const uitkomsten = input.windows.map((w) =>
-    analyseWindow(w, spec, input.tariff, { metOptimum: false, wearEurPerKwh: volleSlijtage }),
+    analyseWindow(w, spec, input.tariff, { metOptimum: false, wearEurPerKwh: volleSlijtage, standbyWatt: input.standbyWatt ?? 0 }),
   );
   const ref = referentieIndexVan(uitkomsten.map((u) => u.kern));
   const basisKosten = uitkomsten[ref]!.baselineCost;

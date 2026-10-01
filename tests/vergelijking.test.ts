@@ -102,7 +102,7 @@ describe("zelfconsumptie", () => {
     let naarNet = 0;
     let geladen = 0;
     for (const entry of invoer.windows) {
-      const u = analyseWindow(entry, spec, invoer.tariff, { metOptimum: false, wearEurPerKwh: volleSlijtage });
+      const u = analyseWindow(entry, spec, invoer.tariff, { metOptimum: false, wearEurPerKwh: volleSlijtage, standbyWatt: 0 });
       const r = entry.window.residualKwh;
       for (let i = 0; i < r.length; i++) {
         const laden = u.realistic.chargeKwh[i]!;

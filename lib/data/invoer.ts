@@ -388,6 +388,7 @@ export class Invoerbron {
       wearFraction: config.wearFraction,
       residualValueEur: config.residualValueEur,
       annualProductionKwh: config.annualProductionKwh,
+      standbyWatt: config.standbyWatt,
     };
   }
 }

@@ -15,11 +15,12 @@ import { dispatchOptimal } from "./dispatch-optimal";
 import { dispatchRolling } from "./dispatch-rolling";
 import { computeFinance, type FinanceResult, type SavingCurvePoint } from "./finance";
 import { stepCost } from "./tariff";
-import type {
-  BatterySpec,
-  DispatchResult,
-  TariffSpec,
-  Window,
+import {
+  HOURS_PER_STEP,
+  type BatterySpec,
+  type DispatchResult,
+  type TariffSpec,
+  type Window,
 } from "./types";
 import type { Configuration } from "../worker/protocol";
 
@@ -39,7 +40,23 @@ export interface SavingBreakdown {
   conversionLossEur: number;
   /** Hoeveel kilowattuur er bij het laden en ontladen verdween. */
   conversionLossKwh: number;
-  /** Som van bovenstaande; gelijk aan basiskosten minus kosten met batterij. */
+  /**
+   * Het stand-byverbruik als aftrekpost, EUR, NEGATIEF: een post die van de
+   * besparing afgaat staat er met een minteken, zoals een negatieve
+   * arbitragepost dat ook doet. Zo tellen alle posten gewoon op:
+   *
+   *   selfConsumptionEur + arbitrageEur + avoidedNegativeExportEur + standbyEur = totalEur
+   *
+   * Anders dan het omzettingsverlies staat deze post WEL in de optelling: het
+   * stand-byverbruik zit in geen enkele andere post verwerkt. Zie `standbyKosten`.
+   */
+  standbyEur: number;
+  /** Het stand-byverbruik in kWh (positief), voor de zin erbij; niet in een som. */
+  standbyKwh: number;
+  /**
+   * De besparing na aftrek van het stand-byverbruik: de handel (basiskosten
+   * minus kosten met batterij) plus `standbyEur`.
+   */
   totalEur: number;
 }
 
@@ -53,8 +70,9 @@ export interface SavingBreakdown {
  *                   je erin stopt.
  *   ontlaadverlies  omzetting terug. Evenredig met wat je eruit haalt.
  *
- * Het eigen verbruik van de omvormer (standby) zit niet in het model: dat is
- * een vaste post van het bezit, geen gevolg van de handel. Zie BatterySpec.
+ * Het eigen verbruik van de batterij (stand-by) staat hier niet in: het is
+ * geen gevolg van het omzetten maar van het bezit, en komt als aparte post in
+ * de besparing (`SavingBreakdown.standbyEur`, `standbyKosten`).
  *
  * De euro's zijn opportuniteitskosten: een verloren kilowattuur kost je wat hij
  * had opgeleverd als hij er nog was geweest. Uit eigen overschot is dat de
@@ -188,8 +206,21 @@ export interface YearKern {
   curtailedKwh: number;
   curtailedWithBatteryKwh: number;
   baselineCostEur: number;
+  /**
+   * Stroomkosten met batterij, EUR, inclusief het stand-byverbruik:
+   * `baselineCostEur - realisticCostEur` is dus `realisticSavingEur`.
+   */
   realisticCostEur: number;
+  /** De besparing na aftrek van het stand-byverbruik (`standbyCostEur`). */
   realisticSavingEur: number;
+  /**
+   * Stand-byverbruik van de batterij in dit venster: kWh en EUR (kosten,
+   * positief). Alleen in de kwartieren waarin de batterij niet laadt en niet
+   * ontlaadt; zie `standbyKosten`. Zit in `realisticSavingEur`, niet in de
+   * dispatch en niet in de dagstatistieken.
+   */
+  standbyKwh: number;
+  standbyCostEur: number;
   breakdown: SavingBreakdown;
   cyclesPerYear: number;
   /** Netafname met batterij, kWh — waar de reductie uit volgt. */
@@ -224,7 +255,9 @@ export interface YearKern {
 
 /** Wat het optimum met perfecte kennis aan een jaar toevoegt. */
 export interface YearOptimum {
+  /** Stroomkosten met het optimum, inclusief stand-by in de kwartieren waarin het optimum stilstaat. */
   optimalCostEur: number;
+  /** Besparing van het optimum na aftrek van zijn eigen stand-byverbruik, zodat de capture rate vergelijkbaar blijft. */
   optimalSavingEur: number;
   /** Aandeel van het optimum dat de realistische strategie haalt, 0–1. */
   captureRate: number;
@@ -320,6 +353,13 @@ export interface AnalysisInput {
   residualValueEur: number;
   /** Capaciteitsfracties waarop de besparingscurve wordt bemonsterd. */
   curveFractions?: number[];
+  /**
+   * Stand-byverbruik van de batterij in watt; afwezig is nul. Bewust niet in
+   * `battery`: de dispatch weet er niets van, het wordt achteraf van de
+   * vensteruitkomsten afgetrokken (`standbyKosten`). Geldt ook voor de curve
+   * bij kleinere capaciteiten: zelfde batterij, zelfde watt.
+   */
+  standbyWatt?: number;
 }
 
 /** Een dag uit de simulatie, om te laten zien wát de batterij doet. */
@@ -592,6 +632,8 @@ export function breakdown(
   base: DispatchResult,
   bat: DispatchResult,
   spec: BatterySpec,
+  /** Stand-byverbruik van dit venster (`standbyKosten`); zonder is het nul. */
+  standby: Pick<StandbyKosten, "kwh" | "eur"> = { kwh: 0, eur: 0 },
 ): SavingBreakdown {
   const n = window.residualKwh.length;
   let avoided = 0;
@@ -650,6 +692,7 @@ export function breakdown(
     }
   }
 
+  // De handel: wat de dispatch opleverde, vóór stand-by.
   const totaal = base.totalCostEur - bat.totalCostEur;
 
   // Wat de ingekochte stroom opbracht, naar rato van zijn aandeel in de lading.
@@ -666,8 +709,87 @@ export function breakdown(
     avoidedNegativeExportEur: avoided,
     conversionLossEur: verliesEur,
     conversionLossKwh: verliesKwh,
-    totalEur: totaal,
+    // 0 - x en niet -x: bij 0 W is dat 0 en niet -0.
+    standbyEur: 0 - standby.eur,
+    standbyKwh: standby.kwh,
+    totalEur: totaal - standby.eur,
   };
+}
+
+/**
+ * Het stand-byverbruik van de batterij, per kwartier en opgeteld.
+ *
+ * ── Waarom hier en niet in de dispatch ──────────────────────────────────────
+ * Tot 16 september 2026 zat stand-by in de dispatch. Dan kwam een dag met een
+ * winstgevende handel op € 0,00 uit en las hij als "slijtage voor niets". De
+ * planner beslist nu per dag over de handel zonder stand-by te kennen; het
+ * stand-byverbruik is een vaste post van het bezit en wordt hier, achteraf, van
+ * de vensteruitkomst afgetrokken: in de jaarbesparing, de maandtotalen, de
+ * curve en dus de terugverdientijd. NIET in de dagstatistieken (`dayStats`), de
+ * periodereeksen voor het verloop, de CO2-balans en de kWh-kerncijfers: de dag
+ * laat de handel zien, het jaar de besparing na stand-by.
+ *
+ * ── Welke kwartieren ────────────────────────────────────────────────────────
+ * Alleen kwartieren waarin de batterij niet laadt en niet ontlaadt. Tijdens
+ * laden en ontladen zit het eigen verbruik al in het gemeten rondgangsrendement
+ * (de omvormer is dan toch al aan); het er nog eens bij tellen is dubbel.
+ *
+ * ── Hoe gewaardeerd ─────────────────────────────────────────────────────────
+ * Op de situatie MET batterij, met dezelfde prijzen als de dispatch:
+ *
+ *   haalt het huis dit kwartier stroom van het net (gridImportKwh > 0), dan had
+ *   het stand-byverbruik van het net moeten komen: de afnameprijs van dat
+ *   kwartier (all-in: heffing, en in het scenario het nettarief);
+ *
+ *   anders had het stand-byverbruik van eigen overschot gekomen dat je anders
+ *   had teruggeleverd: de terugleverprijs van dat kwartier. Die mag negatief
+ *   zijn en dan levert het stand-byverbruik geld op, dat klopt: teruglevering
+ *   kostte op dat moment geld. Met afregelen aan en een negatieve prijs was dat
+ *   overschot toch weggegooid, en kost het stand-byverbruik niets (`stepCost`
+ *   rekent het afregelen precies zo).
+ *
+ * Eén kwartier is HOURS_PER_STEP uur: watt × 0,25 / 1000 kWh, ook op de dagen
+ * van de zomertijdwissel.
+ */
+export interface StandbyKosten {
+  /** Stand-byverbruik, kWh. */
+  kwh: number;
+  /** Wat dat kostte, EUR (positief is een kostenpost). */
+  eur: number;
+  /** Per kwartier, EUR: voor de maandtotalen. Nul in kwartieren waarin de batterij werkt. */
+  eurPerStap: Float64Array;
+}
+
+/** Zo weinig laden of ontladen telt als stilstaan, kWh: ruis van de solver. */
+const STILSTAND_KWH = 1e-9;
+
+export function standbyKosten(
+  window: Window,
+  bat: DispatchResult,
+  tariff: TariffSpec,
+  standbyWatt: number,
+): StandbyKosten {
+  const n = window.residualKwh.length;
+  const eurPerStap = new Float64Array(n);
+  if (!(standbyWatt > 0)) return { kwh: 0, eur: 0, eurPerStap };
+  const kwhPerStap = (standbyWatt * HOURS_PER_STEP) / 1000;
+  let kwh = 0;
+  let eur = 0;
+  for (let i = 0; i < n; i++) {
+    if (bat.chargeKwh[i]! > STILSTAND_KWH || bat.dischargeKwh[i]! > STILSTAND_KWH) continue;
+    const ip = window.prices.importPrice[i]!;
+    const ep = window.prices.exportPrice[i]!;
+    const kosten =
+      bat.gridImportKwh[i]! > 0
+        ? kwhPerStap * ip
+        : tariff.allowCurtailment && ep < 0
+          ? 0
+          : kwhPerStap * ep;
+    kwh += kwhPerStap;
+    eur += kosten;
+    eurPerStap[i] = kosten;
+  }
+  return { kwh, eur, eurPerStap };
 }
 
 /**
@@ -745,6 +867,11 @@ export function maandTotalen(
   base: DispatchResult,
   bat: DispatchResult,
   spec: BatterySpec,
+  /**
+   * Stand-by per kwartier in EUR (`standbyKosten().eurPerStap`), dat van de
+   * maandbesparing afgaat, zodat de maanden optellen tot de jaarbesparing.
+   */
+  standbyEurPerStap?: Float64Array,
 ): MonthTotals[] {
   const { starts, index } = dayBoundaries(window.startMs);
   const per = new Map<number, MonthTotals & { dagen: number; spreidingSom: number }>();
@@ -782,7 +909,8 @@ export function maandTotalen(
       const ep = window.prices.exportPrice[i]!;
       m.savingEur +=
         (base.gridImportKwh[i]! - bat.gridImportKwh[i]!) * ip -
-        (base.gridExportKwh[i]! - bat.gridExportKwh[i]!) * ep;
+        (base.gridExportKwh[i]! - bat.gridExportKwh[i]!) * ep -
+        (standbyEurPerStap ? standbyEurPerStap[i]! : 0);
       m.gridImportBaselineKwh += base.gridImportKwh[i]!;
       m.gridImportBatteryKwh += bat.gridImportKwh[i]!;
       m.gridExportBaselineKwh += base.gridExportKwh[i]!;
@@ -897,12 +1025,15 @@ function quickSaving(
   spec: BatterySpec,
   tariff: TariffSpec,
   baselineCost: number,
+  standbyWatt: number,
 ): { savingEur: number; cyclesPerYear: number } {
   const real = dispatchRolling(entry.window, spec, tariff);
   let ontladen = 0;
   for (let i = 0; i < real.dischargeKwh.length; i++) ontladen += real.dischargeKwh[i]!;
   return {
-    savingEur: baselineCost - real.totalCostEur,
+    // Na stand-by, op dezelfde grondslag als `realisticSavingEur`: de curve
+    // wordt met de verhouding van deze twee getallen geschaald.
+    savingEur: baselineCost - real.totalCostEur - standbyKosten(entry.window, real, tariff, standbyWatt).eur,
     cyclesPerYear: equivalentCycles(ontladen, spec),
   };
 }
@@ -924,6 +1055,8 @@ export interface VensterOpties {
   metOptimum: boolean;
   /** Volle slijtageprijs per geleverde kWh, voor de zichtbare slijtagepost. */
   wearEurPerKwh: number;
+  /** Stand-byverbruik in watt (`AnalysisInput.standbyWatt`); nul of weg is geen stand-by. */
+  standbyWatt: number;
   /** Een al berekende realistische dispatch voor precies deze spec, indien voorhanden. */
   realistischAlBerekend?: DispatchResult;
 }
@@ -968,9 +1101,12 @@ export function analyseWindow(
     afgeregeldMet += real.curtailedKwh[i]!;
   }
 
-  const realSaving = base.totalCostEur - real.totalCostEur;
+  // Stand-by buiten de dispatch om (zie `standbyKosten`): de handel blijft zoals
+  // de planner hem koos, het jaar krijgt de aftrek erbij.
+  const standby = standbyKosten(window, real, tariff, opties.standbyWatt);
+  const realSaving = base.totalCostEur - real.totalCostEur - standby.eur;
 
-  const months = maandTotalen(window, base, real, spec);
+  const months = maandTotalen(window, base, real, spec, standby.eurPerStap);
   let piekBasis = 0;
   let piekBat = 0;
   for (const m of months) {
@@ -988,9 +1124,11 @@ export function analyseWindow(
     curtailedKwh: afgeregeld,
     curtailedWithBatteryKwh: afgeregeldMet,
     baselineCostEur: base.totalCostEur,
-    realisticCostEur: real.totalCostEur,
+    realisticCostEur: real.totalCostEur + standby.eur,
     realisticSavingEur: realSaving,
-    breakdown: breakdown(window, base, real, spec),
+    standbyKwh: standby.kwh,
+    standbyCostEur: standby.eur,
+    breakdown: breakdown(window, base, real, spec, standby),
     cyclesPerYear: equivalentCycles(dischargeTotal, spec),
     gridImportWithBatteryKwh: importWithBattery,
     gridExportWithBatteryKwh: exportWithBattery,
@@ -1004,9 +1142,12 @@ export function analyseWindow(
   };
   let optimum: YearOptimum | undefined;
   if (opt) {
-    const optSaving = base.totalCostEur - opt.totalCostEur;
+    // Het optimum draagt zijn eigen stand-by (alleen waar het stilstaat), zodat
+    // "ideaal geval" en capture rate op dezelfde grondslag blijven.
+    const optStandby = standbyKosten(window, opt, tariff, opties.standbyWatt);
+    const optSaving = base.totalCostEur - opt.totalCostEur - optStandby.eur;
     optimum = {
-      optimalCostEur: opt.totalCostEur,
+      optimalCostEur: opt.totalCostEur + optStandby.eur,
       optimalSavingEur: optSaving,
       captureRate: optSaving > 0 ? realSaving / optSaving : 0,
     };
@@ -1393,24 +1534,31 @@ export function computeStrategyGap(
   baselineCost: number,
   realisticSavingEur: number,
   optimalSavingEur: number,
+  standbyWatt: number,
 ): StrategyGap {
   return strategyGapUit(
     entry.year,
-    perfectVoorspellingBesparing(entry, spec, tariff, baselineCost),
+    perfectVoorspellingBesparing(entry, spec, tariff, baselineCost, standbyWatt),
     realisticSavingEur,
     optimalSavingEur,
   );
 }
 
-/** De besparing van de rollende strategie met de werkelijke residual als voorspelling. */
+/**
+ * De besparing van de rollende strategie met de werkelijke residual als
+ * voorspelling, na stand-by: op dezelfde grondslag als de realistische en de
+ * optimale besparing, anders zou het gat tussen die drie een stand-bypost
+ * bevatten die er niet in hoort.
+ */
 export function perfectVoorspellingBesparing(
   entry: AnalysisInput["windows"][number],
   spec: BatterySpec,
   tariff: TariffSpec,
   baselineCost: number,
+  standbyWatt: number,
 ): number {
   const perfect = dispatchRolling(entry.window, spec, tariff, { perfectForecast: true });
-  return baselineCost - perfect.totalCostEur;
+  return baselineCost - perfect.totalCostEur - standbyKosten(entry.window, perfect, tariff, standbyWatt).eur;
 }
 
 /** Het gat uit de drie besparingen; puur rekenwerk, geen simulatie. */
@@ -1506,7 +1654,13 @@ export function meetCurvePunt(
   baselineCost: number,
 ): CurveMeting {
   const kleiner: BatterySpec = { ...spec, capacityKwh: spec.capacityKwh * fraction };
-  const q = quickSaving(input.windows[referentieIndex]!, kleiner, input.tariff, baselineCost);
+  const q = quickSaving(
+    input.windows[referentieIndex]!,
+    kleiner,
+    input.tariff,
+    baselineCost,
+    input.standbyWatt ?? 0,
+  );
   return { fraction, ...q };
 }
 
@@ -1669,12 +1823,16 @@ function somTotJaar(kernen: readonly YearKern[]): YearKern {
     baselineCostEur: som((y) => y.baselineCostEur),
     realisticCostEur: som((y) => y.realisticCostEur),
     realisticSavingEur: som((y) => y.realisticSavingEur),
+    standbyKwh: som((y) => y.standbyKwh),
+    standbyCostEur: som((y) => y.standbyCostEur),
     breakdown: {
       selfConsumptionEur: som((y) => y.breakdown.selfConsumptionEur),
       arbitrageEur: som((y) => y.breakdown.arbitrageEur),
       avoidedNegativeExportEur: som((y) => y.breakdown.avoidedNegativeExportEur),
       conversionLossEur: som((y) => y.breakdown.conversionLossEur),
       conversionLossKwh: som((y) => y.breakdown.conversionLossKwh),
+      standbyEur: som((y) => y.breakdown.standbyEur),
+      standbyKwh: som((y) => y.breakdown.standbyKwh),
       totalEur: som((y) => y.breakdown.totalEur),
     },
     cyclesPerYear: som((y) => y.cyclesPerYear),
@@ -1874,6 +2032,8 @@ export function voegSamenScenario(
     avoidedNegativeExportEur: gem((y) => y.breakdown.avoidedNegativeExportEur),
     conversionLossEur: gem((y) => y.breakdown.conversionLossEur),
     conversionLossKwh: gem((y) => y.breakdown.conversionLossKwh),
+    standbyEur: gem((y) => y.breakdown.standbyEur),
+    standbyKwh: gem((y) => y.breakdown.standbyKwh),
     totalEur: gem((y) => y.breakdown.totalEur),
   };
 
@@ -1952,7 +2112,11 @@ export function runAnalysis(
 ): AnalysisResult {
   const { spec, volleSlijtage } = slijtageVoor(input);
   const uitkomsten = input.windows.map((w) =>
-    analyseWindow(w, spec, input.tariff, { metOptimum: true, wearEurPerKwh: volleSlijtage }),
+    analyseWindow(w, spec, input.tariff, {
+      metOptimum: true,
+      wearEurPerKwh: volleSlijtage,
+      standbyWatt: input.standbyWatt ?? 0,
+    }),
   );
   if (options.collectDispatches) {
     options.collectDispatches.length = 0;
@@ -1965,7 +2129,13 @@ export function runAnalysis(
   const ref = referentieIndexVan(uitkomsten.map((u) => u.kern));
   const basisKosten = uitkomsten[ref]!.baselineCost;
   const metingen = curveFracties(input).map((f) => meetCurvePunt(input, spec, ref, f, basisKosten));
-  const perfect = perfectVoorspellingBesparing(input.windows[ref]!, spec, input.tariff, basisKosten);
+  const perfect = perfectVoorspellingBesparing(
+    input.windows[ref]!,
+    spec,
+    input.tariff,
+    basisKosten,
+    input.standbyWatt ?? 0,
+  );
   return voegSamen(input, uitkomsten, metingen, perfect);
 }
 
@@ -1977,7 +2147,11 @@ export function runAnalysis(
 export function runScenario(input: AnalysisInput): ScenarioResult {
   const { spec, volleSlijtage } = slijtageVoor(input);
   const uitkomsten = input.windows.map((w) =>
-    analyseWindow(w, spec, input.tariff, { metOptimum: false, wearEurPerKwh: volleSlijtage }),
+    analyseWindow(w, spec, input.tariff, {
+      metOptimum: false,
+      wearEurPerKwh: volleSlijtage,
+      standbyWatt: input.standbyWatt ?? 0,
+    }),
   );
   const ref = referentieIndexVan(uitkomsten.map((u) => u.kern));
   const basisKosten = uitkomsten[ref]!.baselineCost;
