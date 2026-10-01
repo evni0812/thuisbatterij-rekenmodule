@@ -10,13 +10,16 @@
  */
 
 import type { ReactNode } from "react";
-import { PRESETS, type BatteryPreset } from "../lib/presets";
+import { perMerk, PRESETS, STANDAARD_PRESET_ID, type BatteryPreset } from "../lib/presets";
 import { DOELEN, doelInfo } from "../lib/model/doel";
 import type { Doel } from "../lib/model/types";
 import { STRATEGIEEN, strategieVoor } from "../lib/strategie";
-import { euro, getal, kwh, procent } from "../lib/format";
+import { euro, getal, kwh, procent, vermogenTekst } from "../lib/format";
 import { GRENZEN } from "../lib/normaliseer";
 import { GetalInvoer } from "./GetalInvoer";
+
+/** Rondgang van de standaardbatterij, voor als de aanroeper er geen opgeeft. */
+const RONDGANG_STANDAARD = (PRESETS.find((p) => p.id === STANDAARD_PRESET_ID) ?? PRESETS[0]!).spec.efficiency ** 2;
 
 export interface Waarschuwing {
   ernst: "info" | "let-op";
@@ -168,6 +171,8 @@ export function Invoer({
   presetId,
   capaciteitKwh,
   vermogenKw,
+  laadKw,
+  ontlaadKw,
   prijsEur,
   onAfname,
   onTeruglevering,
@@ -178,7 +183,7 @@ export function Invoer({
   slijtageDeel,
   onSlijtageDeel,
   slijtageprijsEur = 0,
-  rondgang = 0.88,
+  rondgang = RONDGANG_STANDAARD,
   onBereken,
   verouderd,
   bezig,
@@ -194,6 +199,9 @@ export function Invoer({
    */
   capaciteitKwh?: number;
   vermogenKw?: number;
+  /** Laad- en ontlaadvermogen waarmee gerekend wordt, als die verschillen; zonder: die van de gekozen batterij. */
+  laadKw?: number;
+  ontlaadKw?: number;
   prijsEur?: number;
   onAfname: (v: number) => void;
   onTeruglevering: (v: number) => void;
@@ -218,6 +226,8 @@ export function Invoer({
   const preset = PRESETS.find((p) => p.id === presetId) ?? PRESETS[0]!;
   const cap = capaciteitKwh ?? preset.capaciteitKwh;
   const kw = vermogenKw ?? preset.vermogenKw;
+  const laad = laadKw ?? (vermogenKw !== undefined && vermogenKw !== preset.vermogenKw ? vermogenKw : preset.laadvermogenKw);
+  const ontlaad = ontlaadKw ?? (vermogenKw !== undefined && vermogenKw !== preset.vermogenKw ? vermogenKw : preset.ontlaadvermogenKw);
   const prijs = prijsEur ?? preset.prijsEur;
   const waarschuwingen = controleerInvoer(afnameKwh, terugleveringKwh, preset, zonnepanelen, {
     capaciteitKwh: cap,
@@ -227,7 +237,7 @@ export function Invoer({
   const aangepast = (afwijkt: boolean) => (afwijkt ? " (aangepast)" : "");
   const batterijHint =
     `${getal(cap, 2)} kWh${aangepast(cap !== preset.capaciteitKwh)} · ` +
-    `${getal(kw, 2)} kW${aangepast(kw !== preset.vermogenKw)} · ` +
+    `${vermogenTekst(laad, ontlaad)}${aangepast(laad !== preset.laadvermogenKw || ontlaad !== preset.ontlaadvermogenKw)} · ` +
     `${euro(prijs)}${aangepast(prijs !== preset.prijsEur)}`;
 
   return (
@@ -303,10 +313,14 @@ export function Invoer({
 
         <Veld label="Welke batterij?" hint={batterijHint}>
           <select value={presetId} onChange={(e) => onPreset(e.target.value)}>
-            {PRESETS.map((p) => (
-              <option key={p.id} value={p.id}>
-                {p.naam}
-              </option>
+            {perMerk().map((g) => (
+              <optgroup key={g.merk} label={g.bijAnwb ? `${g.merk} · bij ANWB` : g.merk}>
+                {g.presets.map((p) => (
+                  <option key={p.id} value={p.id}>
+                    {p.naam}
+                  </option>
+                ))}
+              </optgroup>
             ))}
           </select>
         </Veld>

@@ -19,6 +19,7 @@ import type { Configuration } from "../lib/worker/protocol";
 import { referentieJaar, type AnalysisResult } from "../lib/model/analysis";
 import { rasterGrondslag, celFinance, rasterNiveau, type CelFinance } from "../lib/model/dimensionering";
 import { euro, euroAs, getal, jaren, kwh, procent } from "../lib/format";
+import { vermogenVan } from "../lib/model/kosten";
 import { Figure, Grafiek, Legenda, Raster, Trefvlak, kiesTicks, useTip } from "./chart-parts";
 
 const B = 720;
@@ -59,7 +60,7 @@ export function VoorWie({
   const { kader, tip, toon, wis } = useTip();
   const [aangewezen, setAangewezen] = useState<number | null>(null);
   const cap = config.battery.capacityKwh;
-  const kw = config.battery.maxDischargeKw;
+  const kw = vermogenVan(config.battery);
 
   // Elk huishouden rekent op het rasterjaar; op het niveau van het gemiddelde
   // gebracht, net als de kaart van maten en het antwoord bovenaan.

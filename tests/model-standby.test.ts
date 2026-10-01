@@ -340,25 +340,36 @@ describe("de configuratie en de cache", () => {
       expect(Number.isFinite(p.standbyWatt), p.id).toBe(true);
       expect(p.standbyWatt, p.id).toBeGreaterThan(0);
       expect(p.standbyWatt, p.id).toBeLessThanOrEqual(100);
-      expect(["gemeten", "schatting"], p.id).toContain(p.standbyBron);
+      expect(["gemeten", "schatting", "fabrieksopgave", "aanname"], p.id).toContain(p.standbyBron);
       expect(p.standbyNoot.length, p.id).toBeGreaterThan(5);
     }
     const waarde = Object.fromEntries(PRESETS.map((p) => [p.id, p.standbyWatt]));
     expect(waarde).toEqual({
       "zendure-800pro2": 8,
-      "homewizard-plugin": 6,
+      "zendure-1600ac": 3,
+      "zendure-2400ac": 3.4,
+      "zendure-2400pro": 3.4,
+      "zendure-3000mix": 13,
+      "sessy-5kwh": 3,
+      "sessy-10kwh": 3,
+      "sessy-plus": 5,
+      "alphaess-vitapower3600": 10,
       "anker-solarbank3": 12,
-      "zendure-1600ac": 15,
-      "zendure-2400ac": 15,
+      "anker-solarbank-max": 31.6,
+      "homewizard-plugin": 6,
       "marstek-venus-e3": 7,
-      "anker-solarbank-max": 20,
       "thuisaccu-5kwh": 20,
       "thuisaccu-10kwh": 25,
     });
     expect(PRESETS.filter((p) => p.standbyBron === "gemeten").map((p) => p.id).sort()).toEqual([
+      "anker-solarbank-max",
       "homewizard-plugin",
       "marstek-venus-e3",
+      "zendure-1600ac",
+      "zendure-2400ac",
     ]);
+    expect(PRESETS.filter((p) => p.standbyBron === "fabrieksopgave").map((p) => p.id)).toEqual(["sessy-5kwh", "sessy-10kwh"]);
+    expect(PRESETS.filter((p) => p.standbyBron === "aanname").map((p) => p.id)).toEqual(["sessy-plus", "alphaess-vitapower3600"]);
   });
 
   it("de dispatch krijgt de watt niet te zien: BatterySpec kent geen standbyWatt", () => {

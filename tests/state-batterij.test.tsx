@@ -24,6 +24,8 @@ describe("effectieveBatterij", () => {
     expect(e).toEqual({
       capaciteitKwh: p.capaciteitKwh,
       vermogenKw: p.vermogenKw,
+      laadKw: p.laadvermogenKw,
+      ontlaadKw: p.ontlaadvermogenKw,
       prijsEur: p.prijsEur,
       aangepast: { capaciteit: false, vermogen: false, prijs: false },
     });

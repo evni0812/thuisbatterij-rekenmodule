@@ -78,6 +78,11 @@ function hash(arrs: Float64Array[]): string {
  * minder dan een duizendste euro, en de hashes veranderen mee. Zonder
  * zonnepanelen valt er niets te netten; dat geval staat nog op dezelfde bit.
  *
+ * Op 1 oktober 2026 (MODEL_VERSIE 20) ging het rendement van de standaard-
+ * batterij van 88% naar 84%. De gevallen op de Zendure staan daarom vast op
+ * `rendement: 0.88`: dit harnas bewaakt de solver, niet de catalogus, en de
+ * vastgelegde getallen blijven zo bit-voor-bit dezelfde.
+ *
  * Op 30 september 2026 ging afregelen bij negatieve prijzen standaard uit. De
  * gevallen die op de standaard leunden, staan daarom expliciet op afregelen
  * aan: dit harnas bewaakt de solver, niet de standaardinstelling, en het geval
@@ -90,15 +95,17 @@ const GEVALLEN: {
   rollingHash: string;
   optimal: number;
   optimalHash: string;
+  /** Rondgangsrendement dat de preset overschrijft, zodat de referentie niet met de catalogus meebeweegt. */
+  rendement?: number;
 }[] = [
-  { naam: "Zendure 1,92 kWh / 0,8 kW", inst: { curtailment: true }, rolling: 460.01506358841135, rollingHash: "bd3c2233", optimal: 451.98773242333397, optimalHash: "78610b30" },
+  { naam: "Zendure 1,92 kWh / 0,8 kW", inst: { curtailment: true }, rolling: 460.01506358841135, rollingHash: "bd3c2233", optimal: 451.98773242333397, optimalHash: "78610b30", rendement: 0.88 },
   { naam: "Marstek 5,1 kWh, volle slijtage", inst: { presetId: "marstek-venus-e3", slijtageDeel: 1, prijsEur: 1199, curtailment: true }, rolling: 369.45785150994215, rollingHash: "a89d293a", optimal: 342.9252004979733, optimalHash: "6c163c2c" },
   // De prijs staat hier vast: sinds de kostenregel krijgt een overschreven maat
   // anders een eigen prijs, en daarmee een andere slijtagedrempel. Dit harnas
   // gaat over de solver, niet over de prijs.
-  { naam: "20 kWh / 0,8 kW", inst: { capaciteitKwh: 20, vermogenKw: 0.8, prijsEur: 699, curtailment: true }, rolling: 347.9663942540348, rollingHash: "a9a2881d", optimal: 305.53295264343274, optimalHash: "f0482bb8" },
-  { naam: "20 kWh / 0,8 kW zonder afregelen", inst: { capaciteitKwh: 20, vermogenKw: 0.8, prijsEur: 699, curtailment: false }, rolling: 355.8729262496463, rollingHash: "46c19364", optimal: 313.1948782293686, optimalHash: "f0482bb8" },
-  { naam: "zonder zonnepanelen", inst: { zonnepanelen: false, curtailment: true }, rolling: 537.9500824103864, rollingHash: "7fe491c", optimal: 537.4753299500354, optimalHash: "21b73bb9" },
+  { naam: "20 kWh / 0,8 kW", inst: { capaciteitKwh: 20, vermogenKw: 0.8, prijsEur: 699, curtailment: true }, rolling: 347.9663942540348, rollingHash: "a9a2881d", optimal: 305.53295264343274, optimalHash: "f0482bb8", rendement: 0.88 },
+  { naam: "20 kWh / 0,8 kW zonder afregelen", inst: { capaciteitKwh: 20, vermogenKw: 0.8, prijsEur: 699, curtailment: false }, rolling: 355.8729262496463, rollingHash: "46c19364", optimal: 313.1948782293686, optimalHash: "f0482bb8", rendement: 0.88 },
+  { naam: "zonder zonnepanelen", inst: { zonnepanelen: false, curtailment: true }, rolling: 537.9500824103864, rollingHash: "7fe491c", optimal: 537.4753299500354, optimalHash: "21b73bb9", rendement: 0.88 },
 ];
 
 let bron: Invoerbron;
@@ -112,6 +119,7 @@ beforeAll(async () => {
     // maakConfiguratie houdt de invoer binnen de grenzen van de pagina
     // (lib/normaliseer.ts: minstens 0,8 kW). Dit is een solvertest, geen
     // realistische batterij: het extreme vermogen gaat er daarna direct in.
+    if (g.rendement !== undefined) cfg.battery = { ...cfg.battery, efficiency: Math.sqrt(g.rendement) };
     const kw = g.inst.vermogenKw;
     if (typeof kw === "number") cfg.battery = { ...cfg.battery, maxChargeKw: kw, maxDischargeKw: kw };
     invoeren.set(g.naam, await bron.bouwInvoer(cfg));

@@ -15,8 +15,8 @@
 import { useEffect, useState } from "react";
 import type { Manifest } from "../lib/data/manifest";
 import { netgebiedNaam } from "../lib/data/manifest";
-import { datum, getal, procent } from "../lib/format";
-import { PRIJSPEILDATUM, type BatteryPreset } from "../lib/presets";
+import { datum, getal, procent, vermogenTekst } from "../lib/format";
+import { PRIJSPEILDATUM, RENDEMENT_BRON_LABEL, type BatteryPreset } from "../lib/presets";
 import { wearCostPerKwh } from "../lib/model/battery";
 import { STANDAARD } from "../lib/configuratie";
 import { STRATEGIEEN, strategieVoor } from "../lib/strategie";
@@ -405,7 +405,12 @@ export function Geavanceerd({
               <Getal
                 veld="vermogenKw"
                 label="Laad- en ontlaadvermogen"
-                uitleg="Hoe snel hij kan laden en leveren. Te weinig vermogen betekent dat je de zonnepiek niet kunt wegvangen."
+                uitleg={
+                  "Hoe snel hij kan laden en leveren. Te weinig vermogen betekent dat je de zonnepiek niet kunt wegvangen." +
+                  (preset.laadvermogenKw !== preset.ontlaadvermogenKw
+                    ? ` Deze batterij heeft ${vermogenTekst(preset.laadvermogenKw, preset.ontlaadvermogenKw, 1)}; een eigen getal hier geldt voor laden én leveren.`
+                    : "")
+                }
                 waarde={vermogen}
                 eenheid="kW"
                 onChange={(v) => onChange({ vermogenKw: v })}
@@ -511,10 +516,13 @@ export function Geavanceerd({
             </div>
             <p className="instelling-noot">
               Vast overgenomen van {preset.naam}: van elke 100 kWh die je opslaat,
-              komt er {getal(preset.spec.efficiency ** 2 * 100)} terug. Bruikbaar deel{" "}
+              komt er {getal(preset.spec.efficiency ** 2 * 100, 1)} terug. Bruikbaar deel{" "}
               {procent(preset.spec.depthOfCharge)}, levensduur {getal(preset.cycleLife)} laadbeurten en{" "}
-              {preset.kalenderLevensduurJaren} jaar. Prijs: {preset.prijsNoot},
-              richtprijs {PRIJSPEILDATUM}.
+              {preset.kalenderLevensduurJaren} jaar.{" "}
+              {preset.bruikbaarNoot ? `${preset.bruikbaarNoot} ` : ""}
+              Rendement ({RENDEMENT_BRON_LABEL[preset.rendementBron]}):{" "}
+              {preset.rendementNoot}. Prijs: {preset.prijsNoot}, richtprijs{" "}
+              {PRIJSPEILDATUM}.
             </p>
           </section>
 

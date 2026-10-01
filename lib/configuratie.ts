@@ -80,7 +80,12 @@ export function kiesPreset(presetId: string): BatteryPreset {
 /** De batterij zoals hij wordt doorgerekend, en waar hij van de gekozen preset afwijkt. */
 export interface EffectieveBatterij {
   capaciteitKwh: number;
+  /** Het hoogste van laden en ontladen: voor weergave, de kostenregel en de stekkergrens. */
   vermogenKw: number;
+  /** Laadvermogen waarmee gerekend wordt. */
+  laadKw: number;
+  /** Ontlaadvermogen waarmee gerekend wordt. */
+  ontlaadKw: number;
   prijsEur: number;
   /** Wijkt de waarde af van die van de preset? Dan staat hij als "aangepast" in beeld. */
   aangepast: { capaciteit: boolean; vermogen: boolean; prijs: boolean };
@@ -95,7 +100,12 @@ function effectief(inst: Instellingen): EffectieveBatterij {
     installatieEur: inst.installatieEur,
   };
   const capaciteitKwh = inst.capaciteitKwh ?? preset.capaciteitKwh;
+  // Een eigen vermogen zet laden én leveren op hetzelfde getal; zonder eigen
+  // vermogen blijven ze wat de preset opgeeft (Sessy: 2,2 kW laden, 1,7 leveren).
+  const eigenVermogen = inst.vermogenKw !== null;
   const vermogenKw = inst.vermogenKw ?? preset.vermogenKw;
+  const laadKw = eigenVermogen ? vermogenKw : preset.laadvermogenKw;
+  const ontlaadKw = eigenVermogen ? vermogenKw : preset.ontlaadvermogenKw;
   const prijsEur =
     inst.prijsEur ??
     kostenVan(
@@ -107,10 +117,12 @@ function effectief(inst: Instellingen): EffectieveBatterij {
   return {
     capaciteitKwh,
     vermogenKw,
+    laadKw,
+    ontlaadKw,
     prijsEur,
     aangepast: {
       capaciteit: capaciteitKwh !== preset.capaciteitKwh,
-      vermogen: vermogenKw !== preset.vermogenKw,
+      vermogen: laadKw !== preset.laadvermogenKw || ontlaadKw !== preset.ontlaadvermogenKw,
       prijs: prijsEur !== preset.prijsEur,
     },
   };
@@ -169,7 +181,7 @@ export function maakConfiguratie(invoer: Instellingen): Configuration {
     perKwEur: inst.kostenPerKw,
     installatieEur: inst.installatieEur,
   };
-  const { capaciteitKwh: capaciteit, vermogenKw: vermogen, prijsEur: prijs } = effectief(inst);
+  const { capaciteitKwh: capaciteit, laadKw, ontlaadKw, prijsEur: prijs } = effectief(inst);
   // Zonder zonnepanelen is er niets om terug te leveren en geen eigen opwek;
   // het profiel wisselt naar de gemeten aansluitingen zonder invoeding. Het
   // veld blijft afwezig in het standaardgeval, zodat de hash niet verandert.
@@ -190,8 +202,8 @@ export function maakConfiguratie(invoer: Instellingen): Configuration {
     battery: {
       ...preset.spec,
       capacityKwh: capaciteit,
-      maxChargeKw: vermogen,
-      maxDischargeKw: vermogen,
+      maxChargeKw: laadKw,
+      maxDischargeKw: ontlaadKw,
       wearCostEurPerKwh: 0,
     },
     tariff: {

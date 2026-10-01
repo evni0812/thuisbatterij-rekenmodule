@@ -3647,3 +3647,28 @@ details.uitklap[open] > summary {
 .stat-verloop.klein.met-labels .stat-pijl {
   padding-top: 0.95rem;
 }
+
+/* Bronnen van de batterijcatalogus, per merk, bij "Aannames en bronnen". */
+.batterij-bronnen {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  margin-top: 10px;
+}
+
+.batterij-bronnen-kop {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin: 0 0 6px;
+  font-size: 0.95rem;
+}
+
+.batterij-bronnen ul {
+  margin: 0;
+  padding-left: 1.1em;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  font-size: 0.9rem;
+}

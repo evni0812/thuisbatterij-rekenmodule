@@ -12,7 +12,7 @@
 
 import type { ReactNode } from "react";
 import { netgebiedNaam } from "./data/manifest";
-import { centPerKwh, euro, euroPrecies, getal, jaren, jarenReeks, kwh, procent, standbyKengetallen } from "./format";
+import { centPerKwh, euro, euroPrecies, getal, jaren, jarenReeks, kwh, procent, standbyKengetallen, vermogenTekst } from "./format";
 import { referentieJaar, type AnalysisResult, type ScenarioResult, type YearAnalysis } from "./model/analysis";
 import { usableCapacityKwh } from "./model/battery";
 import { RASTER_CAPACITEITEN, RASTER_VERMOGENS } from "./model/raster";
@@ -29,12 +29,13 @@ import {
 import {
   DIRECT_EIGEN_VERBRUIK_ZONDER_BATTERIJ,
   PRIJSPEILDATUM,
+  RENDEMENT_BRON_LABEL,
   geschatteOpwekKwh,
   type BatteryPreset,
 } from "./presets";
 import { STRATEGIEEN, strategieVoor } from "./strategie";
 import { HUISHOUDENS_TERUGLEVERING } from "./model/huishoudens";
-import { STEKKER_GRENS_KW, kostenregelVan } from "./model/kosten";
+import { STEKKER_GRENS_KW, kostenregelVan, vermogenVan } from "./model/kosten";
 import { CO2_KLASSE_G, STANDAARD_CO2_DREMPEL_G, huishoudPerspectief, nederlandPerspectief } from "./model/co2";
 import { AUTO_G_PER_KM } from "../components/Co2Antwoord";
 import { Co2OverschotStaven } from "../components/Co2Nederland";
@@ -144,9 +145,11 @@ const BATTERIJ_BRON = (p: BatteryPreset) => ({
   naam: `Catalogus: ${p.naam}`,
   wat: (
     <>
-      {getal(p.capaciteitKwh, 2)} kWh, {getal(p.vermogenKw, 1)} kW. Van elke 100
-      kWh die je opslaat, komt er {getal(p.spec.efficiency ** 2 * 100)} terug.
-      Bruikbaar deel: {procent(p.spec.depthOfCharge)}. Prijs: {p.prijsNoot},
+      {getal(p.capaciteitKwh, 2)} kWh, {vermogenTekst(p.laadvermogenKw, p.ontlaadvermogenKw, 1)}. Van
+      elke 100 kWh die je opslaat, komt er {getal(p.spec.efficiency ** 2 * 100, 1)}{" "}
+      terug ({RENDEMENT_BRON_LABEL[p.rendementBron]}: {p.rendementNoot}).
+      Bruikbaar deel: {procent(p.spec.depthOfCharge)}.
+      {p.bruikbaarNoot ? ` ${p.bruikbaarNoot}` : ""} Prijs: {p.prijsNoot},
       richtprijs {PRIJSPEILDATUM}.
     </>
   ),
@@ -737,7 +740,7 @@ export const UITLEG: Record<UitlegId, (ctx: UitlegContext) => UitlegBlok> = {
     bronnen: [BATTERIJ_BRON(preset)],
     stappen: [
       <>Per kwartier telt het model wat de batterij ontlaadt.</>,
-      <>Dat is minder dan wat erin ging: van elke 100 kWh die je opslaat, komt er {getal(preset.spec.efficiency ** 2 * 100)} terug. Zie Verliezen.</>,
+      <>Dat is minder dan wat erin ging: van elke 100 kWh die je opslaat, komt er {getal(preset.spec.efficiency ** 2 * 100, 1)} terug. Zie Verliezen.</>,
     ],
     voorbeeld: {
       regels: [
@@ -872,12 +875,12 @@ export const UITLEG: Record<UitlegId, (ctx: UitlegContext) => UitlegBlok> = {
           const catalogus = preset.spec.efficiency ** 2;
           const verschil = l.roundtrip - catalogus;
           if (verschil < -0.0005) {
-            return <>Het gemeten getal ligt iets onder wat de catalogus opgeeft ({getal(catalogus * 100)} van de 100). Aan het eind van het jaar zit er nog lading in de batterij die niet meer is geleverd.</>;
+            return <>Het gemeten getal ligt iets onder wat de catalogus opgeeft ({getal(catalogus * 100, 1)} van de 100). Aan het eind van het jaar zit er nog lading in de batterij die niet meer is geleverd.</>;
           }
           if (verschil > 0.0005) {
-            return <>Het gemeten getal ligt iets boven wat de catalogus opgeeft ({getal(catalogus * 100)} van de 100).</>;
+            return <>Het gemeten getal ligt iets boven wat de catalogus opgeeft ({getal(catalogus * 100, 1)} van de 100).</>;
           }
-          return <>Dat komt overeen met wat de catalogus opgeeft ({getal(catalogus * 100)} van de 100).</>;
+          return <>Dat komt overeen met wat de catalogus opgeeft ({getal(catalogus * 100, 1)} van de 100).</>;
         })(),
       },
     };
@@ -1079,7 +1082,7 @@ export const UITLEG: Record<UitlegId, (ctx: UitlegContext) => UitlegBlok> = {
     const j = referentie(result);
     const k = kostenregelVan(config);
     const cap = config.battery.capacityKwh;
-    const kw = config.battery.maxDischargeKw;
+    const kw = vermogenVan(config.battery);
     const voorbeeldCap = 5;
     const voorbeeldKw = 2.5;
     const stap = (voorbeeldKw > STEKKER_GRENS_KW ? 1 : 0) - (kw > STEKKER_GRENS_KW ? 1 : 0);

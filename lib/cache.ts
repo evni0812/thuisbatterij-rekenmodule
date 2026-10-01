@@ -47,6 +47,12 @@ export interface Bundel {
  * "Cannot read properties of undefined". Een nieuw veld is dus net zo goed een
  * reden om deze teller te verhogen als een nieuw getal.
  *
+ * Versie 20: de batterijcatalogus is vernieuwd (nieuwe prijzen, rendementen en
+ * stand-byverbruiken, nieuwe modellen van Zendure, Sessy en AlphaESS, laden en
+ * leveren los bij Sessy). De standaardbatterij rekent met 84% in plaats van 88%
+ * rondgang; alle bedragen, ook in het scenario, het raster en de huishoudens,
+ * veranderen.
+ *
  * Versie 19: het stand-byverbruik van de batterij zit in de jaarbesparing en de
  * terugverdientijd (`standbyKwh`, `standbyCostEur` in de kern, een post
  * `standbyEur` in de uitsplitsing, en `standbyWatt` in de configuratie). Niet
@@ -110,7 +116,7 @@ export interface Bundel {
  * heffing per uur in plaats van een jaarconstante, en de uitvoerder die bewuste
  * verkoop aan het net doorlaat. Alle drie veranderen de bedragen.
  */
-export const MODEL_VERSIE = 19;
+export const MODEL_VERSIE = 20;
 
 /**
  * Alles van de cache staat onder zijn eigen voorvoegsel, `tbat:cache:`.

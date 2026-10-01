@@ -64,6 +64,15 @@ export function isVasteAansluiting(kw: number): boolean {
   return kw > STEKKER_GRENS_KW + 1e-9;
 }
 
+/**
+ * Het vermogen van een batterij als één getal: het hoogste van laden en
+ * leveren. Voor de kostenregel, de stekkergrens en de maten in de kaart, die
+ * laden en leveren gelijk nemen.
+ */
+export function vermogenVan(battery: { maxChargeKw: number; maxDischargeKw: number }): number {
+  return Math.max(battery.maxChargeKw, battery.maxDischargeKw);
+}
+
 /** De batterij waaraan de kostenregel is verankerd. */
 export interface Anker {
   investmentEur: number;
@@ -89,7 +98,7 @@ export function ankerVan(config: Configuration): Anker {
   return {
     investmentEur: config.investmentEur,
     capaciteitKwh: config.battery.capacityKwh,
-    vermogenKw: config.battery.maxDischargeKw,
+    vermogenKw: vermogenVan(config.battery),
   };
 }
 

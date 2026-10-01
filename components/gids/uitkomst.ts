@@ -11,7 +11,7 @@
 
 import type { AnalysisResult, SavingBreakdown } from "../../lib/model/analysis";
 import { advies, celFinance, rasterNiveau } from "../../lib/model/dimensionering";
-import { ankerVan, isVasteAansluiting, kostenVan, kostenregelVan } from "../../lib/model/kosten";
+import { ankerVan, isVasteAansluiting, kostenVan, kostenregelVan, vermogenVan } from "../../lib/model/kosten";
 import { huishoudPerspectief } from "../../lib/model/co2";
 import type { FinanceResult } from "../../lib/model/finance";
 import { euro, getal, jaren, jarenReeks, kwh, standbyKengetallen } from "../../lib/format";
@@ -382,7 +382,7 @@ export function andereMaat(
   if (!raad) return { soort: "wacht" };
 
   const cap0 = config.battery.capacityKwh;
-  const kw0 = config.battery.maxDischargeKw;
+  const kw0 = vermogenVan(config.battery);
   let huidigNpv = result.finance.npvEur;
   grid.capacities.forEach((cap, r) =>
     grid.powers.forEach((kw, k) => {
@@ -450,7 +450,7 @@ export function checklist(args: {
   const watt = toon.standbyWatt;
   const regels: (Regel | null)[] = [
     { id: "contract", teken: "info", tekst: CONTRACT_TEKST },
-    aansluitingRegel(toon.battery.maxDischargeKw),
+    aansluitingRegel(vermogenVan(toon.battery)),
     panelenRegel(result.breakdown, toonZonnepanelen),
     co2Regel(result.co2),
     maatRegel(andereMaat(grid, toon, result)),

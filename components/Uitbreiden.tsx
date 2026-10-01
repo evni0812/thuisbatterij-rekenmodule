@@ -25,6 +25,7 @@ import {
   type Uitbreidingsstap,
 } from "../lib/model/dimensionering";
 import { euro, euroAs, getal, jaren, procent } from "../lib/format";
+import { vermogenVan } from "../lib/model/kosten";
 import { Figure, Grafiek, Legenda, Raster, Trefvlak, kiesTicks, useTip } from "./chart-parts";
 
 const B = 720;
@@ -50,7 +51,7 @@ export function Uitbreiden({
   const { kader, tip, toon, wis } = useTip();
   const [aangewezen, setAangewezen] = useState<number | null>(null);
 
-  const kHuidig = grid ? dichtsteKolom(grid.powers, config.battery.maxDischargeKw) : 0;
+  const kHuidig = grid ? dichtsteKolom(grid.powers, vermogenVan(config.battery)) : 0;
   const nb = niveau?.besparing ?? 1;
   const nc = niveau?.cycli ?? 1;
   const raad = useMemo(
@@ -92,9 +93,9 @@ export function Uitbreiden({
     {
       // De kolom die het dichtst bij jouw vermogen ligt: zeg het als ze verschillen.
       naam:
-        Math.abs(grid.powers[kHuidig]! - config.battery.maxDischargeKw) < 0.05
+        Math.abs(grid.powers[kHuidig]! - vermogenVan(config.battery)) < 0.05
           ? `bij ${getal(grid.powers[kHuidig]!, 1)} kW (jouw vermogen)`
-          : `bij ${getal(grid.powers[kHuidig]!, 1)} kW (dichtst bij jouw ${getal(config.battery.maxDischargeKw, 1)} kW)`, kleur: "var(--series-1)", stappen: huidig.stappen, kw: grid.powers[kHuidig]! },
+          : `bij ${getal(grid.powers[kHuidig]!, 1)} kW (dichtst bij jouw ${getal(vermogenVan(config.battery), 1)} kW)`, kleur: "var(--series-1)", stappen: huidig.stappen, kw: grid.powers[kHuidig]! },
     ...(beste
       ? [{ naam: `bij ${getal(grid.powers[kBeste]!, 1)} kW (het beste vermogen)`, kleur: "var(--series-2)", stappen: beste.stappen, kw: grid.powers[kBeste]! }]
       : []),

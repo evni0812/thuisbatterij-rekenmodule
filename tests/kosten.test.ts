@@ -116,7 +116,8 @@ describe("de catalogus", () => {
 
   it("rekent de eigen groep bij elk merkmodel boven 0,8 kW in de prijsnoot", () => {
     for (const p of PRESETS.filter((x) => isVasteAansluiting(x.vermogenKw) && x.merk !== "Generiek")) {
-      expect(p.prijsNoot, p.id).toMatch(/300 euro voor een eigen groep/);
+      // Sessy rekent een installatie door een partner (Sessy Plus: 600 euro basisinstallatie).
+      expect(p.prijsNoot, p.id).toMatch(/300 euro voor (een eigen groep|installatie)|600 euro basisinstallatie/);
     }
   });
 

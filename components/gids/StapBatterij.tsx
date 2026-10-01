@@ -12,8 +12,9 @@
 import { DOELEN } from "../../lib/model/doel";
 import { isVasteAansluiting } from "../../lib/model/kosten";
 import type { Doel } from "../../lib/model/types";
-import { euro, getal } from "../../lib/format";
-import { PRESETS } from "../../lib/presets";
+import { euro, getal, vermogenTekst } from "../../lib/format";
+import { RENDEMENT_BRON_LABEL, perMerk } from "../../lib/presets";
+import { MerkLogo } from "../MerkLogo";
 import { controleerInvoer } from "../Invoer";
 import type { GidsData } from "./types";
 
@@ -92,37 +93,66 @@ export function StapBatterij(data: GidsData) {
         </div>
       ) : null}
 
-      <div className="gids-keuzes batterij-keuzes" role="group" aria-label="Batterij">
-        {PRESETS.map((p) => {
-          const a = aansluiting(p.vermogenKw, p.merk === "Generiek");
-          return (
-            <button
-              key={p.id}
-              type="button"
-              className="gids-keuze invoer-kaart batterij-kaart"
-              aria-pressed={!eigen && inst.presetId === p.id}
-              onClick={() => kies(p.id)}
-            >
-              <BatterijSvg kwh={p.capaciteitKwh} />
-              <span className="kaart-titel">{p.naam}</span>
-              <span className="batterij-groot">
-                {getal(p.capaciteitKwh, 2)} <small>kWh</small>
-              </span>
-              {/* Het model gebruikt alleen het bruikbare deel (depthOfCharge);
-                  dat getal staat in stap 3 bij de batterij, dus hier ook. */}
-              <span className="kaart-noot">
-                waarvan ongeveer {getal(p.capaciteitKwh * p.spec.depthOfCharge, 1)} kWh bruikbaar
-              </span>
-              <span className="kaart-uitleg">
-                {getal(p.vermogenKw, 2)} kW · {euro(p.prijsEur)}
-              </span>
-              <span className={isVasteAansluiting(p.vermogenKw) ? "batterij-label vast" : "batterij-label"}>
-                {a.label}
-              </span>
-              {a.noot ? <span className="kaart-noot">{a.noot}</span> : null}
-            </button>
-          );
-        })}
+      {/* Per merk een kopje met logo; binnen een merk van klein naar groot. De
+          groep zelf blijft één groep voor schermlezers. */}
+      <div className="batterij-merken" role="group" aria-label="Batterij">
+        {perMerk().map((g) => (
+          <section key={g.merk} className="batterij-merk" aria-labelledby={`merk-${g.merk}`}>
+            <div className="batterij-merk-kop">
+              <h2 id={`merk-${g.merk}`} className="batterij-merk-naam">
+                <MerkLogo merk={g.merk} logo={g.logo} />
+                {g.logo ? <span aria-hidden="true">{g.merk}</span> : null}
+              </h2>
+              {g.bijAnwb ? <span className="batterij-anwb">Verkrijgbaar bij ANWB</span> : null}
+            </div>
+            <div className="gids-keuzes batterij-keuzes">
+              {g.presets.map((p) => {
+                const a = aansluiting(p.vermogenKw, p.merk === "Generiek");
+                return (
+                  <div key={p.id} className="batterij-kaart-rij">
+                    <button
+                      type="button"
+                      className="gids-keuze invoer-kaart batterij-kaart"
+                      aria-pressed={!eigen && inst.presetId === p.id}
+                      onClick={() => kies(p.id)}
+                    >
+                      <BatterijSvg kwh={p.capaciteitKwh} />
+                      <span className="kaart-titel">{p.naam}</span>
+                      <span className="batterij-groot">
+                        {getal(p.capaciteitKwh, 2)} <small>kWh</small>
+                      </span>
+                      {/* Het model gebruikt alleen het bruikbare deel (depthOfCharge);
+                          dat getal staat in stap 3 bij de batterij, dus hier ook. */}
+                      <span className="kaart-noot">
+                        waarvan ongeveer {getal(p.capaciteitKwh * p.spec.depthOfCharge, 1)} kWh bruikbaar
+                      </span>
+                      <span className="kaart-uitleg">
+                        {vermogenTekst(p.laadvermogenKw, p.ontlaadvermogenKw)} · {euro(p.prijsEur)}
+                      </span>
+                      {p.prijsLabel ? <span className="batterij-prijslabel">{p.prijsLabel}</span> : null}
+                      <span className={isVasteAansluiting(p.vermogenKw) ? "batterij-label vast" : "batterij-label"}>
+                        {a.label}
+                      </span>
+                      {a.noot ? <span className="kaart-noot">{a.noot}</span> : null}
+                      {/* Eerlijk over wat niet gemeten is: alleen als het rendement
+                          geen testresultaat is, staat het erbij. */}
+                      {p.rendementBron !== "gemeten" ? (
+                        <span className="batterij-aanname">
+                          Rendement {getal(p.spec.efficiency ** 2 * 100, 1)}%: {RENDEMENT_BRON_LABEL[p.rendementBron]}
+                        </span>
+                      ) : null}
+                    </button>
+                    {p.bijAnwb && p.anwbUrl ? (
+                      <a className="batterij-anwb-link" href={p.anwbUrl} rel="noopener" target="_blank">
+                        Bekijk bij ANWB
+                      </a>
+                    ) : null}
+                  </div>
+                );
+              })}
+            </div>
+          </section>
+        ))}
       </div>
 
       {waarschuwingen.length > 0 ? (

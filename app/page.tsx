@@ -44,11 +44,12 @@ import { Verliezen } from "../components/Verliezen";
 import { Verschuiving } from "../components/Verschuiving";
 import { datum, euro, getal, jarenReeks, kwh, periode } from "../lib/format";
 import { leesLaatste, leesProfielen, type Profiel } from "../lib/opslag";
-import { PRESETS, PRIJSPEILDATUM, geschatteOpwekKwh } from "../lib/presets";
+import { PRIJSPEILDATUM, RENDEMENT_BRON_LABEL, STANDBY_BRON_LABEL, geschatteOpwekKwh } from "../lib/presets";
+import { BatterijBronnen } from "../components/BatterijBronnen";
 import { STANDAARD, effectieveBatterij, effectiefStandby, kiesPreset, maakConfiguratie } from "../lib/configuratie";
 import { referentieJaar } from "../lib/model/analysis";
 import { STANDAARD_CO2_DREMPEL_G } from "../lib/model/co2";
-import { ankerVan, kostenVan, kostenregelVan } from "../lib/model/kosten";
+import { ankerVan, kostenVan, kostenregelVan, vermogenVan } from "../lib/model/kosten";
 import { rasterNiveau } from "../lib/model/dimensionering";
 import { wearCostPerKwh } from "../lib/model/battery";
 import { UITLEG, type UitlegContext } from "../lib/uitleg";
@@ -231,6 +232,8 @@ export default function Page() {
   const {
     capaciteitKwh: capaciteit,
     vermogenKw: vermogen,
+    laadKw,
+    ontlaadKw,
     prijsEur: prijs,
   } = effectieveBatterij(inst);
   // Het stand-byverbruik in de invoer (het veld bij Geavanceerd); wat bij een
@@ -327,7 +330,7 @@ export default function Page() {
       ) > 0.5
     : false;
   const toonCapaciteit = toon?.battery.capacityKwh ?? capaciteit;
-  const toonVermogen = toon?.battery.maxChargeKw ?? vermogen;
+  const toonVermogen = toon ? vermogenVan(toon.battery) : vermogen;
 
   const periodeLabel = result
     ? periode(
@@ -588,6 +591,8 @@ export default function Page() {
             presetId={inst.presetId}
             capaciteitKwh={capaciteit}
             vermogenKw={vermogen}
+            laadKw={laadKw}
+            ontlaadKw={ontlaadKw}
             prijsEur={prijs}
             onAfname={(v) => setInst((s) => ({ ...s, afnameKwh: v }))}
             onTeruglevering={(v) => setInst((s) => ({ ...s, terugleveringKwh: v }))}
@@ -609,8 +614,8 @@ export default function Page() {
             slijtageprijsEur={wearCostPerKwh(prijs, preset.cycleLife, {
               ...preset.spec,
               capacityKwh: capaciteit,
-              maxChargeKw: vermogen,
-              maxDischargeKw: vermogen,
+              maxChargeKw: laadKw,
+              maxDischargeKw: ontlaadKw,
               wearCostEurPerKwh: 0,
             })}
             rondgang={preset.spec.efficiency ** 2}
@@ -1009,12 +1014,19 @@ export default function Page() {
                   : ""}
                 De dagfiguren laten alleen de handel zien. Je past het aan bij de
                 geavanceerde instellingen.
-                <span className={standbyEffectief.aangepast || preset.standbyBron === "schatting" ? "badge neutraal" : "badge goed"}>
-                  {standbyEffectief.aangepast
-                    ? "zelf ingevuld"
-                    : preset.standbyBron === "gemeten"
-                      ? "gemeten"
-                      : "schatting"}
+                <span className={standbyEffectief.aangepast || preset.standbyBron !== "gemeten" ? "badge neutraal" : "badge goed"}>
+                  {standbyEffectief.aangepast ? "zelf ingevuld" : STANDBY_BRON_LABEL[preset.standbyBron]}
+                </span>
+              </li>
+              <li>
+                <b>Het rendement van de batterij.</b> Van elke 100 kWh die je
+                opslaat, komt er bij {preset.naam}{" "}
+                {getal(preset.spec.efficiency ** 2 * 100, 1)} terug:{" "}
+                {preset.rendementNoot}. Waar een test ontbreekt, rekenen we met
+                een gemeten waarde van een verwant model of met een aanname; de
+                kaarten bij de batterijkeuze zeggen welke.
+                <span className={preset.rendementBron === "gemeten" ? "badge goed" : "badge neutraal"}>
+                  {RENDEMENT_BRON_LABEL[preset.rendementBron]}
                 </span>
               </li>
               <li>
@@ -1223,8 +1235,10 @@ export default function Page() {
                 ).
               </li>
               <li>
-                <b>Batterijprijzen:</b> richtprijzen van {PRIJSPEILDATUM}:{" "}
-                {PRESETS.map((p) => `${p.naam} ${euro(p.prijsEur)} (${p.prijsNoot})`).join("; ")}.
+                <b>Batterijen:</b> richtprijzen van {PRIJSPEILDATUM}, per merk,
+                met de bron van prijs, rendement en stand-byverbruik van elk
+                model (ANWB-prijzen waar ANWB het model verkoopt).
+                <BatterijBronnen />
               </li>
               <li>
                 <b>Uitbreiding en installatie:</b> prijzen van uitbreidingsbatterijen
@@ -1260,8 +1274,10 @@ export default function Page() {
               </li>
               <li>
                 <b>Stand-byverbruik:</b> gemeten waar er een test van is
-                (Marstek 7 watt met een slimme stekker; HomeWizard ongeveer 6
-                watt), anders een schatting voor de omvormerklasse op basis van
+                (energienerds.nl: Marstek 7 watt met een slimme stekker,
+                HomeWizard ongeveer 6, Zendure 1600 AC+ 3, Zendure 2400 AC+ 3,4,
+                Anker Solarbank Max AC 31,6 watt), Sessy geeft 3 watt op; de rest
+                is een schatting of aanname voor de omvormerklasse op basis van
                 fabrikantopgaven en tests, bijvoorbeeld Indevolt (7 watt in diepe
                 stand-by, 20 watt voor de hoofdunit;{" "}
                 <a href="https://blog.indevolt.com/nl/wat-is-standby-verbruik-waarom-verbruikt-een-plug-in-thuisbatterij-ook-stroom-in-stand-by/">

@@ -125,6 +125,15 @@ export function getal(value: number, decimalen = 0): string {
 }
 
 /**
+ * Het vermogen van een batterij in woorden: "0,8 kW", of bij een batterij die
+ * sneller laadt dan levert "2,2 kW laden · 1,7 kW leveren".
+ */
+export function vermogenTekst(laadKw: number, ontlaadKw: number, decimalen = 2): string {
+  if (Math.abs(laadKw - ontlaadKw) < 1e-9) return `${getal(laadKw, decimalen)} kW`;
+  return `${getal(laadKw, decimalen)} kW laden · ${getal(ontlaadKw, decimalen)} kW leveren`;
+}
+
+/**
  * "8 jaar en 4 maanden" leest prettiger dan "8,3 jaar". Zonder terugverdientijd
  * (null): "niet terugverdiend binnen de looptijd". Die woorden staan vast, en
  * ook in labels als "Terugverdientijd" of "terugverdiend na" komt geen

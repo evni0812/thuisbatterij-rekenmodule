@@ -29,7 +29,7 @@ gebruik, alles vanaf de CDN.
 ```bash
 npm install
 npm run dev          # http://localhost:3000
-npm test             # 689 tests, waaronder de modelinvarianten
+npm test             # 719 tests, waaronder de modelinvarianten
 npm run build        # statische export naar out/
 npm run clean        # bij een vastgelopen build-cache
 ```
@@ -395,6 +395,70 @@ zou als gemeten verbruik gelezen worden.
 dynamisch contract. E1B is dubbeltarief en sommeert over een jaar op ongeveer 2
 in plaats van 1 — het prototype gebruikte dat profiel wel.
 
+## De batterijcatalogus
+
+`PRESETS` in `lib/presets.ts` is de lijst waaruit de bezoeker kiest, geordend
+per merk: eerst Zendure (het ANWB-assortiment, van klein naar groot), dan Sessy,
+AlphaESS, Anker, HomeWizard, Marstek en als laatste de generieke thuisaccu's.
+`perMerk()` geeft die groepen aan de keuze in stap 2 (kopje met logo, bij
+Zendure het label "Verkrijgbaar bij ANWB"), aan de `<optgroup>`'s van de
+keuzelijst en aan de bronnenlijst. Peildatum van de prijzen: 1 oktober 2026
+(de generieke thuisaccu's 24 september).
+
+Elke preset draagt, naast maat en prijs, waar de twee onzekerste getallen
+vandaan komen: `rendementBron` (`gemeten`, `eigenaren`, `afgeleid`, `datasheet`
+of `aanname`, met `rendementNoot`) en `standbyBron` (`gemeten`, `schatting`,
+`fabrieksopgave` of `aanname`, met `standbyNoot`). Een kaart in stap 2 zegt het
+erbij zodra het rendement niet gemeten is. `bronnen` bevat elke URL achter de
+getallen; de bronnenlijst bij "Aannames en bronnen" toont ze allemaal.
+
+| id | Model | kWh | kW | Prijs | Rendement | Stand-by | ANWB |
+|---|---|---|---|---|---|---|---|
+| zendure-800pro2 | Zendure SolarFlow 800 Pro 2 | 1,92 | 0,8 | € 699 | 84% afgeleid (voorganger 83 tot 85%, thuisbatterijgids 82%) | 8 W schatting | ja |
+| zendure-1600ac | Zendure SolarFlow 1600 AC+ | 1,92 | 1,4 | € 1.029 | 87,6% gemeten | 3 W gemeten | ja |
+| zendure-2400ac | Zendure SolarFlow 2400 AC+ | 2,4 | 2,4 | € 1.149 | 88% gemeten | 3,4 W gemeten | ja |
+| zendure-2400pro | Zendure SolarFlow 2400 Pro | 2,4 | 2,4 | € 1.269 | 88% afgeleid van de 2400 AC+ | 3,4 W schatting | ja |
+| zendure-3000mix | Zendure SolarFlow 3000 Mix AC+ | 8,0 | 3,0 | € 2.048 | 86% gemeten | 13 W schatting | ja |
+| sessy-5kwh | Sessy 5 kWh | 5,5 (5,2 bruikbaar) | 2,2 laden, 1,7 leveren | € 3.850 | 82% door eigenaren gemeten | 3 W fabrieksopgave | nee |
+| sessy-10kwh | Sessy 10 kWh | 11 (10,4 bruikbaar) | 2,2 laden, 1,7 leveren | € 5.800 | 82% door eigenaren gemeten | 3 W fabrieksopgave | nee |
+| sessy-plus | Sessy Plus 15 kWh (voorverkoop) | 15 | 6 | € 10.000 | 85% aanname | 5 W aanname | nee |
+| alphaess-vitapower3600 | AlphaESS VitaPower 3600 AC (voorverkoop) | 4 | 2,0 | € 1.299 | 85% aanname | 10 W aanname | nee |
+| anker-solarbank3 | Anker SOLIX Solarbank 3 E2700 Pro | 2,69 | 0,8 | € 1.199 | 80% gemeten | 12 W schatting | nee |
+| anker-solarbank-max | Anker SOLIX Solarbank Max AC | 7 | 3,5 | € 2.299 | 83,5% gemeten | 31,6 W gemeten | nee |
+| homewizard-plugin | HomeWizard Plug-In Battery | 2,7 | 0,8 | € 1.220 | 80% gemeten (78,4%) | 6 W gemeten | nee |
+| marstek-venus-e3 | Marstek Venus E 3.0 | 5,12 | 2,5 | € 1.499 | 83% gemeten | 7 W gemeten | nee |
+| thuisaccu-5kwh | Thuisaccu 5 kWh, geïnstalleerd | 5 | 2,5 | € 3.750 | 90% aanname | 20 W schatting | nee |
+| thuisaccu-10kwh | Thuisaccu 10 kWh, geïnstalleerd | 10 | 3,6 | € 5.750 | 90% aanname | 25 W schatting | nee |
+
+Wat de tabel niet zegt:
+
+- **Prijzen boven 0,8 kW** bevatten de eigen groep door een installateur
+  (300 euro) of de installatie (Sessy: 300 euro aangenomen, bronnen noemen 225
+  tot 400; Sessy Plus: de 600 euro basisinstallatie in plaats van de 300). De
+  Anker Solarbank 3 staat op de actieprijs van de Herfst Sale (tot 12 oktober
+  2026, daarna 1.599 euro), de AlphaESS op de voorverkoopprijs (tot 29 oktober
+  2026, daarna 1.699 euro).
+- **Laden en leveren los.** Bij Sessy laadt de batterij met 2,2 kW en levert hij
+  1,7 kW. `spec()` neemt een apart ontlaadvermogen aan en `BatterySpec` krijgt
+  beide (`maxChargeKw`, `maxDischargeKw`). `vermogenKw` van de preset is het
+  hoogste van de twee en dient voor weergave, de kostenregel en de
+  stekkergrens (`vermogenVan` in `lib/model/kosten.ts`). Wie bij Geavanceerd
+  een eigen vermogen invult, zet laden én leveren op dat getal; het raster rekent
+  altijd symmetrisch.
+- **AlphaESS VitaPower 3600 AC:** 2,0 kW, omdat de basismodule intern maximaal
+  ongeveer 2.000 W levert (energienerds.nl, p1meter.nl); AlphaESS zelf noemt
+  3,68 kW met een installateur. Het bruikbare deel is de uniforme 90% (het
+  datasheet noemt 95%).
+- **Zendure 2400 Pro** is een hybride met vier MPPT-ingangen voor panelen; de
+  tool rekent alleen de AC-kant. De AB3000L is alleen een uitbreidingsaccu en
+  staat er niet in.
+- **Marstek:** de Consumentenbond mat 4,3 kWh bruikbaar van de 5,12 kWh, dus de
+  uniforme 90% is gunstig.
+- **Rendement door eigenaren (Sessy)** is geen testorganisatie: eigenaren meten
+  over maanden ongeveer 82%, het datasheet noemt 85%.
+- **Logo's** staan lokaal in `public/logos/` (de CSP laat alleen `img-src 'self'`
+  toe); de bron per logo staat in `components/MerkLogo.tsx`.
+
 ## Het rekenmodel
 
 ### Twee strategieën
@@ -459,7 +523,7 @@ voorzichtige kant.
 
 **Stand-by zit in de jaarbesparing en de terugverdientijd, niet in de dispatch
 en niet in de dag.** Het eigen verbruik van de batterij als hij niet laadt of
-ontlaadt (6 tot 25 W bij de modellen in de catalogus; `standbyWatt` per preset in
+ontlaadt (3 tot 32 W bij de modellen in de catalogus; `standbyWatt` per preset in
 `lib/presets.ts`) is een vaste post van het bezit. De eigenaar wil het in de
 terugverdientijd en de jaarlijkse besparing, alleen niet in het handelsalgoritme
 op een dag. Daarom rekent `standbyKosten` (`lib/model/analysis.ts`) het achteraf,
@@ -469,7 +533,7 @@ per kwartier, op de dispatch die er al is, en trekt het af van de vensteruitkoms
   laden en ontladen zit het eigen verbruik al in het gemeten
   rondgangsrendement; de rendementen komen uit losse laad-ontlaadrondes bij een
   vast vermogen (energienerds.nl: HomeWizard 78,4% over vier rondes, Marstek
-  ongeveer 83%) en bevatten de stand-by bij stilstand dus niet. Zo is er geen
+  ongeveer 83%, Zendure 2400 AC+ 88,15%) en bevatten de stand-by bij stilstand dus niet. Zo is er geen
   dubbeltelling.
 - Gewaardeerd op de situatie met batterij, met dezelfde prijzen als de dispatch
   (all-in afnameprijs inclusief heffing en, in het scenario, het nettarief): haalt
@@ -491,13 +555,15 @@ per kwartier, op de dispatch die er al is, en trekt het af van de vensteruitkoms
   terugverdientijd zit. Een dag zonder stand-by kan zo nooit meer op € 0,00
   uitkomen door iets dat er niet bij hoort.
 
-De waarden: Zendure 800 Pro 2 8 W (schatting; energienerds.nl schat 6 tot 9 W voor
-de SolarFlow 800 Pro en mat de stand-by niet apart), HomeWizard Plug-In 6 W
-(gemeten door energienerds.nl in de standaardstand met AC aangesloten; 0,52 W in
-de API-stand-by), Anker Solarbank 3 12 W (schatting), Zendure 1600 AC+ en 2400
-AC+ 15 W (schatting), Marstek Venus E 3.0 7 W (gemeten door energienerds.nl met
-een HomeWizard-slimme stekker), Anker Solarbank Max AC 20 W (schatting) en de
-generieke thuisaccu's van 5 en 10 kWh 20 en 25 W (schatting). De gebruiker kan
+De waarden staan met hun soort bron in de catalogustabel. Gemeten door
+energienerds.nl: HomeWizard Plug-In 6 W (standaardstand met AC aangesloten; 0,52
+W in de API-stand-by), Marstek Venus E 3.0 7 W (met een HomeWizard-slimme
+stekker), Zendure 1600 AC+ 3 W en 2400 AC+ 3,4 W (telkens wat via het net
+binnenkomt plus wat de omvormer intern verbruikt) en Anker Solarbank Max AC
+31,6 W (2,6 W net, 29 W intern). Sessy geeft 3 W op. Zendure 800 Pro 2 8 W,
+Zendure 2400 Pro 3,4 W, Zendure 3000 Mix AC+ 13 W, Anker Solarbank 3 12 W en de
+generieke thuisaccu's van 5 en 10 kWh 20 en 25 W zijn een schatting; Sessy Plus
+5 W en AlphaESS VitaPower 10 W een aanname. De gebruiker kan
 het overschrijven bij de geavanceerde instellingen (`Instellingen.standbyWatt`,
 URL-sleutel `sb`, 0 tot 100 W, leeg is de waarde van de batterij; een
 batterijwissel zet het terug op leeg). Bij 8 W en de standaardinvoer is het 47,5
@@ -571,7 +637,7 @@ van 800 W: daarboven legt een installateur een eigen groep aan, gangbaar 300
 euro voor één extra groep (powerplugs.nl: 100 tot 200 euro in een
 standaardsituatie, 300 tot 600 euro bij een volle meterkast; de tool rekent met
 300 euro). Die post zit ook in de presetprijs van de modellen boven 0,8 kW (Marstek Venus E,
-Zendure 2400 AC+, Anker Solarbank Max), want aan het stopcontact leveren die
+de Zendure-modellen vanaf de 1600 AC+, Anker Solarbank Max AC, AlphaESS), want aan het stopcontact leveren die
 maar 800 W. De drie getallen zijn instelbaar onder Geavanceerd, met bron.
 
 Verankeren aan de gekozen batterij respecteert een eigen offerteprijs, en maakt
@@ -741,16 +807,25 @@ die de batterij per uur weghaalt (`Co2Uren`), de winst per maand
 
 ### Gedrag sinds 30 september 2026
 
-Zes dingen die sinds de review van eind september anders werken dan je uit de
+Zeven dingen die sinds de review van eind september anders werken dan je uit de
 oudere alinea's zou verwachten:
+
+**De catalogus is per merk, met de bron van rendement en stand-by.** Sinds
+modelversie 20 (1 oktober 2026) staan er vijftien modellen in van zeven merken,
+elk met `rendementBron` en `standbyBron`; zie "De batterijcatalogus". De
+standaardbatterij (Zendure 800 Pro 2) rekent met 84% rondgang in plaats van 88%
+(er is geen meting van de Pro 2). Het standaardantwoord is daardoor van € 96,52
+naar € 89,32 per jaar gegaan; de terugverdientijd van 5,3 naar 5,7 jaar met het
+nettarief vanaf 2029 (overgang) en van 7,6 naar 8,2 jaar zonder, en het netto
+resultaat van € 905 naar € 803.
 
 **Stand-by zit in de jaarbesparing en de terugverdientijd.** Sinds modelversie 19
 trekt `standbyKosten` het eigen verbruik van de batterij af, per batterij 6 tot
 25 W, alleen in kwartieren zonder laden of ontladen. Dat staat niet in de
 dispatch en niet in de dagfiguren (zie "Stand-by zit in de jaarbesparing"
 hierboven). Bedragen in oudere alinea's, zoals € 105,45 per jaar voor de
-standaardbatterij, zijn zonder die aftrek gemeten; met 8 W is het € 96,52. De
-standaardinvoer verliest daardoor ongeveer € 9 per jaar.
+standaardbatterij, zijn zonder die aftrek gemeten; met 8 W was het € 96,52 (na de catalogusupdate van 1 oktober met 84% rendement:
+€ 89,32). De standaardinvoer verliest door stand-by ongeveer € 9 per jaar.
 
 **Afregelen staat standaard uit.** Een omvormer die bij een negatieve prijs
 stopt met terugleveren (`Instellingen.curtailment`, `lib/configuratie.ts`) is
@@ -1128,7 +1203,8 @@ zonder batterij.
   onderbouwd; de spreidingsfactor laat zien hoe gevoelig de uitkomst ervoor is.
 - Het eigen stroomverbruik van de batterij (stand-by) is een waarde per batterij,
   geen meting aan jouw batterij. Gemeten waar er een test van is (HomeWizard 6 W,
-  Marstek 7 W; energienerds.nl), anders een schatting voor de omvormerklasse
+  Marstek 7 W, Zendure 3 tot 3,4 W, Anker Max 31,6 W; energienerds.nl), anders
+  een opgave van de fabrikant (Sessy) of een schatting of aanname voor de omvormerklasse
   (Indevolt: 7 W in diepe stand-by, 20 W voor de hoofdunit). Het is van de
   besparing afgetrokken, alleen op de momenten dat de batterij niet laadt of
   ontlaadt, en met dezelfde watt voor elke maat in het raster en de curve. Het
@@ -1144,6 +1220,7 @@ zonder batterij.
 ```
 app/                    pagina, thema
 components/             invoer en visualisaties
+lib/presets.ts          de batterijcatalogus, per merk, met bronnen
 lib/model/              solver, strategieën, batterij, tarieven, financiën
 lib/data/               loader, DST-veilige tijdas, manifest
 lib/worker/             rekenworker, pool en protocol
@@ -1157,6 +1234,11 @@ legacy/                 het Streamlit-prototype, als referentie
 
 De tests bewaken de eigenschappen die het prototype miste:
 
+- **Catalogus** — `tests/batterij-catalogus.test.tsx`: elke preset heeft een
+  rendementbron, stand-bybron, bron-URL, peildatum en (behalve generiek) een
+  logo in `public/logos` zonder script of externe verwijzing; prijzen boven 0,8 kW
+  bevatten de eigen groep of installatie; groepering per merk met Zendure eerst;
+  laden en leveren apart bij Sessy; elke bron-URL staat in de bronnenlijst.
 - **Monotonie** — meer capaciteit of vermogen levert nooit minder op. Strikt voor
   het optimum, met marge voor de realistische strategie, want die plant op een
   voorspelling. Dit is de test die het oude model faalt.
