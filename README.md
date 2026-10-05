@@ -29,7 +29,7 @@ gebruik, alles vanaf de CDN.
 ```bash
 npm install
 npm run dev          # http://localhost:3000
-npm test             # 719 tests, waaronder de modelinvarianten
+npm test             # 721 tests, waaronder de modelinvarianten
 npm run build        # statische export naar out/
 npm run clean        # bij een vastgelopen build-cache
 ```
@@ -419,6 +419,7 @@ getallen; de bronnenlijst bij "Aannames en bronnen" toont ze allemaal.
 | zendure-2400ac | Zendure SolarFlow 2400 AC+ | 2,4 | 2,4 | € 1.149 | 88% gemeten | 3,4 W gemeten | ja |
 | zendure-2400pro | Zendure SolarFlow 2400 Pro | 2,4 | 2,4 | € 1.269 | 88% afgeleid van de 2400 AC+ | 3,4 W schatting | ja |
 | zendure-3000mix | Zendure SolarFlow 3000 Mix AC+ | 8,0 | 3,0 | € 2.048 | 86% gemeten | 13 W schatting | ja |
+| zendure-800plus | Zendure SolarFlow 800 Plus | 1,92 | 1,0 laden, 0,8 leveren | € 509 | 84% gemeten (83 tot 85%) | 8 W schatting | nee (TechPunt) |
 | sessy-5kwh | Sessy 5 kWh | 5,5 (5,2 bruikbaar) | 2,2 laden, 1,7 leveren | € 3.850 | 82% door eigenaren gemeten | 3 W fabrieksopgave | nee |
 | sessy-10kwh | Sessy 10 kWh | 11 (10,4 bruikbaar) | 2,2 laden, 1,7 leveren | € 5.800 | 82% door eigenaren gemeten | 3 W fabrieksopgave | nee |
 | sessy-plus | Sessy Plus 15 kWh (voorverkoop) | 15 | 6 | € 10.000 | 85% aanname | 5 W aanname | nee |
@@ -432,6 +433,11 @@ getallen; de bronnenlijst bij "Aannames en bronnen" toont ze allemaal.
 
 Wat de tabel niet zegt:
 
+- **Eén vermogen per batterij is het leververmogen.** De stekkergrens van
+  800 W gaat over terugleveren aan het stopcontact; laden mag hoger. De
+  Zendure 800 Plus laadt met 1.000 W en levert 800 W, en is dus gewoon een
+  stekkerbatterij (geen eigen groep). Hij staat niet in de ANWB-webwinkel; de
+  prijs is die van TechPunt (479 euro) plus 30 euro voor de P1-uitlezer.
 - **Prijzen boven 0,8 kW** bevatten de eigen groep door een installateur
   (300 euro) of de installatie (Sessy: 300 euro aangenomen, bronnen noemen 225
   tot 400; Sessy Plus: de 600 euro basisinstallatie in plaats van de 300). De

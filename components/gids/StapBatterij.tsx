@@ -103,7 +103,11 @@ export function StapBatterij(data: GidsData) {
                 <MerkLogo merk={g.merk} logo={g.logo} />
                 {g.logo ? <span aria-hidden="true">{g.merk}</span> : null}
               </h2>
-              {g.bijAnwb ? <span className="batterij-anwb">Verkrijgbaar bij ANWB</span> : null}
+              {g.bijAnwb ? (
+                <span className="batterij-anwb">Verkrijgbaar bij ANWB</span>
+              ) : g.deelsBijAnwb ? (
+                <span className="batterij-anwb">De meeste bij ANWB</span>
+              ) : null}
             </div>
             <div className="gids-keuzes batterij-keuzes">
               {g.presets.map((p) => {
@@ -145,6 +149,10 @@ export function StapBatterij(data: GidsData) {
                     {p.bijAnwb && p.anwbUrl ? (
                       <a className="batterij-anwb-link" href={p.anwbUrl} rel="noopener" target="_blank">
                         Bekijk bij ANWB
+                      </a>
+                    ) : p.winkel ? (
+                      <a className="batterij-anwb-link" href={p.winkel.url} rel="noopener" target="_blank">
+                        Niet bij ANWB · bekijk bij {p.winkel.naam}
                       </a>
                     ) : null}
                   </div>

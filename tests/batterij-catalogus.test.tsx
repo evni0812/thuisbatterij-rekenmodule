@@ -25,6 +25,8 @@ const ZENDURE_BIJ_ANWB = [
   "zendure-2400pro",
   "zendure-3000mix",
 ];
+/** Zendure buiten de ANWB-webwinkel, met de prijs van een andere winkel. */
+const ZENDURE_ELDERS = ["zendure-800plus"];
 
 describe("herkomst van de getallen", () => {
   it("geeft elke preset een rendementbron, stand-bybron, bron-URL en peildatum", () => {
@@ -42,8 +44,9 @@ describe("herkomst van de getallen", () => {
 
   it("zet de peildatum van de bijgewerkte prijzen op 1 oktober 2026", () => {
     const ongewijzigd = ["thuisaccu-5kwh", "thuisaccu-10kwh"];
+    const later: Record<string, string> = { "zendure-800plus": "2026-10-05" };
     for (const p of PRESETS) {
-      expect(p.peildatum, p.id).toBe(ongewijzigd.includes(p.id) ? "2026-09-24" : "2026-10-01");
+      expect(p.peildatum, p.id).toBe(later[p.id] ?? (ongewijzigd.includes(p.id) ? "2026-09-24" : "2026-10-01"));
     }
   });
 
@@ -66,6 +69,8 @@ describe("herkomst van de getallen", () => {
     expect(prijs("alphaess-vitapower3600")).toBe(999 + 300);
     expect(prijs("anker-solarbank3")).toBe(1199);
     expect(prijs("anker-solarbank-max")).toBe(1999 + 300);
+    // Stekkerbatterij zonder P1 in de doos: TechPunt-prijs plus de P1-uitlezer.
+    expect(prijs("zendure-800plus")).toBe(479 + 30);
   });
 
   it("zet de gecorrigeerde rendementen en stand-bywaarden", () => {
@@ -111,11 +116,21 @@ describe("volgorde en groepering", () => {
     expect(volgorde).toEqual(MERK_VOLGORDE);
   });
 
-  it("zet Zendure van klein naar groot", () => {
+  it("zet Zendure eerst het ANWB-assortiment van klein naar groot, daarna de rest", () => {
     const zendure = perMerk()[0]!.presets;
-    expect(zendure.map((p) => p.id)).toEqual(ZENDURE_BIJ_ANWB);
-    const prijzen = zendure.map((p) => p.prijsEur);
+    expect(zendure.map((p) => p.id)).toEqual([...ZENDURE_BIJ_ANWB, ...ZENDURE_ELDERS]);
+    const prijzen = zendure.filter((p) => p.bijAnwb).map((p) => p.prijsEur);
     expect([...prijzen].sort((a, b) => a - b)).toEqual(prijzen);
+  });
+
+  it("geeft een model buiten ANWB een andere winkel, en het merk een eerlijk label", () => {
+    const plus = kiesPreset("zendure-800plus");
+    expect(plus.bijAnwb).toBe(false);
+    expect(plus.winkel?.naam).toBe("TechPunt");
+    expect(plus.winkel?.url).toMatch(/^https:\/\/www\.techpunt\.nl\//);
+    const zendure = perMerk()[0]!;
+    expect(zendure.bijAnwb).toBe(false);
+    expect(zendure.deelsBijAnwb).toBe(true);
   });
 
   it("markeert precies de vijf Zendure-modellen als verkrijgbaar bij ANWB, met een ANWB-link", () => {
@@ -141,21 +156,31 @@ describe("laden en leveren apart", () => {
       expect(p.spec.maxDischargeKw).toBe(1.7);
       expect(p.laadvermogenKw).toBe(2.2);
       expect(p.ontlaadvermogenKw).toBe(1.7);
-      expect(p.vermogenKw).toBe(2.2);
+      // Het ene vermogensgetal is het leververmogen.
+      expect(p.vermogenKw).toBe(1.7);
       const cfg = maakConfiguratie({ ...STANDAARD, presetId: id });
       expect(cfg.battery.maxChargeKw).toBe(2.2);
       expect(cfg.battery.maxDischargeKw).toBe(1.7);
-      expect(vermogenVan(cfg.battery)).toBe(2.2);
+      expect(vermogenVan(cfg.battery)).toBe(1.7);
     }
   });
 
-  it("laat de andere modellen symmetrisch, met vermogenKw gelijk aan het hoogste van de twee", () => {
+  it("laat de andere modellen symmetrisch, met vermogenKw gelijk aan het leververmogen", () => {
+    const asymmetrisch = ["sessy-5kwh", "sessy-10kwh", "zendure-800plus"];
     for (const p of PRESETS) {
-      expect(p.vermogenKw, p.id).toBe(Math.max(p.spec.maxChargeKw, p.spec.maxDischargeKw));
-      if (!p.id.startsWith("sessy-5") && !p.id.startsWith("sessy-10")) {
-        expect(p.laadvermogenKw, p.id).toBe(p.ontlaadvermogenKw);
-      }
+      expect(p.vermogenKw, p.id).toBe(p.spec.maxDischargeKw);
+      if (!asymmetrisch.includes(p.id)) expect(p.laadvermogenKw, p.id).toBe(p.ontlaadvermogenKw);
     }
+  });
+
+  it("houdt de 800 Plus een stekkerbatterij: laden 1,0 kW, leveren 0,8 kW, geen eigen groep", () => {
+    const p = kiesPreset("zendure-800plus");
+    expect(p.spec.maxChargeKw).toBe(1.0);
+    expect(p.spec.maxDischargeKw).toBe(0.8);
+    expect(isVasteAansluiting(p.vermogenKw)).toBe(false);
+    expect(p.prijsNoot).not.toMatch(/eigen groep/);
+    const cfg = maakConfiguratie({ ...STANDAARD, presetId: "zendure-800plus" });
+    expect(isVasteAansluiting(vermogenVan(cfg.battery))).toBe(false);
   });
 
   it("zet een eigen vermogen op laden én leveren", () => {
@@ -174,11 +199,11 @@ describe("laden en leveren apart", () => {
     expect(effectieveBatterij({ ...STANDAARD, presetId: "sessy-5kwh" }).aangepast.vermogen).toBe(false);
   });
 
-  it("prijst een eigen maat vanaf het hoogste van de twee", () => {
+  it("prijst een eigen maat vanaf het leververmogen", () => {
     // Zelfde maat via een eigen waarde: de prijs blijft die van de preset.
     const e = effectieveBatterij({ ...STANDAARD, presetId: "sessy-5kwh", capaciteitKwh: 5.5 });
     expect(e.prijsEur).toBe(kiesPreset("sessy-5kwh").prijsEur);
-    expect(e.vermogenKw).toBe(2.2);
+    expect(e.vermogenKw).toBe(1.7);
   });
 
   it("noemt laden en leveren apart in woorden", () => {
@@ -276,9 +301,12 @@ describe("stap 2 per merk", () => {
     expect(container.querySelector('img[alt="Generiek"]')).toBeNull();
   });
 
-  it("zegt bij Zendure dat het bij ANWB te koop is, en linkt elk model", () => {
+  it("zegt bij Zendure dat de meeste bij ANWB te koop zijn, en linkt elk model naar zijn winkel", () => {
     render(<StapBatterij {...maakData()} />);
-    expect(screen.getAllByText("Verkrijgbaar bij ANWB")).toHaveLength(1);
+    expect(screen.queryAllByText("Verkrijgbaar bij ANWB")).toHaveLength(0);
+    expect(screen.getAllByText("De meeste bij ANWB")).toHaveLength(1);
+    const elders = screen.getByRole("link", { name: "Niet bij ANWB · bekijk bij TechPunt" });
+    expect(elders.getAttribute("href")).toBe(kiesPreset("zendure-800plus").winkel!.url);
     const links = screen.getAllByRole("link", { name: "Bekijk bij ANWB" });
     expect(links.map((a) => a.getAttribute("href"))).toEqual(PRESETS.filter((p) => p.bijAnwb).map((p) => p.anwbUrl));
     for (const a of links) {
@@ -336,7 +364,7 @@ describe("de keuzelijst bij Invoer", () => {
     );
     const groepen = [...container.querySelectorAll("select optgroup")];
     expect(groepen.map((g) => g.getAttribute("label"))).toEqual([
-      "Zendure · bij ANWB",
+      "Zendure",
       "Sessy",
       "AlphaESS",
       "Anker",
@@ -346,6 +374,11 @@ describe("de keuzelijst bij Invoer", () => {
     ]);
     const opties = [...container.querySelectorAll("select option")].map((o) => (o as HTMLOptionElement).value);
     expect(opties).toEqual(PRESETS.map((p) => p.id));
+    // Niet het hele merk bij ANWB: dan staat het per model.
+    const tekst = (id: string) =>
+      [...container.querySelectorAll<HTMLOptionElement>("select option")].find((o) => o.value === id)!.textContent;
+    expect(tekst("zendure-800pro2")).toBe("Zendure SolarFlow 800 Pro 2 · bij ANWB");
+    expect(tekst("zendure-800plus")).toBe("Zendure SolarFlow 800 Plus");
   });
 
   it("noemt laden en leveren apart in de hint onder de keuze", () => {

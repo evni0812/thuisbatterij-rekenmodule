@@ -121,10 +121,14 @@ export interface BatteryPreset {
   bijAnwb: boolean;
   /** De productpagina in de ANWB-webwinkel, als `bijAnwb`. */
   anwbUrl?: string;
+  /** Een andere winkel als het model niet bij ANWB te koop is, met de prijs van daar. */
+  winkel?: { naam: string; url: string };
   capaciteitKwh: number;
   /**
    * Het getal voor weergave en voor de kostenregel en de stekkergrens: het
-   * hoogste van laden en ontladen (`laadvermogenKw`, `ontlaadvermogenKw`).
+   * leververmogen (`ontlaadvermogenKw`). De stekkergrens van 800 W gaat over
+   * wat de batterij aan het stopcontact teruglevert; laden mag hoger, een
+   * stopcontact mag gewoon 1.000 W afnemen (Zendure 800 Plus).
    */
   vermogenKw: number;
   /** Laadvermogen, kW. Gelijk aan `vermogenKw`, behalve als laden en leveren verschillen. */
@@ -210,7 +214,7 @@ function preset(p: PresetInvoer): BatteryPreset {
     ...p,
     laadvermogenKw: p.spec.maxChargeKw,
     ontlaadvermogenKw: p.spec.maxDischargeKw,
-    vermogenKw: Math.max(p.spec.maxChargeKw, p.spec.maxDischargeKw),
+    vermogenKw: p.spec.maxDischargeKw,
   };
 }
 
@@ -374,6 +378,41 @@ export const PRESETS: BatteryPreset[] = [
     peildatum: "2026-10-01",
     spec: spec(8, 3, 0.86, 0.9),
     cycleLife: 10000,
+    kalenderLevensduurJaren: 15,
+  }),
+  preset({
+    // De instapper van Zendure, niet in de ANWB-webwinkel maar wel bij
+    // TechPunt (dat ook de ANWB-webwinkel levert). Laadt met 1.000 W uit het
+    // stopcontact en levert 800 W: onder de stekkergrens, dus geen eigen groep.
+    id: "zendure-800plus",
+    naam: "Zendure SolarFlow 800 Plus",
+    merk: "Zendure",
+    logo: ZENDURE_LOGO,
+    bijAnwb: false,
+    winkel: { naam: "TechPunt", url: "https://www.techpunt.nl/en/products/zendure-solarflow-800-plus" },
+    capaciteitKwh: 1.92,
+    // 479 euro bij TechPunt (nagekeken 05-10-2026); de uitlezer van de
+    // slimme-meterpoort (P1) zit er niet bij. Zendure verkoopt die voor 29,99
+    // euro in een bundel; afgerond 30.
+    prijsEur: 509,
+    prijsNoot: "479 euro bij TechPunt plus 30 euro voor de uitlezer van de slimme-meterpoort (P1), die er niet bij zit",
+    // Stand-by: niet gemeten. Zelfde klasse en omvormer als de 800 Pro 2.
+    standbyWatt: 8,
+    standbyBron: "schatting",
+    standbyNoot: "schatting, zoals de 800 Pro 2; de stand-by van de 800 Plus is niet gemeten",
+    rendementBron: "gemeten",
+    rendementNoot: "energienerds.nl mat 83 tot 85% over drie volle rondes van 10 naar 100%, laden met 1.000 W en ontladen met 800 W",
+    bron: "https://www.zendure.nl/products/solarflow-800-plus",
+    bronnen: [
+      { wat: "prijs (TechPunt)", url: "https://www.techpunt.nl/en/products/zendure-solarflow-800-plus" },
+      { wat: "specificaties (Zendure)", url: "https://www.zendure.nl/products/solarflow-800-plus" },
+      { wat: "rendement en vermogen (energienerds.nl)", url: "https://energienerds.nl/index.php/2025/12/06/review-zendure-solarflow-800-plus-compact-slim-en-handig" },
+      { wat: "P1 niet inbegrepen (thuisbatterijgids.net)", url: "https://thuisbatterijgids.net/thuisbatterij/zendure-solarflow-800-plus-4/" },
+    ],
+    peildatum: "2026-10-05",
+    // Laden 1,0 kW, leveren 0,8 kW.
+    spec: spec(1.92, 1.0, 0.84, 0.9, 0.8),
+    cycleLife: 6000,
     kalenderLevensduurJaren: 15,
   }),
   preset({
@@ -662,8 +701,10 @@ export const PRESETS: BatteryPreset[] = [
 export interface MerkGroep {
   merk: string;
   logo?: string;
-  /** Verkoopt ANWB (een deel van) dit merk in de webwinkel? */
+  /** Verkoopt ANWB alle modellen van dit merk in de lijst? */
   bijAnwb: boolean;
+  /** Verkoopt ANWB een deel ervan? */
+  deelsBijAnwb: boolean;
   presets: BatteryPreset[];
 }
 
@@ -672,11 +713,14 @@ export function perMerk(lijst: readonly BatteryPreset[] = PRESETS): MerkGroep[] 
   for (const p of lijst) {
     let g = groepen.find((x) => x.merk === p.merk);
     if (!g) {
-      g = { merk: p.merk, logo: p.logo, bijAnwb: false, presets: [] };
+      g = { merk: p.merk, logo: p.logo, bijAnwb: false, deelsBijAnwb: false, presets: [] };
       groepen.push(g);
     }
     g.presets.push(p);
-    if (p.bijAnwb) g.bijAnwb = true;
+  }
+  for (const g of groepen) {
+    g.bijAnwb = g.presets.every((p) => p.bijAnwb);
+    g.deelsBijAnwb = g.presets.some((p) => p.bijAnwb);
   }
   return groepen;
 }

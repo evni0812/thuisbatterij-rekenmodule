@@ -317,7 +317,8 @@ export function Invoer({
               <optgroup key={g.merk} label={g.bijAnwb ? `${g.merk} · bij ANWB` : g.merk}>
                 {g.presets.map((p) => (
                   <option key={p.id} value={p.id}>
-                    {p.naam}
+                    {/* Hangt niet het hele merk bij ANWB, dan per model. */}
+                    {!g.bijAnwb && g.deelsBijAnwb && p.bijAnwb ? `${p.naam} · bij ANWB` : p.naam}
                   </option>
                 ))}
               </optgroup>

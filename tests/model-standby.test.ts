@@ -350,6 +350,7 @@ describe("de configuratie en de cache", () => {
       "zendure-2400ac": 3.4,
       "zendure-2400pro": 3.4,
       "zendure-3000mix": 13,
+      "zendure-800plus": 8,
       "sessy-5kwh": 3,
       "sessy-10kwh": 3,
       "sessy-plus": 5,

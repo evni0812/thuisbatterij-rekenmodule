@@ -65,12 +65,14 @@ export function isVasteAansluiting(kw: number): boolean {
 }
 
 /**
- * Het vermogen van een batterij als één getal: het hoogste van laden en
- * leveren. Voor de kostenregel, de stekkergrens en de maten in de kaart, die
- * laden en leveren gelijk nemen.
+ * Het vermogen van een batterij als één getal: het leververmogen. Voor de
+ * kostenregel, de stekkergrens en de maten in de kaart, die laden en leveren
+ * gelijk nemen. De stekkergrens van 800 W gaat over terugleveren aan het
+ * stopcontact; laden mag hoger (de Zendure 800 Plus laadt met 1.000 W en is
+ * gewoon een stekkerbatterij).
  */
 export function vermogenVan(battery: { maxChargeKw: number; maxDischargeKw: number }): number {
-  return Math.max(battery.maxChargeKw, battery.maxDischargeKw);
+  return battery.maxDischargeKw;
 }
 
 /** De batterij waaraan de kostenregel is verankerd. */
